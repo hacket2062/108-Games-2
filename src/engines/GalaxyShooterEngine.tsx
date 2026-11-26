@@ -171,6 +171,12 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   const freezeRef = useRef(0);
   const shieldTimerRef = useRef(0);
   const doubleNextRef = useRef(false);
+  const touchDragRef = useRef<{ active: boolean; pointerId: number | null; lastX: number; lastY: number }>({
+    active: false,
+    pointerId: null,
+    lastX: 0,
+    lastY: 0,
+  });
 
   const TOTAL_DRONE_WAVES = stageConfig ? Math.max(3, stageConfig.waveCount - 1) : 4;
 
@@ -918,26 +924,27 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         ctx.arc(0, 16, 6, 0, Math.PI * 2);
         ctx.fill();
 
-        // Large glowing neon answer billboard
-        ctx.font = '800 18px "Fredoka", "Noto Sans TC", sans-serif';
-        const tw = Math.max(96, ctx.measureText(d.label).width + 24);
-        ctx.fillStyle = d.hitFlash > 0 ? '#FFFFFF' : 'rgba(15, 23, 42, 0.94)';
+        // Large glowing neon answer billboard (extra crisp & legible on mobile screens)
+        const fontSize = W < 640 ? 20 : 21;
+        ctx.font = `900 ${fontSize}px "Fredoka", "Noto Sans TC", sans-serif`;
+        const tw = Math.max(106, ctx.measureText(d.label).width + 28);
+        ctx.fillStyle = d.hitFlash > 0 ? '#FFFFFF' : 'rgba(9, 14, 34, 0.96)';
         ctx.strokeStyle = d.shieldFlash > 0 ? '#F97316' : '#38BDF8';
-        ctx.lineWidth = 2.6;
-        drawRoundedRect(ctx, -tw / 2, -20, tw, 34, 10);
+        ctx.lineWidth = 3;
+        drawRoundedRect(ctx, -tw / 2, -23, tw, 40, 12);
         ctx.fill();
         ctx.stroke();
 
-        ctx.fillStyle = d.hitFlash > 0 ? '#0F172A' : '#E0F2FE';
+        ctx.fillStyle = d.hitFlash > 0 ? '#0F172A' : '#F0F9FF';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(d.label, 0, -3);
 
         // Drone HP microbar
         ctx.fillStyle = 'rgba(15,23,42,0.85)';
-        ctx.fillRect(-32, -32, 64, 5);
+        ctx.fillRect(-34, -34, 68, 5);
         ctx.fillStyle = '#22D3EE';
-        ctx.fillRect(-32, -32, Math.max(0, 64 * (d.hp / d.maxHp)), 5);
+        ctx.fillRect(-34, -34, Math.max(0, 68 * (d.hp / d.maxHp)), 5);
 
         ctx.restore();
       }
@@ -1062,57 +1069,99 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
     };
   }, [concludeRun, guardianId, onAnswerResult, playMode, playerStats.baseAttack, playerStats.maxHp, playerStats.speedBonus, spawnBossSpellingRound, spawnDroneWave]);
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pausedRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    if (e.pointerType === 'touch') {
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      touchDragRef.current = { active: true, pointerId: e.pointerId, lastX: px, lastY: py };
+      // Keep mecha ship comfortably above the thumb (+52px upward offset) so thumb never blocks ship
+      simRef.current.targetX = Math.max(36, Math.min(rect.width - 36, px));
+      simRef.current.targetY = Math.max(120, Math.min(rect.height - 62, py - 52));
+      simRef.current.pointerActive = true;
+    } else {
+      simRef.current.targetX = px;
+      simRef.current.targetY = py;
+      simRef.current.pointerActive = true;
+    }
+  };
+
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (pausedRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    simRef.current.targetX = e.clientX - rect.left;
-    simRef.current.targetY = e.clientY - rect.top;
-    simRef.current.pointerActive = true;
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    if (e.pointerType === 'touch') {
+      if (!touchDragRef.current.active || touchDragRef.current.pointerId !== e.pointerId) return;
+      // Smooth relative touch drag (1.15x thumb responsiveness without jumping under finger)
+      const dx = (px - touchDragRef.current.lastX) * 1.15;
+      const dy = (py - touchDragRef.current.lastY) * 1.15;
+      touchDragRef.current.lastX = px;
+      touchDragRef.current.lastY = py;
+      simRef.current.targetX = Math.max(36, Math.min(rect.width - 36, simRef.current.targetX + dx));
+      simRef.current.targetY = Math.max(120, Math.min(rect.height - 62, simRef.current.targetY + dy));
+      simRef.current.pointerActive = true;
+    } else {
+      simRef.current.targetX = px;
+      simRef.current.targetY = py;
+      simRef.current.pointerActive = true;
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (touchDragRef.current.pointerId === e.pointerId) {
+      touchDragRef.current.active = false;
+      touchDragRef.current.pointerId = null;
+    }
   };
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-slate-950" data-testid="galaxy-shooter-engine">
       <canvas
         ref={canvasRef}
+        onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerDown={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         className="block w-full h-full cursor-crosshair touch-none"
         data-testid="galaxy-shooter-canvas"
       />
 
       {/* Top Holographic Mission Radar (Zero Option Buttons!) */}
-      <div className="fixed inset-x-0 top-0 z-20 pointer-events-none p-3 flex flex-wrap items-start justify-between gap-2">
+      <div className="fixed inset-x-0 top-0 z-20 pointer-events-none safe-top p-2 sm:p-3 flex flex-wrap items-start justify-between gap-2">
         {/* Left: Ship HP & Wave */}
-        <div className="pointer-events-auto rounded-2xl bg-slate-900/92 border-2 border-cyan-400/80 px-3.5 py-2 shadow-xl flex items-center gap-3.5">
-          <div>
-            <div className="text-[11px] font-bold text-cyan-300">
+        <div className="pointer-events-auto max-w-full rounded-2xl bg-slate-900/92 border-2 border-cyan-400/80 px-2.5 sm:px-3.5 py-1.5 sm:py-2 shadow-xl flex items-center gap-2.5 sm:gap-3.5">
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold text-cyan-300 truncate max-w-[140px] sm:max-w-none">
               {stageConfig
-                ? `Word Galaxy・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」`
-                : `英語文・Word Galaxy（${grade}年級）`}
+                ? `Word Galaxy・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關`
+                : `Word Galaxy（${grade}年級）`}
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs font-black text-rose-300">SHIELD</span>
-              <div className="w-24 h-3 rounded-full bg-slate-800 border border-slate-600 overflow-hidden">
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] font-black text-rose-300">SHIELD</span>
+              <div className="w-16 sm:w-24 h-2.5 rounded-full bg-slate-800 border border-slate-600 overflow-hidden">
                 <div
                   className="h-full bg-cyan-400 transition-transform origin-left"
                   style={{ transform: `scaleX(${Math.max(0, hp / playerStats.maxHp)})` }}
                 />
               </div>
-              <span className="text-xs font-black text-white font-mono-num">{hp}</span>
+              <span className="text-[11px] font-black text-white font-mono-num">{hp}</span>
             </div>
           </div>
           <div className="text-center">
-            <div className="text-[10px] text-slate-400">WAVE</div>
-            <div className="text-base font-black text-cyan-300 font-mono-num">
+            <div className="text-[9px] text-slate-400">WAVE</div>
+            <div className="text-sm sm:text-base font-black text-cyan-300 font-mono-num">
               {wave}/{TOTAL_DRONE_WAVES + 1}
             </div>
           </div>
           <div className="text-center">
-            <div className="text-[10px] text-slate-400">COMBO</div>
-            <div className="text-base font-black text-pink-400 font-mono-num">{combo}x</div>
+            <div className="text-[9px] text-slate-400">COMBO</div>
+            <div className="text-sm sm:text-base font-black text-pink-400 font-mono-num">{combo}x</div>
           </div>
-          <div className="text-center">
-            <div className="text-[10px] text-slate-400">SCORE</div>
+          <div className="hidden sm:block text-center">
+            <div className="text-[9px] text-slate-400">SCORE</div>
             <div className="text-base font-black text-white font-mono-num">{score}</div>
           </div>
         </div>
@@ -1201,7 +1250,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
 
       {bossWarning && stageConfig?.tier === 'boss' && (
         <div className="fixed inset-x-0 top-24 z-30 pointer-events-none flex justify-center px-4">
-          <div className="rounded-2xl bg-rose-950/95 border-2 border-cyan-300 px-6 py-3 text-center shadow-[0_0_32px_rgba(34,211,238,0.5)]">
+          <div className="animate-vs-banner rounded-2xl bg-rose-950/95 border-2 border-cyan-300 px-6 py-3 text-center shadow-[0_0_32px_rgba(34,211,238,0.5)]">
             <div className="text-xs font-black tracking-widest text-cyan-300">
               WARNING · 第 10 關章節大魔王星艦逼近！
             </div>

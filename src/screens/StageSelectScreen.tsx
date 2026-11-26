@@ -135,45 +135,45 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
       data-testid="stage-select-screen"
     >
       {/* Top World Map Header */}
-      <div className={`shrink-0 bg-slate-900/95 border-b-2 ${theme.accentBorder} px-4 py-3 flex flex-wrap items-center justify-between gap-3`}>
-        <div className="flex items-center gap-3">
+      <div className={`shrink-0 safe-top bg-slate-900/95 border-b-2 ${theme.accentBorder} px-3 sm:px-4 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2 sm:gap-3`}>
+        <div className="flex items-center gap-2.5 sm:gap-3">
           <button
             type="button"
             onClick={() => {
               soundEngine.playClick();
               onExit();
             }}
-            className="min-h-[44px] px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-black text-xs inline-flex items-center gap-1.5"
+            className="min-h-[44px] px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-black text-xs inline-flex items-center gap-1.5 shrink-0"
           >
             <ArrowLeft className="w-4 h-4" /> 返回廣場
           </button>
-          <div className="w-10 h-10 rounded-2xl bg-slate-950 border-2 border-white/30 flex items-center justify-center font-black text-lg text-amber-300 shrink-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-slate-950 border-2 border-white/30 flex items-center justify-center font-black text-base sm:text-lg text-amber-300 shrink-0">
             {theme.emblem}
           </div>
-          <div>
-            <h1 className={`text-lg sm:text-xl font-black ${theme.accentText} flex items-center gap-2`}>
+          <div className="min-w-0">
+            <h1 className={`text-base sm:text-xl font-black ${theme.accentText} flex flex-wrap items-center gap-1.5 sm:gap-2`}>
               <span>
                 {theme.subjectLabel}・{theme.worldName}
               </span>
-              <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 border border-slate-700">
+              <span className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 border border-slate-700">
                 {save.grade}年級 {save.semester === 'upper' ? '上學期' : '下學期'}
               </span>
             </h1>
-            <p className="text-xs text-slate-400">{theme.tagline}</p>
+            <p className="text-[11px] sm:text-xs text-slate-400 truncate">{theme.tagline}</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-xs sm:text-sm font-black font-mono-num">
-          <span className="text-amber-300 inline-flex items-center gap-1.5">
+        <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm font-black font-mono-num">
+          <span className="text-amber-300 inline-flex items-center gap-1">
             <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-            世界星數 {worldStars.earned} / {worldStars.max}
+            {worldStars.earned} / {worldStars.max}
           </span>
           <span className="text-emerald-300">已通關 {worldStars.clearedStages} / 30 關</span>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+      <div className="flex-1 overflow-y-auto scroll-touch p-3 sm:p-5 pb-10">
         <div className="max-w-6xl mx-auto space-y-4">
           {/* 3 Chapter Selector Tabs */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

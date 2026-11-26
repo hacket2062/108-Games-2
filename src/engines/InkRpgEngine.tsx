@@ -166,6 +166,8 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
     targetX: 180,
     targetY: 420,
     hasClickTarget: false,
+    joyX: 0,
+    joyY: 0,
     facing: 1 as 1 | -1,
     walkPhase: 0,
     trail: [
@@ -668,18 +670,18 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       w.floats.update(dt);
 
       if (phaseRef.current === 'explore' && dt > 0) {
-        // Movement via WASD / Arrows or click-to-walk
-        let dx = 0;
-        let dy = 0;
+        // Movement via WASD / Arrows, Virtual Touch Joystick, or click-to-walk
+        let dx = w.joyX;
+        let dy = w.joyY;
         if (w.keys.has('w') || w.keys.has('arrowup')) dy -= 1;
         if (w.keys.has('s') || w.keys.has('arrowdown')) dy += 1;
         if (w.keys.has('a') || w.keys.has('arrowleft')) dx -= 1;
         if (w.keys.has('d') || w.keys.has('arrowright')) dx += 1;
 
         const speed = 225 * (1 + playerStats.speedBonus);
-        if (dx !== 0 || dy !== 0) {
+        if (Math.abs(dx) > 0.08 || Math.abs(dy) > 0.08) {
           w.hasClickTarget = false;
-          const len = Math.hypot(dx, dy);
+          const len = Math.max(1, Math.hypot(dx, dy));
           w.playerX += (dx / len) * speed * dt;
           w.playerY += (dy / len) * speed * dt;
           w.facing = dx < 0 ? -1 : 1;
@@ -985,10 +987,14 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         ctx.fill();
 
         // Calligraphy golden battle floor ring
+        const isPortrait = W < 640;
+        const shiftY = isPortrait ? -H * 0.11 : 0;
+        const heroScaleMul = isPortrait ? 0.88 : 1;
+
         ctx.strokeStyle = 'rgba(217, 119, 6, 0.32)';
         ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.ellipse(W * 0.5, H * 0.57, W * 0.38, H * 0.15, 0, 0, Math.PI * 2);
+        ctx.ellipse(W * 0.5, H * 0.57 + shiftY, W * 0.38, H * 0.13, 0, 0, Math.PI * 2);
         ctx.stroke();
 
         // Freeze aura when Griffin skill active
@@ -1005,54 +1011,54 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
           ctx,
           'swordsman',
           W * 0.27 + (w.heroAttackRole === 'swordsman' ? dashOffset : 0),
-          H * 0.45,
+          H * 0.44 + shiftY,
           w.time,
           {
             facing: 1,
             attackProgress: w.heroAttackRole === 'swordsman' ? w.heroDash : 0,
             hitFlash: w.heroHitFlash,
             label: '墨劍士',
-            scale: 1.28,
+            scale: 1.28 * heroScaleMul,
           }
         );
         drawInkChibiHero(
           ctx,
           'craneMage',
           W * 0.17 + (w.heroAttackRole === 'craneMage' ? dashOffset * 0.5 : 0),
-          H * 0.54,
+          H * 0.52 + shiftY,
           w.time,
           {
             facing: 1,
             attackProgress: w.heroAttackRole === 'craneMage' ? w.heroDash : 0,
             hitFlash: w.heroHitFlash,
             label: '詩韻法師',
-            scale: 1.22,
+            scale: 1.22 * heroScaleMul,
           }
         );
         drawInkChibiHero(
           ctx,
           'pandaHealer',
-          W * 0.25 + (w.heroAttackRole === 'pandaHealer' ? dashOffset * 0.5 : 0),
-          H * 0.62,
+          W * 0.26 + (w.heroAttackRole === 'pandaHealer' ? dashOffset * 0.5 : 0),
+          H * 0.59 + shiftY,
           w.time,
           {
             facing: 1,
             attackProgress: w.heroAttackRole === 'pandaHealer' ? w.heroDash : 0,
             hitFlash: w.heroHitFlash,
             label: '印璽醫者',
-            scale: 1.2,
+            scale: 1.2 * heroScaleMul,
           }
         );
 
         // Enemy on right
         const enemy = battleEnemyRef.current;
         if (enemy) {
-          drawInkMonster(ctx, enemy.kind, W * 0.72, H * 0.49, w.time, {
+          drawInkMonster(ctx, enemy.kind, W * 0.72, H * 0.49 + shiftY, w.time, {
             hitFlash: w.enemyHitFlash,
             shielded: enemy.shielded,
             hpRatio: enemy.hp / enemy.maxHp,
             name: enemy.name,
-            scale: enemy.kind === 'boss' ? 1.9 : 1.55,
+            scale: (enemy.kind === 'boss' ? 1.9 : 1.55) * heroScaleMul,
           });
 
           // Enemy ATB warning ring
@@ -1060,7 +1066,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
             ctx.strokeStyle = '#F43F5E';
             ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.arc(W * 0.72, H * 0.49, 58 + Math.sin(w.time * 18) * 5, 0, Math.PI * 2);
+            ctx.arc(W * 0.72, H * 0.49 + shiftY, 58 + Math.sin(w.time * 18) * 5, 0, Math.PI * 2);
             ctx.stroke();
           }
         }
@@ -1137,6 +1143,36 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
     };
   }, [concludeRun, playMode, playerStats.maxHp, playerStats.speedBonus]);
 
+  const joyBaseRef = useRef<HTMLDivElement | null>(null);
+  const joyActiveIdRef = useRef<number | null>(null);
+  const [joyKnob, setJoyKnob] = useState({ x: 0, y: 0 });
+
+  const updateJoystick = (clientX: number, clientY: number) => {
+    const el = joyBaseRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const maxR = 36;
+    const rawX = clientX - cx;
+    const rawY = clientY - cy;
+    const dist = Math.hypot(rawX, rawY);
+    const clampedDist = Math.min(maxR, dist);
+    const angle = Math.atan2(rawY, rawX);
+    const kx = dist > 2 ? Math.cos(angle) * clampedDist : 0;
+    const ky = dist > 2 ? Math.sin(angle) * clampedDist : 0;
+    setJoyKnob({ x: kx, y: ky });
+    worldRef.current.joyX = kx / maxR;
+    worldRef.current.joyY = ky / maxR;
+  };
+
+  const resetJoystick = () => {
+    joyActiveIdRef.current = null;
+    setJoyKnob({ x: 0, y: 0 });
+    worldRef.current.joyX = 0;
+    worldRef.current.joyY = 0;
+  };
+
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (phaseRef.current !== 'explore' || pausedRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -1150,6 +1186,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
     if (!currentQ || currentQ.payload.mode !== 'radical') return;
     const payload = currentQ.payload as ChineseRadicalPayload;
     soundEngine.playClick();
+    soundEngine.hapticPulse(14);
 
     if (selectedRadicals.includes(part)) {
       setSelectedRadicals((prev) => prev.filter((p) => p !== part));
@@ -1175,93 +1212,131 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         data-testid="ink-rpg-canvas"
       />
 
-      {/* Top Perimeter HUD (No backdrop-blur over canvas) */}
-      <div className="fixed inset-x-0 top-0 z-20 pointer-events-none p-3 flex items-start justify-between gap-3">
+      {/* Top Perimeter HUD (No backdrop-blur over canvas, responsive wrap on mobile) */}
+      <div className="fixed inset-x-0 top-0 z-20 pointer-events-none safe-top p-2.5 sm:p-3 flex flex-wrap items-start justify-between gap-2">
         {/* Left: Party HP + World Status */}
-        <div className="pointer-events-auto rounded-2xl bg-slate-900/92 border-2 border-amber-400/80 px-4 py-2.5 shadow-xl flex items-center gap-4">
-          <div>
-            <div className="text-[11px] font-bold text-amber-300 tracking-wide">
+        <div className="pointer-events-auto max-w-full rounded-2xl bg-slate-900/92 border-2 border-amber-400/80 px-3 sm:px-4 py-2 shadow-xl flex flex-wrap items-center gap-2.5 sm:gap-4">
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold text-amber-300 tracking-wide truncate max-w-[200px] sm:max-w-none">
               {stageConfig
                 ? `墨靈幻境・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」`
                 : `國語文・墨靈幻境（${grade}年級）`}
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs font-black text-emerald-300">HP</span>
-              <div className="w-32 h-3.5 rounded-full bg-slate-800 border border-slate-600 overflow-hidden">
+            <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5">
+              <span className="text-[11px] font-black text-emerald-300">HP</span>
+              <div className="w-20 sm:w-32 h-3 rounded-full bg-slate-800 border border-slate-600 overflow-hidden">
                 <div
                   className="h-full bg-emerald-400 transition-transform origin-left"
                   style={{ transform: `scaleX(${Math.max(0, partyHp / playerStats.maxHp)})` }}
                 />
               </div>
-              <span className="text-xs font-black text-white font-mono-num">
+              <span className="text-[11px] font-black text-white font-mono-num">
                 {partyHp}/{playerStats.maxHp}
               </span>
             </div>
           </div>
-          <div className="h-8 w-px bg-slate-700" />
-          <div className="text-center">
-            <div className="text-[10px] text-slate-400 font-bold">剩餘魔物</div>
-            <div className="text-lg font-black text-amber-300 font-mono-num">{monstersLeft} / 3</div>
-          </div>
-          <div className="text-center">
-            <div className="text-[10px] text-slate-400 font-bold">連擊</div>
-            <div className="text-lg font-black text-rose-400 font-mono-num">{combo}x</div>
-          </div>
-          <div className="text-center">
-            <div className="text-[10px] text-slate-400 font-bold">積分</div>
-            <div className="text-lg font-black text-white font-mono-num">{score}</div>
+          <div className="hidden sm:block h-8 w-px bg-slate-700" />
+          <div className="flex items-center gap-3">
+            <div className="text-center">
+              <div className="text-[10px] text-slate-400 font-bold">魔物</div>
+              <div className="text-sm sm:text-lg font-black text-amber-300 font-mono-num">{monstersLeft}/3</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[10px] text-slate-400 font-bold">連擊</div>
+              <div className="text-sm sm:text-lg font-black text-rose-400 font-mono-num">{combo}x</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[10px] text-slate-400 font-bold">積分</div>
+              <div className="text-sm sm:text-lg font-black text-white font-mono-num">{score}</div>
+            </div>
           </div>
         </div>
 
         {/* Right: Guardian Active Skill + Pause */}
-        <div className="pointer-events-auto flex items-center gap-2">
+        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 ml-auto">
           {freezeTimer > 0 && (
-            <div className="rounded-xl bg-sky-600 text-white font-black text-xs px-3 py-2 shadow-lg">
-              時空定格 {freezeTimer}s
+            <div className="rounded-xl bg-sky-600 text-white font-black text-xs px-2.5 py-2 shadow-lg">
+              定格 {freezeTimer}s
             </div>
           )}
           <button
             type="button"
             disabled={guardianUsed}
             onClick={handleGuardianSkill}
-            className={`min-h-[44px] px-3.5 rounded-xl font-black text-xs border-2 flex items-center gap-2 shadow-lg transition-transform active:scale-95 ${
+            className={`min-h-[42px] px-2.5 sm:px-3.5 rounded-xl font-black text-xs border-2 flex items-center gap-1.5 shadow-lg transition-transform active:scale-95 ${
               guardianUsed
                 ? 'bg-slate-800/80 border-slate-700 text-slate-500 cursor-not-allowed'
                 : 'bg-amber-400 hover:bg-amber-300 border-amber-200 text-slate-950'
             }`}
           >
-            <Sparkles className="w-4 h-4" />
-            {guardian.name}：{guardian.activeName}
+            <Sparkles className="w-4 h-4 shrink-0" />
+            <span className="truncate max-w-[110px] sm:max-w-none">{guardian.activeName}</span>
           </button>
           <button
             type="button"
             onClick={() => setPaused(true)}
             aria-label="暫停遊戲"
-            className="w-11 h-11 rounded-xl bg-slate-900/92 hover:bg-slate-800 border-2 border-slate-600 text-white flex items-center justify-center shadow-lg"
+            className="w-11 h-11 rounded-xl bg-slate-900/92 hover:bg-slate-800 border-2 border-slate-600 text-white flex items-center justify-center shadow-lg shrink-0"
           >
             <Pause className="w-5 h-5" />
           </button>
         </div>
       </div>
 
-      {/* Explore Phase Bottom Helper Strip */}
+      {/* Explore Phase: Bottom-Left Translucent Virtual Joystick + Auto-Path CTA */}
       {phase === 'explore' && (
-        <div className="fixed inset-x-0 bottom-4 z-20 pointer-events-none flex flex-col items-center gap-2 px-4">
-          {mapToast && (
-            <div className="rounded-xl bg-slate-900/92 border border-amber-400/70 px-4 py-2 text-xs sm:text-sm font-bold text-amber-100 shadow-lg">
-              {mapToast}
-            </div>
-          )}
-          <div className="pointer-events-auto flex items-center gap-3">
-            <button
-              type="button"
-              onClick={guideToNearestMonster}
-              className="min-h-[48px] px-5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm flex items-center gap-2 shadow-xl transition-transform active:scale-95"
-            >
-              <Compass className="w-5 h-5" /> 自動尋路迎戰魔物
-            </button>
+        <>
+          {/* Virtual Touch Joystick (Mobile & Tablet Thumb Control) */}
+          <div
+            ref={joyBaseRef}
+            data-testid="ink-virtual-joystick"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              joyActiveIdRef.current = e.pointerId;
+              updateJoystick(e.clientX, e.clientY);
+            }}
+            onPointerMove={(e) => {
+              if (joyActiveIdRef.current !== e.pointerId) return;
+              e.stopPropagation();
+              updateJoystick(e.clientX, e.clientY);
+            }}
+            onPointerUp={(e) => {
+              if (joyActiveIdRef.current === e.pointerId) resetJoystick();
+            }}
+            onPointerCancel={resetJoystick}
+            className="fixed left-4 bottom-5 z-25 w-28 h-28 rounded-full bg-slate-900/55 border-2 border-amber-300/55 flex items-center justify-center touch-none select-none shadow-2xl"
+            aria-label="虛擬方向搖桿"
+          >
+            <div className="w-12 h-12 rounded-full border border-white/25 pointer-events-none" />
+            <div
+              className="absolute w-12 h-12 rounded-full bg-gradient-to-br from-amber-300 to-orange-500 border-2 border-white shadow-lg pointer-events-none"
+              style={{
+                transform: `translate3d(${joyKnob.x}px, ${joyKnob.y}px, 0)`,
+              }}
+            />
           </div>
-        </div>
+
+          <div className="fixed right-4 left-36 sm:inset-x-0 bottom-5 z-20 pointer-events-none flex flex-col items-end sm:items-center gap-2 px-1 sm:px-4">
+            {mapToast && (
+              <div className="rounded-xl bg-slate-900/92 border border-amber-400/70 px-3.5 py-2 text-xs sm:text-sm font-bold text-amber-100 shadow-lg max-w-full">
+                {mapToast}
+              </div>
+            )}
+            <div className="pointer-events-auto flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.hapticPulse(12);
+                  guideToNearestMonster();
+                }}
+                className="min-h-[50px] px-4 sm:px-5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-2 shadow-xl transition-transform active:scale-95"
+              >
+                <Compass className="w-5 h-5" /> 自動尋路迎戰魔物
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Battle Phase: ATB Skill Deck (Bottom Dock) */}
@@ -1396,15 +1471,16 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
                   <button
                     key={opt}
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                      soundEngine.hapticPulse(14);
                       applyPlayerDamageToEnemy(
                         1.15,
                         'slash',
                         idx === (currentQ.payload as ChineseSlashPayload).correctIndex,
                         currentQ
-                      )
-                    }
-                    className="min-h-[52px] rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 border-2 border-slate-600 hover:border-amber-200 text-white font-black text-base px-4 transition-colors active:scale-95"
+                      );
+                    }}
+                    className="min-h-[56px] rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 border-2 border-slate-600 hover:border-amber-200 text-white font-black text-base px-4 transition-all active:scale-95"
                   >
                     {opt}
                   </button>
@@ -1436,9 +1512,9 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
                         key={part}
                         type="button"
                         onClick={() => handleRadicalPick(part)}
-                        className={`min-w-[60px] min-h-[60px] rounded-2xl text-2xl font-black border-2 transition-transform active:scale-90 ${
+                        className={`min-w-[64px] min-h-[64px] rounded-2xl text-2xl font-black border-2 transition-transform active:scale-90 ${
                           active
-                            ? 'bg-amber-400 border-amber-100 text-slate-950 scale-105'
+                            ? 'bg-amber-400 border-amber-100 text-slate-950 scale-105 shadow-[0_0_16px_rgba(251,191,36,0.7)]'
                             : 'bg-slate-800 hover:bg-slate-700 border-sky-400/70 text-white'
                         }`}
                       >
@@ -1452,7 +1528,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
 
             {/* Skill 3: Clickable Stone Tablet Sentence Typo Slash */}
             {currentQ.payload.mode === 'typo' && (
-              <div className="rounded-2xl bg-stone-800 border-2 border-stone-500 p-3 flex flex-wrap items-center justify-center gap-1.5">
+              <div className="rounded-2xl bg-stone-800 border-2 border-stone-500 p-3 flex flex-wrap items-center justify-center gap-2">
                 {(currentQ.payload as ChineseTypoPayload).sentence.split('').map((ch, idx) => {
                   const isPunc = ch === '，' || ch === '。' || ch === '！' || ch === '？';
                   if (isPunc) {
@@ -1466,15 +1542,16 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
                     <button
                       key={idx}
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
+                        soundEngine.hapticPulse(16);
                         applyPlayerDamageToEnemy(
                           1.35,
                           'typo',
                           idx === (currentQ.payload as ChineseTypoPayload).typoIndex,
                           currentQ
-                        )
-                      }
-                      className="min-w-[46px] min-h-[48px] rounded-xl bg-stone-700 hover:bg-rose-500 border border-stone-400 hover:border-amber-200 text-white text-xl font-black transition-transform active:scale-90"
+                        );
+                      }}
+                      className="min-w-[50px] min-h-[52px] rounded-xl bg-stone-700 hover:bg-rose-500 border-2 border-stone-400 hover:border-amber-200 text-white text-xl font-black transition-transform active:scale-90"
                     >
                       {ch}
                     </button>
@@ -1488,7 +1565,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
 
       {bossWarning && stageConfig?.tier === 'boss' && (
         <div className="fixed inset-x-0 top-24 z-30 pointer-events-none flex justify-center px-4">
-          <div className="rounded-2xl bg-rose-950/95 border-2 border-amber-400 px-6 py-3 text-center shadow-[0_0_32px_rgba(251,191,36,0.5)]">
+          <div className="animate-vs-banner rounded-2xl bg-rose-950/95 border-2 border-amber-400 px-6 py-3 text-center shadow-[0_0_32px_rgba(251,191,36,0.5)]">
             <div className="text-xs font-black tracking-widest text-amber-300">
               WARNING · 第 10 關章節大魔王現身！
             </div>

@@ -124,6 +124,12 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
 
   const [paused, setPaused] = useState(false);
   const [selectedTower, setSelectedTower] = useState<MathTowerKind>('raccoon');
+  const [radialPicker, setRadialPicker] = useState<{
+    lane: number;
+    col: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const [gears, setGears] = useState(guardianId === 'griffin' ? 210 : 150);
   const [castleHp, setCastleHp] = useState(playerStats.maxHp);
   const [score, setScore] = useState(0);
@@ -473,12 +479,13 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       const td = tdRef.current;
       td.width = rect.width;
       td.height = rect.height;
-      td.gridLeft = Math.max(96, rect.width * 0.1);
-      td.gridTop = 98;
-      const availW = rect.width - td.gridLeft - 36;
-      const availH = rect.height - td.gridTop - 104;
-      td.cellW = Math.max(64, availW / COLS);
-      td.cellH = Math.max(58, availH / LANES);
+      const isNarrow = rect.width < 640;
+      td.gridLeft = isNarrow ? 44 : Math.max(96, rect.width * 0.1);
+      td.gridTop = isNarrow ? 156 : 98;
+      const availW = rect.width - td.gridLeft - (isNarrow ? 8 : 36);
+      const availH = rect.height - td.gridTop - (isNarrow ? 94 : 104);
+      td.cellW = Math.max(38, availW / COLS);
+      td.cellH = Math.max(48, availH / LANES);
     };
     resize();
     const ro = new ResizeObserver(resize);
@@ -736,25 +743,27 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       ctx.fillStyle = '#0F172A';
       ctx.fillRect(0, 0, W, H);
 
-      // Left Mechanical Castle Gate wall
+      // Left Mechanical Castle Gate wall (scales gracefully on 390px mobile)
+      const castlePad = td.gridLeft < 60 ? 6 : 12;
+      const castleW = Math.max(24, td.gridLeft - castlePad * 2);
       const castleGrad = ctx.createLinearGradient(0, td.gridTop, td.gridLeft, td.gridTop);
       castleGrad.addColorStop(0, '#1E3A8A');
       castleGrad.addColorStop(1, '#3B82F6');
       ctx.fillStyle = castleGrad;
-      drawRoundedRect(ctx, 12, td.gridTop - 8, td.gridLeft - 22, td.cellH * LANES + 16, 16);
+      drawRoundedRect(ctx, castlePad, td.gridTop - 6, castleW, td.cellH * LANES + 12, 12);
       ctx.fill();
       ctx.strokeStyle = '#93C5FD';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2.5;
       ctx.stroke();
 
       // Rotating Castle Gate Gear emblem
       ctx.save();
-      ctx.translate(td.gridLeft * 0.5, td.gridTop + td.cellH * 2.5);
+      ctx.translate(castlePad + castleW * 0.5, td.gridTop + td.cellH * 2.5);
       ctx.rotate(td.time * 0.8);
       ctx.strokeStyle = '#FACC15';
-      ctx.lineWidth = 5;
+      ctx.lineWidth = td.gridLeft < 60 ? 3.5 : 5;
       ctx.beginPath();
-      ctx.arc(0, 0, 24, 0, Math.PI * 2);
+      ctx.arc(0, 0, Math.min(24, castleW * 0.36), 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
 
@@ -864,50 +873,31 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     };
   }, [concludeRun, playMode, playerStats.baseAttack, playerStats.maxHp, pullMathQ]);
 
-  const handleGridClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (pausedRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
+  const placeTowerAt = (lane: number, col: number, kind: MathTowerKind) => {
     const td = tdRef.current;
-
-    // 1. Check if player clicked a Formula-Shielded Zombie to snipe it!
-    for (const z of td.zombies) {
-      if (!z.formulaQuestion) continue;
-      const zx = td.gridLeft + z.x * (td.cellW * COLS);
-      const zy = td.gridTop + (z.lane + 0.5) * td.cellH;
-      if (Math.abs(cx - zx) < 52 && Math.abs(cy - (zy - 22)) < 58) {
-        soundEngine.playClick();
-        setSolverState({
-          purpose: 'snipe',
-          question: z.formulaQuestion,
-          targetZombieId: z.id,
-          startedAt: Date.now(),
-        });
-        soundEngine.speakText(z.formulaQuestion.prompt, 'zh-TW');
-        return;
-      }
+    const occupied = td.towers.some((t) => t.lane === lane && t.col === col);
+    if (occupied) {
+      setRadialPicker(null);
+      return;
     }
 
-    // 2. Otherwise try to place the selected tower on the clicked 5x8 cell
-    const col = Math.floor((cx - td.gridLeft) / td.cellW);
-    const lane = Math.floor((cy - td.gridTop) / td.cellH);
-    if (col < 0 || col >= COLS || lane < 0 || lane >= LANES) return;
-
-    const occupied = td.towers.some((t) => t.lane === lane && t.col === col);
-    if (occupied) return;
-
-    const cfg = TOWER_SHOP.find((s) => s.kind === selectedTowerRef.current)!;
+    const cfg = TOWER_SHOP.find((s) => s.kind === kind)!;
+    const tx = td.gridLeft + (col + 0.5) * td.cellW;
+    const ty = td.gridTop + (lane + 0.5) * td.cellH;
     if (gearsRef.current < cfg.cost) {
       soundEngine.playWrongBuzz();
-      td.floats.spawn(cx, cy, '齒輪不足！解題採能', 'miss');
+      soundEngine.hapticPulse(22);
+      td.floats.spawn(tx, ty, '齒輪不足！解題採能', 'miss');
+      setRadialPicker(null);
       openHarvestSolver();
       return;
     }
 
     gearsRef.current -= cfg.cost;
     setGears(gearsRef.current);
+    setSelectedTower(kind);
     soundEngine.playGearBuild();
+    soundEngine.hapticPulse(16);
     td.towers.push({
       id: `t-${Date.now()}-${Math.random()}`,
       kind: cfg.kind,
@@ -920,9 +910,55 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       overheatTimer: 0,
       recoil: 0,
     });
-    const tx = td.gridLeft + (col + 0.5) * td.cellW;
-    const ty = td.gridTop + (lane + 0.5) * td.cellH;
-    td.particles.burst(tx, ty, 12, ['#FACC15', '#38BDF8', '#FFFFFF'], 40, 140, 5);
+    td.particles.burst(tx, ty, 14, ['#FACC15', '#38BDF8', '#FFFFFF'], 40, 140, 5);
+    setRadialPicker(null);
+  };
+
+  const handleGridClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (pausedRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const td = tdRef.current;
+
+    // 1. Check if player clicked a Formula-Shielded Zombie to snipe it!
+    for (const z of td.zombies) {
+      if (!z.formulaQuestion) continue;
+      const zx = td.gridLeft + z.x * (td.cellW * COLS);
+      const zy = td.gridTop + (z.lane + 0.5) * td.cellH;
+      if (Math.abs(cx - zx) < 56 && Math.abs(cy - (zy - 22)) < 62) {
+        soundEngine.playClick();
+        soundEngine.hapticPulse(16);
+        setRadialPicker(null);
+        setSolverState({
+          purpose: 'snipe',
+          question: z.formulaQuestion,
+          targetZombieId: z.id,
+          startedAt: Date.now(),
+        });
+        soundEngine.speakText(z.formulaQuestion.prompt, 'zh-TW');
+        return;
+      }
+    }
+
+    // 2. Clicking an empty 5x8 grass tile opens the circular Radial Tower Wheel right near the tile!
+    const col = Math.floor((cx - td.gridLeft) / td.cellW);
+    const lane = Math.floor((cy - td.gridTop) / td.cellH);
+    if (col < 0 || col >= COLS || lane < 0 || lane >= LANES) {
+      setRadialPicker(null);
+      return;
+    }
+
+    const occupied = td.towers.some((t) => t.lane === lane && t.col === col);
+    if (occupied) {
+      setRadialPicker(null);
+      return;
+    }
+
+    soundEngine.playClick();
+    const clampedX = Math.max(122, Math.min(rect.width - 122, td.gridLeft + (col + 0.5) * td.cellW));
+    const clampedY = Math.max(138, Math.min(rect.height - 154, td.gridTop + (lane + 0.5) * td.cellH));
+    setRadialPicker({ lane, col, x: clampedX, y: clampedY });
   };
 
   return (
@@ -935,37 +971,37 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       />
 
       {/* Top Unified Tower Defense HUD */}
-      <div className="fixed inset-x-0 top-0 z-20 pointer-events-none p-3 flex flex-wrap items-start justify-between gap-2">
-        <div className="pointer-events-auto rounded-2xl bg-slate-900/94 border-2 border-blue-400/80 px-4 py-2 shadow-xl flex items-center gap-4">
-          <div>
-            <div className="text-[11px] font-bold text-sky-300">
+      <div className="fixed inset-x-0 top-0 z-20 pointer-events-none safe-top p-2 sm:p-3 flex flex-wrap items-start justify-between gap-2">
+        <div className="pointer-events-auto max-w-full rounded-2xl bg-slate-900/94 border-2 border-blue-400/80 px-2.5 sm:px-4 py-1.5 sm:py-2 shadow-xl flex items-center gap-2.5 sm:gap-4">
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold text-sky-300 truncate max-w-[140px] sm:max-w-none">
               {stageConfig
-                ? `數境建築王國・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」`
-                : `數學・數境建築王國（${grade}年級）`}
+                ? `數境建築・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關`
+                : `數境建築王國（${grade}年級）`}
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs font-black text-emerald-300">城門</span>
-              <div className="w-28 h-3 rounded-full bg-slate-800 border border-slate-600 overflow-hidden">
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] font-black text-emerald-300">城門</span>
+              <div className="w-16 sm:w-28 h-2.5 rounded-full bg-slate-800 border border-slate-600 overflow-hidden">
                 <div
                   className="h-full bg-emerald-400 transition-transform origin-left"
                   style={{ transform: `scaleX(${Math.max(0, castleHp / playerStats.maxHp)})` }}
                 />
               </div>
-              <span className="text-xs font-black text-white font-mono-num">{castleHp}</span>
+              <span className="text-[11px] font-black text-white font-mono-num">{castleHp}</span>
             </div>
           </div>
-          <div className="h-8 w-px bg-slate-700" />
-          <div className="flex items-center gap-1.5 text-amber-300 font-black font-mono-num text-lg">
-            <Cog className="w-5 h-5 animate-spin" style={{ animationDuration: '6s' }} /> {gears}
+          <div className="hidden sm:block h-8 w-px bg-slate-700" />
+          <div className="flex items-center gap-1 text-amber-300 font-black font-mono-num text-sm sm:text-lg">
+            <Cog className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" style={{ animationDuration: '6s' }} /> {gears}
           </div>
           <div className="text-center">
-            <div className="text-[10px] text-slate-400">波次</div>
-            <div className="text-base font-black text-white font-mono-num">
+            <div className="text-[9px] text-slate-400">波次</div>
+            <div className="text-sm sm:text-base font-black text-white font-mono-num">
               {wave}/{TOTAL_WAVES}
             </div>
           </div>
-          <div className="text-center">
-            <div className="text-[10px] text-slate-400">連擊</div>
+          <div className="hidden sm:block text-center">
+            <div className="text-[9px] text-slate-400">連擊</div>
             <div className="text-base font-black text-amber-300 font-mono-num">{combo}x</div>
           </div>
         </div>
@@ -1065,9 +1101,57 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         </button>
       </div>
 
+      {/* Circular Radial Tower Build Wheel (Opens on Empty Grass Tile Tap) */}
+      {radialPicker && (
+        <div
+          data-testid="math-td-radial-wheel"
+          className="fixed z-30 pointer-events-auto"
+          style={{
+            left: radialPicker.x,
+            top: radialPicker.y,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <div className="relative w-56 h-56 rounded-full bg-slate-950/78 border-2 border-amber-400/80 shadow-[0_0_28px_rgba(15,23,42,0.85)] flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => setRadialPicker(null)}
+              aria-label="取消建塔"
+              className="w-11 h-11 rounded-full bg-slate-800 hover:bg-slate-700 border-2 border-slate-500 text-slate-200 font-black text-xs shadow"
+            >
+              取消
+            </button>
+            {TOWER_SHOP.map((t, idx) => {
+              const positions = [
+                'top-1.5 left-1/2 -translate-x-1/2',
+                'right-1.5 top-1/2 -translate-y-1/2',
+                'bottom-1.5 left-1/2 -translate-x-1/2',
+                'left-1.5 top-1/2 -translate-y-1/2',
+              ];
+              const affordable = gears >= t.cost;
+              return (
+                <button
+                  key={t.kind}
+                  type="button"
+                  onClick={() => placeTowerAt(radialPicker.lane, radialPicker.col, t.kind)}
+                  className={`absolute ${positions[idx]} min-w-[82px] min-h-[50px] px-2.5 py-1 rounded-2xl border-2 text-center shadow-xl transition-transform active:scale-90 ${
+                    affordable
+                      ? `bg-slate-900 ${t.accent} text-white hover:bg-slate-800`
+                      : 'bg-slate-900/85 border-slate-700 text-slate-400'
+                  }`}
+                >
+                  <div className="text-[11px] font-black whitespace-nowrap">{t.name.slice(0, 4)}</div>
+                  <div className="text-[11px] font-black text-amber-300 font-mono-num">⚙{t.cost}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Non-Blocking Side/Bottom Blueprint Math Solver Overlay */}
       {solverState && (
-        <div className="fixed right-4 bottom-24 z-30 w-[min(92vw,420px)] rounded-3xl bg-slate-900/96 border-2 border-amber-400 p-4 shadow-2xl pointer-events-auto">
+        <div className="fixed right-3 sm:right-4 bottom-24 z-30 w-[min(94vw,420px)] rounded-3xl bg-slate-900/96 border-2 border-amber-400 p-4 shadow-2xl pointer-events-auto">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-xs font-black text-amber-300">
               {solverState.purpose === 'snipe'
@@ -1078,7 +1162,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
               type="button"
               onClick={() => soundEngine.speakText(solverState.question.prompt, 'zh-TW')}
               aria-label="朗讀數學題目"
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300"
+              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300"
             >
               <Volume2 className="w-4 h-4" />
             </button>
@@ -1086,19 +1170,22 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           <div className="text-base sm:text-lg font-black text-white mb-3 leading-snug">
             {solverState.question.prompt}
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             {solverState.question.payload.options.map((opt, idx) => (
               <button
                 key={opt}
                 type="button"
-                onClick={() => handleSolveOption(idx)}
-                className="min-h-[48px] rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 border-2 border-sky-500/60 hover:border-amber-200 text-white font-black text-base font-mono-num transition-colors active:scale-95"
+                onClick={() => {
+                  soundEngine.hapticPulse(14);
+                  handleSolveOption(idx);
+                }}
+                className="min-h-[54px] rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 border-2 border-sky-500/60 hover:border-amber-200 text-white font-black text-base font-mono-num transition-all active:scale-95"
               >
                 {opt}
               </button>
             ))}
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400">
             <span>提示：{solverState.question.hint}</span>
             <button
               type="button"
@@ -1113,7 +1200,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
 
       {bossWarning && stageConfig?.tier === 'boss' && (
         <div className="fixed inset-x-0 top-24 z-30 pointer-events-none flex justify-center px-4">
-          <div className="rounded-2xl bg-rose-950/95 border-2 border-amber-400 px-6 py-3 text-center shadow-[0_0_32px_rgba(244,63,94,0.55)]">
+          <div className="animate-vs-banner rounded-2xl bg-rose-950/95 border-2 border-amber-400 px-6 py-3 text-center shadow-[0_0_32px_rgba(244,63,94,0.55)]">
             <div className="text-xs font-black tracking-widest text-amber-300">
               WARNING · 第 10 關章節大魔王進軍！
             </div>

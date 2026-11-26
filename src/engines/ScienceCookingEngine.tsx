@@ -889,10 +889,13 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
             <button
               type="button"
               disabled={step !== 'temperature'}
-              onClick={handleLockTemperature}
-              className={`w-full min-h-[48px] rounded-xl font-black text-sm transition-transform active:scale-95 ${
+              onClick={() => {
+                soundEngine.hapticPulse(18);
+                handleLockTemperature();
+              }}
+              className={`w-full min-h-[56px] rounded-xl font-black text-sm sm:text-base transition-transform active:scale-95 ${
                 step === 'temperature'
-                  ? 'bg-orange-500 hover:bg-orange-400 text-white shadow-lg'
+                  ? 'bg-orange-500 hover:bg-orange-400 text-white shadow-[0_0_18px_rgba(249,115,22,0.55)]'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed'
               }`}
             >
@@ -918,12 +921,15 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
               <div className="text-[11px] text-slate-300 mb-2">
                 需求：{currentDish.payload.targetPhLabel}
               </div>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   disabled={step !== 'ph'}
-                  onClick={() => handleDropReagent('acid')}
-                  className="min-h-[44px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-45 text-white font-black text-xs"
+                  onClick={() => {
+                    soundEngine.hapticPulse(14);
+                    handleDropReagent('acid');
+                  }}
+                  className="min-h-[54px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95"
                 >
                   酸性
                   <div className="text-[10px] font-normal">檸檬紅</div>
@@ -931,8 +937,11 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
                 <button
                   type="button"
                   disabled={step !== 'ph'}
-                  onClick={() => handleDropReagent('neutral')}
-                  className="min-h-[44px] rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-45 text-white font-black text-xs"
+                  onClick={() => {
+                    soundEngine.hapticPulse(14);
+                    handleDropReagent('neutral');
+                  }}
+                  className="min-h-[54px] rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95"
                 >
                   中性
                   <div className="text-[10px] font-normal">純水紫</div>
@@ -940,8 +949,11 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
                 <button
                   type="button"
                   disabled={step !== 'ph'}
-                  onClick={() => handleDropReagent('alkali')}
-                  className="min-h-[44px] rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-45 text-white font-black text-xs"
+                  onClick={() => {
+                    soundEngine.hapticPulse(14);
+                    handleDropReagent('alkali');
+                  }}
+                  className="min-h-[54px] rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95"
                 >
                   鹼性
                   <div className="text-[10px] font-normal">蘇打藍</div>
@@ -954,10 +966,13 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
               <button
                 type="button"
                 disabled={step !== 'serve'}
-                onClick={handleRingServeBell}
-                className={`min-h-[54px] rounded-2xl font-black text-sm border-2 flex items-center justify-center gap-1.5 transition-transform active:scale-95 ${
+                onClick={() => {
+                  soundEngine.hapticPulse(22);
+                  handleRingServeBell();
+                }}
+                className={`min-h-[60px] rounded-2xl font-black text-sm border-2 flex items-center justify-center gap-1.5 transition-transform active:scale-95 ${
                   step === 'serve'
-                    ? 'bg-amber-400 hover:bg-amber-300 border-white text-slate-950 shadow-[0_0_20px_rgba(251,191,36,0.75)]'
+                    ? 'bg-amber-400 hover:bg-amber-300 border-white text-slate-950 shadow-[0_0_24px_rgba(251,191,36,0.85)]'
                     : 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
                 }`}
               >
@@ -967,7 +982,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
                 type="button"
                 disabled={ultCharge < 100}
                 onClick={triggerElementFeastUltimate}
-                className={`min-h-[54px] rounded-2xl font-black text-xs border-2 flex items-center justify-center gap-1 transition-transform active:scale-95 ${
+                className={`min-h-[60px] rounded-2xl font-black text-xs border-2 flex items-center justify-center gap-1 transition-transform active:scale-95 ${
                   ultCharge >= 100
                     ? 'bg-rose-500 hover:bg-rose-400 border-amber-200 text-white'
                     : 'bg-slate-800 border-slate-700 text-slate-400 cursor-not-allowed'
@@ -982,7 +997,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 
       {bossWarning && stageConfig?.tier === 'boss' && (
         <div className="fixed inset-x-0 top-24 z-30 pointer-events-none flex justify-center px-4">
-          <div className="rounded-2xl bg-rose-950/95 border-2 border-orange-400 px-6 py-3 text-center shadow-[0_0_32px_rgba(251,146,60,0.55)]">
+          <div className="animate-vs-banner rounded-2xl bg-rose-950/95 border-2 border-orange-400 px-6 py-3 text-center shadow-[0_0_32px_rgba(251,146,60,0.55)]">
             <div className="text-xs font-black tracking-widest text-orange-300">
               WARNING · 第 10 關章節大魔王饕餮現身！
             </div>

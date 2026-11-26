@@ -1,6 +1,7 @@
-import React from 'react';
-import { Star, Coins, Sparkles, RotateCcw, Home, Award } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Star, Coins, Sparkles, RotateCcw, Home, Award, Gift, ArrowRight } from 'lucide-react';
 import { WorldRunResult } from '../types/game';
+import { soundEngine } from '../audio/soundEngine';
 
 interface BattleEndModalProps {
   result: WorldRunResult | null;
@@ -24,6 +25,44 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
   onNextStage,
   onReturnLobby,
 }) => {
+  const [litStars, setLitStars] = useState(0);
+  const [chestOpened, setChestOpened] = useState(false);
+
+  useEffect(() => {
+    if (!result) {
+      setLitStars(0);
+      setChestOpened(false);
+      return;
+    }
+
+    setLitStars(0);
+    setChestOpened(false);
+
+    const timers: number[] = [];
+    if (result.victory) {
+      timers.push(
+        window.setTimeout(() => {
+          setChestOpened(true);
+          soundEngine.playChestOpen();
+          soundEngine.hapticPulse(24);
+        }, 220)
+      );
+    }
+
+    for (let s = 1; s <= result.stars; s++) {
+      timers.push(
+        window.setTimeout(() => {
+          setLitStars(s);
+          soundEngine.playStarChime(s);
+        }, 380 + s * 220)
+      );
+    }
+
+    return () => {
+      timers.forEach((id) => window.clearTimeout(id));
+    };
+  }, [result]);
+
   if (!result) return null;
   const accuracy =
     result.totalAttempts > 0
@@ -35,12 +74,12 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={result.victory ? '關卡勝利結算' : '挑戰失敗結算'}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 pointer-events-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-3 sm:p-4 pointer-events-auto overflow-y-auto"
     >
       <div
-        className={`w-full max-w-lg rounded-3xl border-2 p-6 sm:p-7 shadow-2xl ${
+        className={`w-full max-w-lg my-auto rounded-3xl border-2 p-5 sm:p-6 shadow-2xl ${
           result.victory
-            ? 'bg-slate-900 border-amber-400'
+            ? 'bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950/90 border-amber-400'
             : 'bg-slate-900 border-rose-500/80'
         }`}
       >
@@ -49,106 +88,159 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
             {result.stageLabel ?? SUBJECT_NAMES[result.subject]}
           </div>
           {leveledUp && (
-            <div className="mt-1 inline-block rounded-lg bg-amber-400/20 border border-amber-300/60 px-2.5 py-0.5 text-xs font-black text-amber-200">
+            <div className="mt-1.5 inline-block rounded-lg bg-amber-400/20 border border-amber-300/60 px-2.5 py-0.5 text-xs font-black text-amber-200">
               守護者升級！全屬性能力提升
             </div>
           )}
           <h2
-            className={`text-3xl sm:text-4xl font-black mt-1 font-display ${
+            className={`text-2xl sm:text-4xl font-black mt-1 font-display ${
               result.victory ? 'text-amber-300' : 'text-rose-400'
             }`}
           >
             {result.victory ? '關卡大勝利！' : '差一點就通關了！'}
           </h2>
-          <p className="text-sm text-slate-300 mt-1">{result.progressSummary}</p>
+          <p className="text-xs sm:text-sm text-slate-300 mt-1">{result.progressSummary}</p>
 
-          {result.chestRewardText && (
-            <div className="mt-3 rounded-2xl bg-amber-950/80 border-2 border-amber-400 px-3.5 py-2 text-xs font-black text-amber-200">
-              {result.chestRewardText}
+          {/* Animated Treasure Chest Reveal */}
+          {result.victory && (
+            <div className="mt-3 flex justify-center">
+              <div
+                className={`relative inline-flex items-center gap-2.5 rounded-2xl border-2 px-4 py-2 ${
+                  chestOpened
+                    ? 'animate-chest-open bg-gradient-to-r from-amber-500/25 via-yellow-400/25 to-orange-500/25 border-amber-300 shadow-[0_0_24px_rgba(251,191,36,0.45)]'
+                    : 'bg-slate-800/80 border-slate-700 opacity-60'
+                }`}
+              >
+                <span className="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow">
+                  <Gift className="w-5 h-5" />
+                </span>
+                <div className="text-left">
+                  <div className="text-[11px] font-black text-amber-200">
+                    {result.chestRewardText ? '傳說魔王寶箱已開啟！' : '通關戰利品寶箱已開啟！'}
+                  </div>
+                  <div className="text-xs font-bold text-white">
+                    {result.chestRewardText ?? `獲得 ${result.coinsEarned} 金幣與 ${result.crystalsEarned} 智光晶石`}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* 3-Star Display */}
-          <div className="flex items-center justify-center gap-3 my-4">
-            {[1, 2, 3].map((idx) => (
-              <Star
-                key={idx}
-                className={`w-10 h-10 transition-transform ${
-                  idx <= result.stars
-                    ? 'text-amber-400 fill-amber-400 scale-110 drop-shadow-[0_0_12px_rgba(251,191,36,0.65)]'
-                    : 'text-slate-700 fill-slate-800'
-                }`}
-              />
-            ))}
+          {/* Staggered 3-Star Pop-In Lighting Display */}
+          <div className="flex items-center justify-center gap-3.5 my-4">
+            {[1, 2, 3].map((idx) => {
+              const earned = idx <= result.stars;
+              const lit = idx <= litStars;
+              return (
+                <div
+                  key={idx}
+                  className={`relative flex items-center justify-center ${
+                    idx === 2 ? '-mt-2' : ''
+                  }`}
+                >
+                  <Star
+                    className={`w-11 h-11 transition-all duration-300 ${
+                      earned && lit
+                        ? 'animate-star-pop text-amber-400 fill-amber-400 drop-shadow-[0_0_16px_rgba(251,191,36,0.8)]'
+                        : 'text-slate-700 fill-slate-800 scale-90'
+                    }`}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
 
         {/* Mastery Metrics */}
-        <div className="grid grid-cols-3 gap-2.5 bg-slate-950/70 rounded-2xl p-3.5 border border-slate-800">
+        <div className="grid grid-cols-3 gap-2 bg-slate-950/75 rounded-2xl p-3 border border-slate-800">
           <div className="text-center">
-            <div className="text-xs text-slate-400">戰鬥積分</div>
-            <div className="text-xl font-black text-white font-mono-num">
+            <div className="text-[11px] text-slate-400">戰鬥積分</div>
+            <div className="text-lg sm:text-xl font-black text-white font-mono-num">
               {Math.round(result.score)}
             </div>
           </div>
           <div className="text-center border-x border-slate-800">
-            <div className="text-xs text-slate-400">答題正確率</div>
-            <div className="text-xl font-black text-emerald-400 font-mono-num">
+            <div className="text-[11px] text-slate-400">答題正確率</div>
+            <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono-num">
               {accuracy}%
             </div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-slate-400">最高連擊</div>
-            <div className="text-xl font-black text-amber-300 font-mono-num">
+            <div className="text-[11px] text-slate-400">最高連擊</div>
+            <div className="text-lg sm:text-xl font-black text-amber-300 font-mono-num">
               {result.maxCombo}x
             </div>
           </div>
         </div>
 
-        {/* Rewards Strip */}
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-5 text-sm font-bold">
-          <span className="inline-flex items-center gap-1.5 text-amber-300 font-mono-num">
-            <Coins className="w-4 h-4" /> +{result.coinsEarned} 金幣
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-cyan-300 font-mono-num">
-            <Sparkles className="w-4 h-4" /> +{result.crystalsEarned} 晶石
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-emerald-300 font-mono-num">
-            <Award className="w-4 h-4" /> +{result.xpEarned} 經驗值
-          </span>
+        {/* Structured Loot Rewards List */}
+        <div className="mt-3.5 grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-slate-950/70 border border-amber-500/35 px-2.5 py-2 text-center">
+            <div className="inline-flex items-center justify-center gap-1 text-[11px] text-amber-300 font-bold">
+              <Coins className="w-3.5 h-3.5" /> 金幣
+            </div>
+            <div className="text-sm sm:text-base font-black text-white font-mono-num">
+              +{result.coinsEarned}
+            </div>
+          </div>
+          <div className="rounded-xl bg-slate-950/70 border border-cyan-500/35 px-2.5 py-2 text-center">
+            <div className="inline-flex items-center justify-center gap-1 text-[11px] text-cyan-300 font-bold">
+              <Sparkles className="w-3.5 h-3.5" /> 智光晶石
+            </div>
+            <div className="text-sm sm:text-base font-black text-white font-mono-num">
+              +{result.crystalsEarned}
+            </div>
+          </div>
+          <div className="rounded-xl bg-slate-950/70 border border-emerald-500/35 px-2.5 py-2 text-center">
+            <div className="inline-flex items-center justify-center gap-1 text-[11px] text-emerald-300 font-bold">
+              <Award className="w-3.5 h-3.5" /> 守護經驗
+            </div>
+            <div className="text-sm sm:text-base font-black text-white font-mono-num">
+              +{result.xpEarned}
+            </div>
+          </div>
         </div>
 
         {result.knowledgeTags.length > 0 && (
-          <div className="mt-4 text-center text-xs text-slate-300">
+          <div className="mt-3 text-center text-xs text-slate-300">
             <span className="text-slate-400">解鎖知識卡：</span>
             {result.knowledgeTags.slice(0, 4).join(' · ')}
           </div>
         )}
 
-        <div className="mt-6 flex flex-col gap-2.5">
+        <div className="mt-5 flex flex-col gap-2.5">
           {onNextStage && (
             <button
               type="button"
               data-start="true"
-              onClick={onNextStage}
-              className="w-full min-h-[50px] rounded-xl bg-gradient-to-r from-emerald-400 to-amber-400 hover:brightness-110 text-slate-950 font-black text-base flex items-center justify-center gap-2 shadow-xl transition-transform active:scale-95"
+              onClick={() => {
+                soundEngine.playClick();
+                onNextStage();
+              }}
+              className="w-full min-h-[52px] rounded-xl bg-gradient-to-r from-emerald-400 to-amber-400 hover:brightness-110 text-slate-950 font-black text-base flex items-center justify-center gap-2 shadow-xl transition-transform active:scale-95"
             >
-              推進下一關！
+              推進下一關！ <ArrowRight className="w-5 h-5" />
             </button>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
               data-start={!onNextStage ? 'true' : undefined}
-              onClick={onRetry}
-              className="min-h-[48px] rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-base flex items-center justify-center gap-2 transition-transform active:scale-95"
+              onClick={() => {
+                soundEngine.playClick();
+                onRetry();
+              }}
+              className="min-h-[48px] rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm sm:text-base flex items-center justify-center gap-1.5 transition-transform active:scale-95"
             >
               <RotateCcw className="w-4 h-4" /> {result.victory ? '重刷三星' : '立即重試'}
             </button>
             <button
               type="button"
-              onClick={onReturnLobby}
-              className="min-h-[48px] rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-base border border-slate-600 flex items-center justify-center gap-2 transition-transform active:scale-95"
+              onClick={() => {
+                soundEngine.playClick();
+                onReturnLobby();
+              }}
+              className="min-h-[48px] rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm sm:text-base border border-slate-600 flex items-center justify-center gap-1.5 transition-transform active:scale-95"
             >
               <Home className="w-4 h-4" /> 返回章節地圖
             </button>

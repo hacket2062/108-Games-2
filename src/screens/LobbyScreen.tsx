@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen,
   CheckCircle2,
+  ChevronRight,
   Coins,
+  Compass,
   Gem,
   Hammer,
   Heart,
@@ -41,7 +43,6 @@ import {
   FloatingTextPool,
   ParticlePool,
 } from '../core/canvasEffects';
-
 import { getWorldTotalStars } from '../data/campaignMap';
 
 interface LobbyScreenProps {
@@ -69,9 +70,9 @@ const PLANET_PORTALS: PlanetPortalConfig[] = [
     worldTitle: '墨靈幻境',
     subjectLabel: '國語文',
     genreTag: 'RO 2.5D 走圖＋ATB 拼字斬句',
-    accentBorder: 'border-amber-400 hover:border-amber-200',
+    accentBorder: 'border-amber-400/90 hover:border-amber-200',
     planetGrad: 'from-amber-400 via-orange-500 to-rose-600',
-    ringColor: 'border-amber-200/70',
+    ringColor: 'border-amber-200/75',
     emblem: '墨',
   },
   {
@@ -80,9 +81,9 @@ const PLANET_PORTALS: PlanetPortalConfig[] = [
     worldTitle: '星際機甲戰線',
     subjectLabel: '英語文',
     genreTag: '賽博彈幕射擊＋母艦拼字',
-    accentBorder: 'border-cyan-400 hover:border-cyan-200',
+    accentBorder: 'border-cyan-400/90 hover:border-cyan-200',
     planetGrad: 'from-cyan-400 via-indigo-500 to-fuchsia-600',
-    ringColor: 'border-cyan-200/70',
+    ringColor: 'border-cyan-200/75',
     emblem: 'Aa',
   },
   {
@@ -91,9 +92,9 @@ const PLANET_PORTALS: PlanetPortalConfig[] = [
     worldTitle: '數境建築王國',
     subjectLabel: '數學',
     genreTag: '5×8 殭屍塔防＋算式盾雷射',
-    accentBorder: 'border-blue-400 hover:border-sky-200',
+    accentBorder: 'border-sky-400/90 hover:border-sky-200',
     planetGrad: 'from-emerald-400 via-sky-500 to-blue-700',
-    ringColor: 'border-sky-200/70',
+    ringColor: 'border-sky-200/75',
     emblem: 'π',
   },
   {
@@ -102,12 +103,96 @@ const PLANET_PORTALS: PlanetPortalConfig[] = [
     worldTitle: '元素料理大亂鬥',
     subjectLabel: '自然科學',
     genreTag: 'Overcooked 控溫酸鹼廚房',
-    accentBorder: 'border-emerald-400 hover:border-emerald-200',
+    accentBorder: 'border-emerald-400/90 hover:border-emerald-200',
     planetGrad: 'from-orange-400 via-rose-500 to-teal-500',
-    ringColor: 'border-emerald-200/70',
+    ringColor: 'border-emerald-200/75',
     emblem: '炎',
   },
 ];
+
+/** Compact 90x90 Retina mini-canvas for the Mobile Guardian Companion Card */
+const GuardianMiniCanvas: React.FC<{
+  guardianId: GuardianId;
+  auraColor: string;
+  bounceSignal: number;
+}> = ({ guardianId, auraColor, bounceSignal }) => {
+  const miniRef = useRef<HTMLCanvasElement | null>(null);
+  const guardianRef = useRef(guardianId);
+  const auraRef = useRef(auraColor);
+  const bounceRef = useRef(0);
+
+  useEffect(() => {
+    guardianRef.current = guardianId;
+  }, [guardianId]);
+
+  useEffect(() => {
+    auraRef.current = auraColor;
+  }, [auraColor]);
+
+  useEffect(() => {
+    if (bounceSignal > 0) bounceRef.current = 1.0;
+  }, [bounceSignal]);
+
+  useEffect(() => {
+    const canvas = miniRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const size = 90;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(size * dpr);
+    canvas.height = Math.floor(size * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    let rafId = 0;
+    let alive = true;
+    let lastTs = performance.now();
+    let time = 0;
+
+    const loop = (now: number) => {
+      if (!alive) return;
+      const dt = Math.min(0.05, Math.max(0.001, (now - lastTs) / 1000));
+      lastTs = now;
+      time += dt;
+      if (bounceRef.current > 0) {
+        bounceRef.current = Math.max(0, bounceRef.current - dt * 2.5);
+      }
+
+      ctx.clearRect(0, 0, size, size);
+      const glow = ctx.createRadialGradient(45, 50, 6, 45, 50, 42);
+      glow.addColorStop(0, `${auraRef.current}55`);
+      glow.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, size, size);
+
+      // Mini stone disc
+      ctx.fillStyle = '#334155';
+      ctx.strokeStyle = auraRef.current;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(45, 74, 30, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      drawGuardianSpirit(ctx, guardianRef.current, 45, 52, time, 0.88, bounceRef.current);
+      rafId = requestAnimationFrame(loop);
+    };
+
+    rafId = requestAnimationFrame(loop);
+    return () => {
+      alive = false;
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={miniRef}
+      className="w-[90px] h-[90px] rounded-2xl bg-slate-950/90 border border-slate-700/80 shrink-0"
+    />
+  );
+};
 
 export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   onNavigate,
@@ -144,6 +229,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   const [drawer, setDrawer] = useState<'none' | 'account' | 'quests' | 'spirits'>('none');
   const [newStudentName, setNewStudentName] = useState('');
   const [questToast, setQuestToast] = useState<string | null>(null);
+  const [miniBounceSignal, setMiniBounceSignal] = useState(0);
 
   const guardianIdRef = useRef<GuardianId>(save.selectedGuardian);
   const auraColorRef = useRef(ASCENSION_PATHS[equippedWeapon.ascensionPath].auraPrimary);
@@ -160,7 +246,16 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     auraColorRef.current = ASCENSION_PATHS[equippedWeapon.ascensionPath].auraPrimary;
   }, [equippedWeapon.ascensionPath]);
 
-  // Enter / Space quick launch to Stage Map
+  // Auto-dismiss auth notification toast after 2.5s so it never blocks UI
+  useEffect(() => {
+    if (!authNotice) return;
+    const timer = window.setTimeout(() => {
+      clearAuthNotice();
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [authNotice, clearAuthNotice]);
+
+  // Enter / Space quick launch to Stage Map on desktop keyboard
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (drawer !== 'none') return;
@@ -179,7 +274,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [drawer, focusedScreen, onOpenWorldMap]);
 
-  // Live Interactive Plaza Canvas (Guardian cleanly above the interaction card!)
+  // Live Starry Knowledge-Rune Backdrop Canvas (Desktop shows full guardian pedestal on left; mobile shows clean ambient backdrop)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -194,7 +289,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       if (rect.width === width && rect.height === height && cachedSky) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.max(1, Math.floor(rect.width * dpr));
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -202,17 +297,17 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       height = rect.height;
 
       const sky = ctx.createLinearGradient(0, 0, 0, height);
-      sky.addColorStop(0, '#0B1120');
-      sky.addColorStop(0.48, '#1E3A8A');
-      sky.addColorStop(0.86, '#0F766E');
-      sky.addColorStop(1, '#064E3B');
+      sky.addColorStop(0, '#070D1F');
+      sky.addColorStop(0.46, '#172E73');
+      sky.addColorStop(0.84, '#0F5E63');
+      sky.addColorStop(1, '#063B36');
       cachedSky = sky;
 
       const gx = width < 1024 ? width * 0.5 : width * 0.21;
-      const gy = width < 1024 ? height * 0.3 : height * 0.44;
-      const rad = ctx.createRadialGradient(gx, gy, 24, gx, gy, Math.max(width, height) * 0.42);
-      rad.addColorStop(0, 'rgba(251, 191, 36, 0.26)');
-      rad.addColorStop(0.55, 'rgba(56, 189, 248, 0.11)');
+      const gy = width < 1024 ? height * 0.28 : height * 0.46;
+      const rad = ctx.createRadialGradient(gx, gy, 20, gx, gy, Math.max(width, height) * 0.45);
+      rad.addColorStop(0, 'rgba(251, 191, 36, 0.22)');
+      rad.addColorStop(0.55, 'rgba(56, 189, 248, 0.10)');
       rad.addColorStop(1, 'rgba(15, 23, 42, 0)');
       cachedRad = rad;
     };
@@ -222,9 +317,27 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
     const clouds = Array.from({ length: 6 }, (_, i) => ({
       x: i * 260,
-      y: 72 + (i % 3) * 58,
-      speed: 11 + (i % 3) * 5,
-      scale: 0.78 + (i % 3) * 0.3,
+      y: 78 + (i % 3) * 64,
+      speed: 10 + (i % 3) * 4.5,
+      scale: 0.72 + (i % 3) * 0.28,
+    }));
+
+    const stars = Array.from({ length: 38 }, (_, i) => ({
+      x: (i * 197.3) % 1,
+      y: (i * 89.1) % 0.75,
+      size: 1.2 + (i % 3) * 0.85,
+      phase: i * 0.7,
+    }));
+
+    const runeSymbols = ['文', 'π', 'Aa', '⚡', '★', '炎', '智', '∞'];
+    const runes = Array.from({ length: 14 }, (_, i) => ({
+      x: ((i * 137) % 100) / 100,
+      y: ((i * 73) % 100) / 100,
+      speedY: 0.012 + (i % 4) * 0.005,
+      swayPhase: i * 1.1,
+      symbol: runeSymbols[i % runeSymbols.length],
+      size: 13 + (i % 3) * 4,
+      color: i % 3 === 0 ? '#FDE047' : i % 3 === 1 ? '#38BDF8' : '#34D399',
     }));
 
     let rafId = 0;
@@ -246,53 +359,72 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       particlesRef.current.update(dt);
       floatsRef.current.update(dt);
 
-      ctx.fillStyle = cachedSky ?? '#1E3A8A';
+      ctx.fillStyle = cachedSky ?? '#172E73';
       ctx.fillRect(0, 0, width, height);
       if (cachedRad) {
         ctx.fillStyle = cachedRad;
         ctx.fillRect(0, 0, width, height);
       }
 
-      // Soft clouds
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+      // Twinkling Stardust
+      for (const s of stars) {
+        const alpha = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(time * 2.1 + s.phase));
+        ctx.fillStyle = `rgba(254, 249, 195, ${alpha.toFixed(2)})`;
+        ctx.beginPath();
+        ctx.arc(s.x * width, s.y * height, s.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Slowly Drifting Glowing Knowledge Rune Particles
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const r of runes) {
+        r.y -= r.speedY * dt;
+        if (r.y < -0.06) r.y = 1.06;
+        const rx = r.x * width + Math.sin(time * 0.9 + r.swayPhase) * 18;
+        const ry = r.y * height;
+        ctx.globalAlpha = 0.14 + 0.08 * Math.sin(time * 1.6 + r.swayPhase);
+        ctx.fillStyle = r.color;
+        ctx.font = `900 ${r.size}px "Fredoka", "Noto Sans TC", sans-serif`;
+        ctx.fillText(r.symbol, rx, ry);
+      }
+      ctx.restore();
+
+      // Soft Clouds
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
       for (const c of clouds) {
         c.x += c.speed * dt;
         if (c.x > width + 180) c.x = -180;
         ctx.beginPath();
-        ctx.arc(c.x, c.y, 36 * c.scale, 0, Math.PI * 2);
-        ctx.arc(c.x + 34 * c.scale, c.y - 10, 42 * c.scale, 0, Math.PI * 2);
-        ctx.arc(c.x + 72 * c.scale, c.y, 32 * c.scale, 0, Math.PI * 2);
+        ctx.arc(c.x, c.y, 34 * c.scale, 0, Math.PI * 2);
+        ctx.arc(c.x + 32 * c.scale, c.y - 9, 40 * c.scale, 0, Math.PI * 2);
+        ctx.arc(c.x + 68 * c.scale, c.y, 30 * c.scale, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Floating Stone Pedestal positioned cleanly at upper-middle left (zero overlap with card below!)
-      const px = width < 1024 ? width * 0.5 : width * 0.21;
-      const py = width < 1024 ? height * 0.3 : height * 0.44;
+      // Desktop-only full pedestal + Guardian Sprite (Mobile uses the compact horizontal Guardian Card!)
+      if (width >= 1024) {
+        const px = width * 0.21;
+        const py = height * 0.45;
 
-      ctx.save();
-      ctx.translate(px, py + 48);
-      ctx.fillStyle = '#334155';
-      ctx.strokeStyle = auraColorRef.current;
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 92, 24, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+        ctx.save();
+        ctx.translate(px, py + 48);
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = auraColorRef.current;
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 92, 24, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
 
-      ctx.fillStyle = '#1E293B';
-      drawRoundedRect(ctx, -60, 15, 120, 20, 9);
-      ctx.fill();
-      ctx.restore();
+        ctx.fillStyle = '#1E293B';
+        drawRoundedRect(ctx, -60, 15, 120, 20, 9);
+        ctx.fill();
+        ctx.restore();
 
-      drawGuardianSpirit(
-        ctx,
-        guardianIdRef.current,
-        px,
-        py,
-        time,
-        width < 1024 ? 1.45 : 1.9,
-        petBounceRef.current
-      );
+        drawGuardianSpirit(ctx, guardianIdRef.current, px, py, time, 1.85, petBounceRef.current);
+      }
 
       particlesRef.current.render(ctx);
       floatsRef.current.render(ctx);
@@ -318,7 +450,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
   const triggerPetGuardian = () => {
     soundEngine.playPetChime();
+    soundEngine.hapticPulse(16);
     petBounceRef.current = 1.0;
+    setMiniBounceSignal((n) => n + 1);
     petGuardian();
     const lines = guardian.petLines;
     setSpeechBubble(lines[Math.floor(Math.random() * lines.length)]);
@@ -326,14 +460,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     const canvas = canvasRef.current;
     if (canvas) {
       const rect = canvas.getBoundingClientRect();
-      const px = rect.width < 1024 ? rect.width * 0.5 : rect.width * 0.21;
-      const py = rect.width < 1024 ? rect.height * 0.3 : rect.height * 0.44;
-      particlesRef.current.burst(px, py - 24, 16, ['#FB7185', '#FDE047', '#34D399'], 50, 170, 6, 'petal');
-      floatsRef.current.spawn(px, py - 68, '羈絆 +1 ♥', 'perfect');
+      if (rect.width >= 1024) {
+        const px = rect.width * 0.21;
+        const py = rect.height * 0.45;
+        particlesRef.current.burst(px, py - 24, 16, ['#FB7185', '#FDE047', '#34D399'], 50, 170, 6, 'petal');
+        floatsRef.current.spawn(px, py - 68, '羈絆 +1 ♥', 'perfect');
+      }
     }
   };
 
-  // Detect if 3 identical gems can be synthesized (shows subtle ready dot on Socketing dock button)
   const hasSynthReady = useMemo(() => {
     const counts = new Map<string, number>();
     for (const g of save.gemBag) {
@@ -353,155 +488,249 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   const weaponPathDef = ASCENSION_PATHS[equippedWeapon.ascensionPath];
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-slate-950" data-testid="lobby-hub">
-      <canvas ref={canvasRef} className="block w-full h-full" data-testid="lobby-canvas" />
+    <div
+      className="relative w-full h-full overflow-hidden bg-slate-950 flex flex-col"
+      data-testid="lobby-hub"
+    >
+      {/* Full-bleed Live Starry & Rune Backdrop Canvas */}
+      <canvas
+        ref={canvasRef}
+        className="fixed inset-0 w-full h-full pointer-events-none"
+        data-testid="lobby-canvas"
+      />
 
-      {/* Clean Mobile/Tablet-First Game Shell Overlay */}
-      <div className="fixed inset-0 z-10 pointer-events-none flex flex-col justify-between p-3 sm:p-5">
-        {/* TOP STRIP: Account + Resources + Secondary Utility Buttons */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <div className="pointer-events-auto flex flex-wrap items-center gap-2.5">
-            {/* Account Badge with Real Google Photo or Local Avatar */}
+      {/* 1. STICKY TOP HEADER (Single-Row Compact Capsule Bar <= 56px, Zero Multi-Row Wrapping) */}
+      <header className="relative z-30 shrink-0 safe-top bg-slate-950/88 backdrop-blur-md border-b border-slate-800/80 shadow-lg">
+        <div className="max-w-7xl mx-auto h-14 px-2 sm:px-5 flex items-center justify-between gap-1 sm:gap-3">
+          {/* Left: Circular Avatar + Nickname/Lv + Prominent Quick Google Login/Switch */}
+          <div className="min-w-0 flex items-center gap-1 sm:gap-2.5">
             <button
               type="button"
               onClick={() => {
                 soundEngine.playClick();
                 setDrawer('account');
               }}
-              className="min-h-[48px] rounded-2xl bg-slate-900/94 hover:bg-slate-800 border-2 border-amber-400/75 px-3.5 py-2 shadow-xl flex items-center gap-3 text-left"
+              aria-label="開啟帳號與切換選單"
+              className="shrink-0 h-9 sm:h-10 rounded-full bg-slate-900/95 hover:bg-slate-800 border border-amber-400/75 pl-1 pr-2 sm:pr-3.5 flex items-center gap-1.5 sm:gap-2 text-left transition-transform active:scale-95"
             >
               {user.photoURL ? (
                 <img
                   src={user.photoURL}
                   alt={user.displayName}
                   referrerPolicy="no-referrer"
-                  className="w-9 h-9 rounded-xl border border-amber-300 object-cover shrink-0"
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-amber-300 object-cover shrink-0"
                 />
               ) : (
                 <span
-                  className="w-9 h-9 rounded-xl font-black text-sm text-slate-950 flex items-center justify-center shrink-0"
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-full font-black text-xs text-slate-950 flex items-center justify-center shrink-0"
                   style={{ backgroundColor: user.avatarColor }}
                 >
                   {user.displayName.slice(0, 1)}
                 </span>
               )}
-              <div>
-                <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-white">
-                  <span>{user.displayName}</span>
-                  <span className="text-amber-300 font-mono-num">Lv.{save.level}</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1 text-[11px] sm:text-xs font-black text-white leading-tight">
+                  <span className="hidden sm:inline truncate max-w-[110px]">{user.displayName}</span>
+                  <span className="text-amber-300 font-mono-num shrink-0">Lv.{save.level}</span>
                 </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <div className="w-20 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                <div className="hidden sm:flex items-center gap-1.5 mt-0.5">
+                  <div className="w-16 h-1 rounded-full bg-slate-800 overflow-hidden">
                     <div
                       className="h-full bg-amber-400"
                       style={{ width: `${Math.min(100, (save.xp / xpNeeded) * 100)}%` }}
                     />
                   </div>
-                  <span className="text-[10px] text-slate-400">
-                    {user.provider === 'google' ? 'Google 雲端已同步' : '本機檔案'} · {currentTitle}
+                  <span className="hidden md:inline text-[10px] text-slate-400 truncate">
+                    {user.provider === 'google' ? '雲端同步' : currentTitle}
                   </span>
                 </div>
               </div>
             </button>
 
-            {/* Prominent Top-Left Google Login & Switch Account Buttons */}
-            <div className="flex items-center gap-1.5">
-              {user.provider !== 'google' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundEngine.playClick();
-                    signInWithGoogle();
-                  }}
-                  className="min-h-[46px] px-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-950 border-2 border-sky-300 font-black text-xs inline-flex items-center gap-1.5 shadow-xl transition-transform active:scale-95"
-                >
-                  <LogIn className="w-4 h-4 text-sky-600" /> Google 帳號登入
-                </button>
-              ) : null}
+            {/* Quick Google Login / Switch Trigger */}
+            {user.provider !== 'google' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick();
+                  signInWithGoogle();
+                }}
+                className="h-8 sm:h-9 px-2 sm:px-3 rounded-full bg-white hover:bg-slate-100 text-slate-950 border border-sky-300 font-black text-[11px] sm:text-xs inline-flex items-center gap-1 shadow transition-transform active:scale-95 shrink-0"
+              >
+                <LogIn className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <span className="sm:hidden">Google</span>
+                <span className="hidden sm:inline">Google 登入</span>
+              </button>
+            ) : (
               <button
                 type="button"
                 onClick={() => {
                   soundEngine.playClick();
                   setDrawer('account');
                 }}
-                className="min-h-[46px] px-3 rounded-xl bg-slate-900/92 hover:bg-slate-800 border-2 border-sky-400/75 text-sky-200 font-black text-xs inline-flex items-center gap-1.5 shadow-xl transition-transform active:scale-95"
+                className="h-8 sm:h-9 px-2 sm:px-3 rounded-full bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/70 text-sky-200 font-black text-[11px] sm:text-xs inline-flex items-center gap-1 shrink-0"
               >
-                <Users className="w-4 h-4" /> 切換帳號
+                <Users className="w-3.5 h-3.5 shrink-0" />
+                <span>切換</span>
               </button>
-            </div>
+            )}
+          </div>
 
-            {/* Compact Resource Numbers */}
-            <div className="rounded-2xl bg-slate-900/92 border border-slate-700 px-3.5 py-2.5 shadow-xl flex items-center gap-3.5 text-xs sm:text-sm font-black font-mono-num">
-              <span className="text-amber-300 inline-flex items-center gap-1">
-                <Coins className="w-4 h-4" /> {save.coins}
+          {/* Right: Compact Coins/Crystals + 3 Round Utility Icon Buttons */}
+          <div className="shrink-0 flex items-center gap-1 sm:gap-2">
+            <div className="h-8 sm:h-9 rounded-full bg-slate-900/95 border border-slate-700 px-2 sm:px-3 flex items-center gap-1.5 sm:gap-3 text-[11px] sm:text-xs font-black font-mono-num">
+              <span className="text-amber-300 inline-flex items-center gap-0.5 sm:gap-1">
+                <Coins className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" /> {save.coins}
               </span>
-              <span className="text-cyan-300 inline-flex items-center gap-1">
-                <Sparkles className="w-4 h-4" /> {save.crystals}
+              <span className="text-cyan-300 inline-flex items-center gap-0.5 sm:gap-1">
+                <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" /> {save.crystals}
               </span>
-              <span className="text-fuchsia-300 inline-flex items-center gap-1 hidden sm:inline-flex">
-                <Trophy className="w-4 h-4" /> {save.pvp.honorTokens}
+              <span className="hidden md:inline-flex text-fuchsia-300 items-center gap-1">
+                <Trophy className="w-3.5 h-3.5" /> {save.pvp.honorTokens}
               </span>
-              <span className="text-emerald-300 text-xs hidden md:inline">
+              <span className="hidden lg:inline text-emerald-300 text-[11px]">
                 戰力 {combatStats.baseAttack}
               </span>
             </div>
-          </div>
 
-          {/* Top Right Actions */}
-          <div className="pointer-events-auto flex items-center gap-2">
             <button
               type="button"
               onClick={() => {
                 soundEngine.playClick();
                 setDrawer('quests');
               }}
-              className="relative min-h-[46px] px-3 rounded-xl bg-slate-900/92 hover:bg-slate-800 border-2 border-emerald-400/70 text-emerald-200 font-black text-xs inline-flex items-center gap-1.5"
+              aria-label="每日任務"
+              title="每日任務"
+              className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-900/95 hover:bg-slate-800 border border-emerald-400/70 text-emerald-300 flex items-center justify-center transition-transform active:scale-90 shrink-0"
             >
-              <ListChecks className="w-4 h-4" /> 每日任務
+              <ListChecks className="w-4 h-4" />
               {unclaimedQuests > 0 && (
-                <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">
                   {unclaimedQuests}
                 </span>
               )}
             </button>
+
             <button
               type="button"
               onClick={() => {
                 soundEngine.playClick();
                 onNavigate('parent_dashboard');
               }}
-              className="min-h-[46px] px-3 rounded-xl bg-slate-900/92 hover:bg-slate-800 border-2 border-sky-400/70 text-sky-200 font-black text-xs inline-flex items-center gap-1.5"
+              aria-label="家長專區"
+              title="家長專區"
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-900/95 hover:bg-slate-800 border border-sky-400/70 text-sky-300 flex items-center justify-center transition-transform active:scale-90 shrink-0"
             >
-              <Lock className="w-4 h-4" /> 家長專區
+              <Lock className="w-4 h-4" />
             </button>
+
             <button
               type="button"
               onClick={toggleMute}
               aria-label={save.muted ? '開啟音效' : '靜音'}
-              className="w-11 h-11 rounded-xl bg-slate-900/92 hover:bg-slate-800 border-2 border-slate-600 text-white flex items-center justify-center"
+              title={save.muted ? '開啟音效' : '靜音'}
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-900/95 hover:bg-slate-800 border border-slate-600 text-white flex items-center justify-center transition-transform active:scale-90 shrink-0"
             >
-              {save.muted ? <VolumeX className="w-5 h-5 text-rose-400" /> : <Volume2 className="w-5 h-5 text-emerald-300" />}
+              {save.muted ? (
+                <VolumeX className="w-4 h-4 text-rose-400" />
+              ) : (
+                <Volume2 className="w-4 h-4 text-emerald-300" />
+              )}
             </button>
           </div>
         </div>
+      </header>
 
-        {authNotice && (
-          <div className="pointer-events-auto self-center rounded-xl bg-indigo-950/95 border border-indigo-400 px-4 py-1.5 text-xs font-bold text-indigo-100 flex items-center gap-3 shadow-lg">
-            <span>{authNotice}</span>
-            <button type="button" onClick={clearAuthNotice} aria-label="關閉通知" className="text-indigo-300 hover:text-white">
-              <X className="w-4 h-4" />
-            </button>
+      {/* Auto-Dismissing Floating Auth Notice Toast (2.5s, never blocks UI) */}
+      {authNotice && (
+        <div
+          role="status"
+          className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] rounded-full bg-indigo-950/92 backdrop-blur-md border border-indigo-400/80 px-4 py-1.5 text-xs font-bold text-indigo-100 flex items-center gap-2.5 shadow-xl"
+        >
+          <span className="truncate">{authNotice}</span>
+          <button
+            type="button"
+            onClick={clearAuthNotice}
+            aria-label="關閉通知"
+            className="text-indigo-300 hover:text-white shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* 2. SCROLLABLE MAIN STAGE (Smooth Vertical Scroll on Mobile, 2-Column Split on Desktop) */}
+      <main className="relative z-10 flex-1 overflow-y-auto scroll-touch px-3 sm:px-6 pt-3 pb-24">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-3.5 lg:gap-6 items-start lg:items-center min-h-full">
+          {/* MOBILE COMPACT BRAND + HORIZONTAL GUARDIAN CARD (~110px tall, zero clipping!) */}
+          <div className="lg:hidden flex flex-col gap-2.5">
+            <div className="flex items-center justify-between px-0.5">
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-300 to-orange-500 text-slate-950 font-black text-sm flex items-center justify-center shadow">
+                  智
+                </span>
+                <div>
+                  <h1 className="text-base font-black text-white leading-none font-display tracking-wide">
+                    智光守護者
+                  </h1>
+                  <div className="text-[10px] font-bold text-amber-300/90 mt-0.5">
+                    108 學園大冒險 · 四界獨立引擎
+                  </div>
+                </div>
+              </div>
+              <span className="text-[11px] font-black text-emerald-300 bg-slate-900/80 border border-emerald-500/40 rounded-lg px-2 py-1 font-mono-num">
+                戰力 {combatStats.baseAttack}
+              </span>
+            </div>
+
+            {/* Horizontal Compact Guardian Card */}
+            <div className="rounded-2xl bg-slate-900/92 backdrop-blur-sm border-2 border-amber-400/75 p-2.5 shadow-xl flex items-center gap-3">
+              <GuardianMiniCanvas
+                guardianId={save.selectedGuardian}
+                auraColor={weaponPathDef.auraPrimary}
+                bounceSignal={miniBounceSignal}
+              />
+              <div className="min-w-0 flex-1 flex flex-col justify-between gap-1.5">
+                <div className="flex items-center justify-between gap-1">
+                  <div className="text-xs font-black text-amber-300 truncate">
+                    {guardian.name} · {guardian.title}
+                  </div>
+                  <span className="text-[11px] font-black text-rose-300 inline-flex items-center gap-0.5 font-mono-num shrink-0">
+                    <Heart className="w-3 h-3 fill-rose-400" /> Lv.{save.guardianBonds[save.selectedGuardian]}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-100 leading-snug line-clamp-2">
+                  「{speechBubble}」
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={triggerPetGuardian}
+                    className="flex-1 min-h-[38px] rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-black text-xs flex items-center justify-center gap-1 transition-transform active:scale-95"
+                  >
+                    <Heart className="w-3.5 h-3.5 fill-white" /> 摸摸 (+羈絆)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playClick();
+                      setDrawer('spirits');
+                    }}
+                    className="min-h-[38px] px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-200 border border-slate-600 font-bold text-xs shrink-0 transition-transform active:scale-95"
+                  >
+                    切換
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-        )}
 
-        {/* CENTER MAIN SPLIT: Left Unobstructed Guardian Stage + Right 4 Worlds & PvP Arena */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center my-auto">
-          {/* Left 5 Cols: Crest + Open Guardian Window + Interaction Card Below Pedestal */}
-          <div className="lg:col-span-5 flex flex-col items-start justify-between gap-3">
-            <div className="pointer-events-auto">
+          {/* DESKTOP LEFT 5 COLS: Full Crest + Open Canvas Guardian Pedestal + Interaction Card */}
+          <div className="hidden lg:flex lg:col-span-5 flex-col items-start justify-between gap-3">
+            <div>
               <svg
                 viewBox="0 0 420 78"
-                className="w-[290px] sm:w-[360px] h-auto"
+                className="w-[360px] h-auto"
                 role="img"
                 aria-label="智光守護者：108 學園大冒險"
               >
@@ -550,10 +779,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               </svg>
             </div>
 
-            {/* Spacer keeps Canvas Guardian & Pedestal 100% clear */}
-            <div className="h-24 lg:h-48" />
+            {/* Open Pedestal Spacer for Desktop Canvas Guardian */}
+            <div className="h-52 pointer-events-none" />
 
-            <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-slate-900/92 border-2 border-amber-400/75 p-3.5 shadow-2xl">
+            <div className="w-full max-w-sm rounded-2xl bg-slate-900/92 backdrop-blur-sm border-2 border-amber-400/75 p-3.5 shadow-2xl">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-sm font-black text-amber-300">
                   {guardian.name} · {guardian.title}
@@ -577,7 +806,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     soundEngine.playClick();
                     setDrawer('spirits');
                   }}
-                  className="min-h-[46px] px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-200 border border-slate-600 font-bold text-xs"
+                  className="min-h-[46px] px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-200 border border-slate-600 font-bold text-xs transition-transform active:scale-95"
                 >
                   切換精靈
                 </button>
@@ -585,11 +814,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             </div>
           </div>
 
-          {/* Right 7 Cols: Grade/Semester/Mode + 4 Distinct Worlds + Online PvP Portal */}
-          <div className="lg:col-span-7 pointer-events-auto flex flex-col gap-3">
-            {/* Grade + Semester + Mode Selector */}
-            <div className="rounded-2xl bg-slate-900/94 border border-slate-700 p-2.5 flex flex-wrap items-center justify-between gap-2 shadow-xl">
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+          {/* RIGHT 7 COLS (Full Width on Mobile): Grade/Semester/Mode + 4 Worlds + Online PvP */}
+          <div className="lg:col-span-7 flex flex-col gap-3">
+            {/* Compact Segmented Controls: Grade (3~6), Semester (上/下), Mode (計時/練習) */}
+            <div className="rounded-2xl bg-slate-900/92 backdrop-blur-sm border border-slate-700/90 p-2 shadow-xl flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-2">
+              <div className="grid grid-cols-4 sm:flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
                 {([3, 4, 5, 6] as GradeLevel[]).map((g) => (
                   <button
                     key={g}
@@ -598,8 +827,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       soundEngine.playClick();
                       setGrade(g);
                     }}
-                    className={`min-h-[38px] px-3 rounded-lg text-xs font-black whitespace-nowrap ${
-                      save.grade === g ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white'
+                    className={`min-h-[38px] px-2.5 sm:px-3 rounded-lg text-xs font-black whitespace-nowrap transition-colors ${
+                      save.grade === g
+                        ? 'bg-amber-400 text-slate-950 shadow'
+                        : 'text-slate-300 hover:text-white'
                     }`}
                   >
                     {g}年級
@@ -607,59 +838,63 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 ))}
               </div>
 
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
-                {(['upper', 'lower'] as SemesterId[]).map((sem) => (
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                <div className="grid grid-cols-2 items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  {(['upper', 'lower'] as SemesterId[]).map((sem) => (
+                    <button
+                      key={sem}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.playClick();
+                        setSemester(sem);
+                      }}
+                      className={`min-h-[38px] px-2.5 rounded-lg text-xs font-black whitespace-nowrap transition-colors ${
+                        save.semester === sem
+                          ? 'bg-sky-400 text-slate-950 shadow'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      {sem === 'upper' ? '上學期' : '下學期'}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
                   <button
-                    key={sem}
+                    type="button"
+                    disabled={save.parentSettings.forcePracticeMode}
+                    onClick={() => {
+                      soundEngine.playClick();
+                      setPlayMode('adventure');
+                    }}
+                    className={`min-h-[38px] px-2 rounded-lg text-xs font-black whitespace-nowrap transition-colors ${
+                      save.playMode === 'adventure'
+                        ? 'bg-rose-500 text-white shadow'
+                        : 'text-slate-400 hover:text-white disabled:opacity-40'
+                    }`}
+                  >
+                    計時
+                  </button>
+                  <button
                     type="button"
                     onClick={() => {
                       soundEngine.playClick();
-                      setSemester(sem);
+                      setPlayMode('practice');
                     }}
-                    className={`min-h-[38px] px-3 rounded-lg text-xs font-black whitespace-nowrap ${
-                      save.semester === sem ? 'bg-sky-400 text-slate-950' : 'text-slate-300 hover:text-white'
+                    className={`min-h-[38px] px-2 rounded-lg text-xs font-black whitespace-nowrap transition-colors ${
+                      save.playMode === 'practice'
+                        ? 'bg-emerald-400 text-slate-950 shadow'
+                        : 'text-slate-300 hover:text-white'
                     }`}
                   >
-                    {sem === 'upper' ? '上學期' : '下學期'}
+                    練習
                   </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
-                <button
-                  type="button"
-                  disabled={save.parentSettings.forcePracticeMode}
-                  onClick={() => {
-                    soundEngine.playClick();
-                    setPlayMode('adventure');
-                  }}
-                  className={`min-h-[38px] px-3 rounded-lg text-xs font-black whitespace-nowrap ${
-                    save.playMode === 'adventure'
-                      ? 'bg-rose-500 text-white'
-                      : 'text-slate-400 hover:text-white disabled:opacity-40'
-                  }`}
-                >
-                  冒險計時
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundEngine.playClick();
-                    setPlayMode('practice');
-                  }}
-                  className={`min-h-[38px] px-3 rounded-lg text-xs font-black whitespace-nowrap ${
-                    save.playMode === 'practice'
-                      ? 'bg-emerald-400 text-slate-950'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  練習不計時
-                </button>
+                </div>
               </div>
             </div>
 
-            {/* 4 Subject Planets -> 3 Chapters x 10 Stages World Map */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* 4 Subject Worlds -> 3 Chapters x 10 Stages */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
               {PLANET_PORTALS.map((planet) => {
                 const worldStats = getWorldTotalStars(planet.id, save.grade, save.stageProgress);
                 return (
@@ -669,96 +904,122 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     onMouseEnter={() => setFocusedScreen(planet.screen)}
                     onClick={() => {
                       soundEngine.playClick();
+                      soundEngine.hapticPulse(12);
                       onOpenWorldMap(planet.id);
                     }}
                     data-start={planet.id === 'chinese' ? 'true' : undefined}
-                    className={`group rounded-2xl bg-slate-900/94 border-2 ${planet.accentBorder} p-3.5 text-left shadow-2xl transition-transform hover:-translate-y-0.5 active:scale-[0.98] flex items-center gap-3.5`}
+                    className={`group min-h-[84px] rounded-2xl bg-slate-900/94 backdrop-blur-sm border-2 ${planet.accentBorder} p-3 sm:p-3.5 text-left shadow-xl transition-transform hover:-translate-y-0.5 active:scale-[0.98] flex items-center gap-3`}
                   >
-                    <div className="relative w-14 h-14 shrink-0 flex items-center justify-center">
+                    <div className="relative w-13 h-13 sm:w-14 sm:h-14 shrink-0 flex items-center justify-center">
                       <div
-                        className={`w-12 h-12 rounded-full bg-gradient-to-br ${planet.planetGrad} border-2 border-white/70 shadow-lg flex items-center justify-center text-xl font-black text-white group-hover:scale-110 transition-transform`}
+                        className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br ${planet.planetGrad} border-2 border-white/75 shadow-lg flex items-center justify-center text-lg sm:text-xl font-black text-white group-hover:scale-110 transition-transform`}
                       >
                         {planet.emblem}
                       </div>
                       <div
-                        className={`absolute inset-x-[-5px] top-1/2 -translate-y-1/2 h-4 rounded-full border-2 ${planet.ringColor} -rotate-12 pointer-events-none`}
+                        className={`absolute inset-x-[-5px] top-1/2 -translate-y-1/2 h-3.5 rounded-full border-2 ${planet.ringColor} -rotate-12 pointer-events-none`}
                       />
                     </div>
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-[11px] font-bold text-slate-400">
-                          {planet.subjectLabel} · {save.grade}年級 · 3章30關
+                          {planet.subjectLabel} · {save.grade}年級
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-300 font-mono-num">
+                        <span className="inline-flex items-center gap-0.5 text-[11px] font-black text-amber-300 font-mono-num">
                           <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                           {worldStats.earned}/90
                         </span>
                       </div>
-                      <div className="text-base sm:text-lg font-black text-white mt-0.5">
+                      <div className="text-base sm:text-lg font-black text-white mt-0.5 leading-tight">
                         {planet.worldTitle}
                       </div>
-                      <div className="text-[11px] text-slate-300 truncate">{planet.genreTag}</div>
+                      <div className="text-[11px] text-slate-300 truncate mt-0.5">{planet.genreTag}</div>
                     </div>
+
+                    <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-white group-hover:translate-x-0.5 transition-transform shrink-0" />
                   </button>
                 );
               })}
             </div>
 
-            {/* Online PvP Arena Featured Banner */}
+            {/* Golden/Neon Featured Online PvP Arena Banner */}
             <button
               type="button"
               disabled={!save.parentSettings.pvpEnabled}
               onClick={() => {
                 soundEngine.playClick();
+                soundEngine.hapticPulse(18);
                 onNavigate('pvp_arena');
               }}
-              className={`w-full min-h-[64px] rounded-2xl border-2 px-4 py-3 text-left flex items-center justify-between gap-3 shadow-2xl transition-transform active:scale-[0.99] ${
+              className={`w-full min-h-[70px] rounded-2xl border-2 px-3.5 sm:px-4 py-3 text-left flex items-center justify-between gap-3 shadow-2xl transition-transform active:scale-[0.98] ${
                 save.parentSettings.pvpEnabled
-                  ? 'bg-gradient-to-r from-indigo-900/95 via-fuchsia-900/95 to-rose-900/95 border-fuchsia-400 hover:border-amber-300'
+                  ? 'bg-gradient-to-r from-indigo-900/95 via-fuchsia-900/95 to-amber-900/90 border-amber-400/90 hover:border-amber-200'
                   : 'bg-slate-900/90 border-slate-700 opacity-60 cursor-not-allowed'
               }`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <div
-                  className="w-11 h-11 rounded-xl border-2 border-white/60 flex items-center justify-center font-black text-lg text-slate-950 shrink-0"
+                  className="w-11 h-11 rounded-xl border-2 border-white/70 flex items-center justify-center font-black text-lg text-slate-950 shrink-0 shadow"
                   style={{ backgroundColor: rankTier.color }}
                 >
                   {rankTier.emblem}
                 </div>
-                <div>
-                  <div className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                    <Swords className="w-4 h-4 text-amber-300" /> 線上對戰・雙人知識競技場
+                <div className="min-w-0">
+                  <div className="text-sm sm:text-base font-black text-white flex items-center gap-1.5">
+                    <Swords className="w-4 h-4 text-amber-300 shrink-0" />
+                    <span className="truncate">線上對戰・雙人知識競技場</span>
                   </div>
-                  <div className="text-[11px] text-fuchsia-200">
+                  <div className="text-[11px] text-amber-100/90 truncate mt-0.5">
                     {save.parentSettings.pvpEnabled
-                      ? `${rankTier.name}（${save.pvp.rating}分）· 神兵光環對轟 · 好友房號即時對決`
+                      ? `${rankTier.name}（${save.pvp.rating}分）· 好友房號即時同框對轟`
                       : '家長專區已暫時鎖定線上對戰模式'}
                   </div>
                 </div>
               </div>
-              <span className="min-h-[38px] px-3.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs inline-flex items-center gap-1 shrink-0">
-                <Play className="w-3.5 h-3.5 fill-slate-950" /> 進入對戰
+              <span className="min-h-[38px] px-3 sm:px-3.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs inline-flex items-center gap-1 shrink-0 shadow">
+                <Play className="w-3.5 h-3.5 fill-slate-950" /> 開戰
               </span>
             </button>
           </div>
         </div>
+      </main>
 
-        {/* BOTTOM RPG DOCK: Forge / Socketing / Shop / Mistakes */}
-        <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2.5">
+      {/* 3. FIXED 5-TAB BOTTOM MOBILE NAVIGATION BAR (64px height + Safe Area Inset) */}
+      <nav
+        aria-label="主功能導覽列"
+        className="fixed bottom-0 inset-x-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 safe-bottom shadow-[0_-8px_24px_rgba(2,6,23,0.65)]"
+      >
+        <div className="max-w-2xl mx-auto h-16 grid grid-cols-5 items-center px-1">
+          <button
+            type="button"
+            aria-current="page"
+            onClick={() => soundEngine.playClick()}
+            className="h-full flex flex-col items-center justify-center gap-0.5 text-amber-300 font-black relative"
+          >
+            <span className="absolute top-0 inset-x-4 h-0.5 rounded-full bg-amber-400" />
+            <Compass className="w-5 h-5" />
+            <span className="text-[10px] sm:text-xs">冒險大廳</span>
+          </button>
+
           <button
             type="button"
             onClick={() => {
               soundEngine.playClick();
               onNavigate('forge');
             }}
-            className="min-h-[50px] px-4 rounded-2xl bg-slate-900/95 hover:bg-slate-800 border-2 border-amber-400/75 text-white font-black text-xs sm:text-sm inline-flex items-center gap-2 shadow-xl"
+            className="h-full flex flex-col items-center justify-center gap-0.5 text-slate-300 hover:text-amber-300 font-bold relative transition-colors active:scale-95"
           >
-            <Hammer className="w-4 h-4 text-amber-400" />
-            <span>神兵鍛造屋</span>
-            <span className="text-[11px] font-mono-num" style={{ color: weaponPathDef.auraPrimary }}>
-              +{equippedWeapon.enhanceLevel}
-            </span>
+            <div className="relative">
+              <Hammer className="w-5 h-5 text-amber-400" />
+              <span
+                className="absolute -top-1.5 -right-4 text-[9px] font-black font-mono-num"
+                style={{ color: weaponPathDef.auraPrimary }}
+              >
+                +{equippedWeapon.enhanceLevel}
+              </span>
+            </div>
+            <span className="text-[10px] sm:text-xs">神兵鍛造</span>
           </button>
 
           <button
@@ -767,14 +1028,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               soundEngine.playClick();
               onNavigate('socketing');
             }}
-            className="relative min-h-[50px] px-4 rounded-2xl bg-slate-900/95 hover:bg-slate-800 border-2 border-cyan-400/75 text-white font-black text-xs sm:text-sm inline-flex items-center gap-2 shadow-xl"
+            className="h-full flex flex-col items-center justify-center gap-0.5 text-slate-300 hover:text-cyan-300 font-bold relative transition-colors active:scale-95"
           >
-            <Gem className="w-4 h-4 text-cyan-300" />
-            <span>寶石工坊</span>
-            <span className="text-[11px] text-cyan-300 font-mono-num">({save.gemBag.length})</span>
-            {hasSynthReady && (
-              <span className="w-2.5 h-2.5 rounded-full bg-fuchsia-400 animate-ping" />
-            )}
+            <div className="relative">
+              <Gem className="w-5 h-5 text-cyan-300" />
+              {hasSynthReady && (
+                <span className="absolute -top-0.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-fuchsia-400 animate-ping" />
+              )}
+            </div>
+            <span className="text-[10px] sm:text-xs">寶石工坊</span>
           </button>
 
           <button
@@ -783,11 +1045,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               soundEngine.playClick();
               onNavigate('shop');
             }}
-            className="min-h-[50px] px-4 rounded-2xl bg-slate-900/95 hover:bg-slate-800 border-2 border-emerald-400/75 text-white font-black text-xs sm:text-sm inline-flex items-center gap-2 shadow-xl"
+            className="h-full flex flex-col items-center justify-center gap-0.5 text-slate-300 hover:text-emerald-300 font-bold relative transition-colors active:scale-95"
           >
-            <ShoppingBag className="w-4 h-4 text-emerald-300" />
-            <span>魔法商店</span>
-            <span className="text-[10px] font-black text-amber-300">7折</span>
+            <div className="relative">
+              <ShoppingBag className="w-5 h-5 text-emerald-300" />
+              <span className="absolute -top-1.5 -right-4 text-[9px] font-black text-amber-300">
+                7折
+              </span>
+            </div>
+            <span className="text-[10px] sm:text-xs">魔法商店</span>
           </button>
 
           <button
@@ -796,18 +1062,25 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               soundEngine.playClick();
               onOpenMistakes();
             }}
-            className="min-h-[50px] px-4 rounded-2xl bg-slate-900/95 hover:bg-slate-800 border-2 border-rose-400/75 text-white font-black text-xs sm:text-sm inline-flex items-center gap-2 shadow-xl"
+            className="h-full flex flex-col items-center justify-center gap-0.5 text-slate-300 hover:text-rose-300 font-bold relative transition-colors active:scale-95"
           >
-            <BookOpen className="w-4 h-4 text-rose-300" />
-            <span>錯題本 ({save.wrongRecords.length})</span>
+            <div className="relative">
+              <BookOpen className="w-5 h-5 text-rose-300" />
+              {save.wrongRecords.length > 0 && (
+                <span className="absolute -top-1.5 -right-3 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black font-mono-num flex items-center justify-center">
+                  {save.wrongRecords.length}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] sm:text-xs">錯題本</span>
           </button>
         </div>
-      </div>
+      </nav>
 
       {/* SLIDE-OVER DRAWER: ACCOUNT SWITCHER & GOOGLE LOGIN */}
       {drawer === 'account' && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-3xl bg-slate-900 border-2 border-amber-400 p-5 space-y-4 shadow-2xl">
+          <div className="w-full max-w-md max-h-[85dvh] overflow-y-auto rounded-3xl bg-slate-900 border-2 border-amber-400 p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-black text-amber-300 flex items-center gap-2">
                 <Users className="w-5 h-5" /> 學園帳號與多學生切換
@@ -829,13 +1102,13 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               </div>
               {user.provider === 'google' ? (
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs text-slate-200">
+                  <div className="text-xs text-slate-200 min-w-0 truncate">
                     已登入：<strong>{user.displayName}</strong> ({user.email})
                   </div>
                   <button
                     type="button"
                     onClick={signOutGoogle}
-                    className="min-h-[40px] px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs inline-flex items-center gap-1"
+                    className="min-h-[40px] px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs inline-flex items-center gap-1 shrink-0"
                   >
                     <LogOut className="w-3.5 h-3.5" /> 登出
                   </button>
@@ -844,7 +1117,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 <button
                   type="button"
                   onClick={signInWithGoogle}
-                  className="w-full min-h-[46px] rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-sm inline-flex items-center justify-center gap-2"
+                  className="w-full min-h-[48px] rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-sm inline-flex items-center justify-center gap-2"
                 >
                   <LogIn className="w-4 h-4" /> 使用 Google 帳號登入
                 </button>
@@ -919,7 +1192,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       {/* SLIDE-OVER DRAWER: DAILY QUESTS */}
       {drawer === 'quests' && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-3xl bg-slate-900 border-2 border-emerald-400 p-5 space-y-4 shadow-2xl">
+          <div className="w-full max-w-md max-h-[85dvh] overflow-y-auto rounded-3xl bg-slate-900 border-2 border-emerald-400 p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-black text-emerald-300 flex items-center gap-2">
                 <ListChecks className="w-5 h-5" /> 每日學園任務
@@ -980,7 +1253,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       {/* SLIDE-OVER DRAWER: GUARDIAN SPIRIT SWITCHER */}
       {drawer === 'spirits' && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-slate-900 border-2 border-amber-400 p-5 space-y-4 shadow-2xl">
+          <div className="w-full max-w-lg max-h-[85dvh] overflow-y-auto rounded-3xl bg-slate-900 border-2 border-amber-400 p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-black text-amber-300">選擇出戰守護精靈</h2>
               <button

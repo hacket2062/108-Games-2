@@ -1,6 +1,58 @@
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private muted = false;
+  private unlocked = false;
+
+  constructor() {
+    this.initAutoUnlock();
+  }
+
+  private initAutoUnlock() {
+    if (typeof window === 'undefined') return;
+    const unlock = () => {
+      this.unlockAudio();
+    };
+    window.addEventListener('touchstart', unlock, { once: true, passive: true });
+    window.addEventListener('pointerdown', unlock, { once: true, passive: true });
+    window.addEventListener('click', unlock, { once: true, passive: true });
+    window.addEventListener('keydown', unlock, { once: true, passive: true });
+  }
+
+  /** Explicitly unlocks Web Audio on iOS Safari & Android Chrome via silent 1-sample buffer */
+  public unlockAudio() {
+    if (this.unlocked || typeof window === 'undefined') return;
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!this.ctx) {
+        this.ctx = new AudioCtx();
+      }
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+      const silentBuffer = this.ctx.createBuffer(1, 1, 22050);
+      const src = this.ctx.createBufferSource();
+      src.buffer = silentBuffer;
+      src.connect(this.ctx.destination);
+      src.start(0);
+      this.unlocked = true;
+    } catch {
+      // Ignore audio unlock errors in restricted environments
+    }
+  }
+
+  /** Subtle tactile mobile vibration pulse when supported */
+  public hapticPulse(durationMs = 14) {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      try {
+        navigator.vibrate(durationMs);
+      } catch {
+        // Ignore vibration block on desktop or iOS
+      }
+    }
+  }
 
   public setMuted(muted: boolean) {
     this.muted = muted;
@@ -16,7 +68,9 @@ class SoundEngine {
   private ensureContext(): AudioContext | null {
     if (this.muted || typeof window === 'undefined') return null;
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return null;
       this.ctx = new AudioCtx();
     }
@@ -355,6 +409,42 @@ class SoundEngine {
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);
     osc.stop(now + 0.32);
+  }
+
+  public playStarChime(starIndex: number) {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const freqs = [587.33, 783.99, 1046.5];
+    const f = freqs[Math.min(2, Math.max(0, starIndex - 1))];
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(f, now);
+    osc.frequency.exponentialRampToValueAtTime(f * 1.03, now + 0.24);
+    gain.gain.setValueAtTime(0.16, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.3);
+  }
+
+  public playChestOpen() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      const t = now + idx * 0.055;
+      osc.frequency.setValueAtTime(f, t);
+      gain.gain.setValueAtTime(0.14, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.36);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.38);
+    });
   }
 
   public speakText(text: string, lang: 'zh-TW' | 'en-US') {

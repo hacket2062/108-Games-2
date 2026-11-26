@@ -116,6 +116,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
   const [myHasteTimer, setMyHasteTimer] = useState(0);
   const [questionTimer, setQuestionTimer] = useState(12);
   const [cutIn, setCutIn] = useState(false);
+  const [showVsBanner, setShowVsBanner] = useState(false);
   const [answerFeedback, setAnswerFeedback] = useState<string | null>(null);
   const [finalResult, setFinalResult] = useState<PvPRunResult | null>(null);
 
@@ -328,7 +329,10 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
       setAnswerFeedback(null);
       setFinalResult(null);
       setPhase('fighting');
+      setShowVsBanner(true);
       soundEngine.playPerfectBell();
+      soundEngine.hapticPulse(24);
+      window.setTimeout(() => setShowVsBanner(false), 1250);
     },
     []
   );
@@ -776,7 +780,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.max(1, Math.floor(rect.width * dpr));
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1394,8 +1398,11 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
                 <button
                   key={`${currentCard.id}-${idx}`}
                   type="button"
-                  onClick={() => handleSelectAnswer(idx)}
-                  className="min-h-[56px] rounded-2xl bg-slate-800 hover:bg-indigo-600 active:scale-[0.98] border-2 border-slate-600 hover:border-amber-300 px-4 py-2 text-left text-white font-black text-sm sm:text-base transition-all flex items-center gap-3"
+                  onClick={() => {
+                    soundEngine.hapticPulse(14);
+                    handleSelectAnswer(idx);
+                  }}
+                  className="min-h-[58px] rounded-2xl bg-slate-800 hover:bg-indigo-600 active:scale-[0.98] border-2 border-slate-600 hover:border-amber-300 px-4 py-2 text-left text-white font-black text-sm sm:text-base transition-all flex items-center gap-3"
                 >
                   <span className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-600 text-amber-300 font-mono-num text-xs flex items-center justify-center shrink-0">
                     {['A', 'B', 'C', 'D'][idx]}
@@ -1476,6 +1483,21 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
           </div>
         )}
       </div>
+
+      {showVsBanner && (
+        <div className="fixed inset-x-0 top-24 z-40 pointer-events-none flex justify-center px-4">
+          <div className="animate-vs-banner rounded-2xl bg-gradient-to-r from-sky-950/96 via-fuchsia-950/96 to-rose-950/96 border-2 border-amber-300 px-6 py-3.5 text-center shadow-[0_0_36px_rgba(251,191,36,0.55)]">
+            <div className="text-[11px] font-black tracking-widest text-amber-300">
+              KNOWLEDGE DUEL · 線上對決開始！
+            </div>
+            <div className="text-lg sm:text-2xl font-black text-white mt-0.5 flex items-center justify-center gap-3">
+              <span className="text-sky-300">{user.displayName}</span>
+              <span className="text-amber-400 font-display text-2xl">VS</span>
+              <span className="text-rose-300">{opponent?.name ?? '神話挑戰者'}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <UltimateCutIn
         visible={cutIn}
