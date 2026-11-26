@@ -1,0 +1,6 @@
+{
+  "name": "智光守護者：108 學園大冒險",
+  "description": "結合台灣 108 課綱國小三至六年級國語、英語、數學、自然四大領域的四界差異化 Canvas 2D 跨科冒險學習遊戲。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

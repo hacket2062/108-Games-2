@@ -1,0 +1,1038 @@
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import {
+  AnyQuestion,
+  AscensionPath,
+  BattleItemId,
+  DailyQuestProgress,
+  EffectiveCombatStats,
+  GemElementId,
+  GemInstance,
+  GradeLevel,
+  GuardianId,
+  ParentSettings,
+  PlayMode,
+  PlayerSaveData,
+  PvPRunResult,
+  SemesterId,
+  SubjectId,
+  WeaponInstance,
+  WorldRunResult,
+  WrongRecord,
+} from '../types/game';
+import { useAuth } from '../auth/AuthContext';
+import { db, handleFirestoreError, isFirebaseReady, OperationType } from './firebase';
+import { applyXpGain, computeSaveCombatStats } from './combatMath';
+import {
+  ASCENSION_PATHS,
+  BATTLE_ITEMS,
+  createStarterWeapon,
+  FUSION_RECIPES,
+  GEM_ELEMENTS,
+  getEnhanceCost,
+  getEnhanceSuccessRate,
+  WEAPON_CATALOG,
+} from '../data/itemsAndGems';
+import { GUARDIAN_SHOP_COSTS } from '../data/spiritsAndTitles';
+import { soundEngine } from '../audio/soundEngine';
+
+const SAVE_PREFIX = 'zhiguang_108_save_v2_';
+
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function createInitialDailyQuests(): DailyQuestProgress[] {
+  return [
+    {
+      id: 'q_answer_5',
+      title: '答對 5 道 108 課綱題目',
+      target: 5,
+      current: 0,
+      rewardCoins: 120,
+      rewardCrystals: 3,
+      claimed: false,
+    },
+    {
+      id: 'q_clear_1',
+      title: '通關任一科目世界 Boss',
+      target: 1,
+      current: 0,
+      rewardCoins: 160,
+      rewardCrystals: 4,
+      claimed: false,
+    },
+    {
+      id: 'q_pvp_1',
+      title: '完成 1 場線上知識競技對戰',
+      target: 1,
+      current: 0,
+      rewardCoins: 180,
+      rewardCrystals: 5,
+      claimed: false,
+    },
+  ];
+}
+
+export function createInitialPlayerSave(): PlayerSaveData {
+  const starterWeapon = createStarterWeapon();
+  return {
+    level: 1,
+    xp: 0,
+    coins: 520,
+    crystals: 20,
+    bestStreak: 0,
+    selectedGuardian: 'qilin',
+    unlockedGuardians: ['qilin', 'stardragon', 'griffin', 'deer'],
+    guardianBonds: {
+      qilin: 2,
+      stardragon: 1,
+      griffin: 1,
+      deer: 1,
+    },
+    equipment: {
+      weapon: 1,
+      armor: 1,
+      boots: 1,
+    },
+    weapons: [
+      starterWeapon,
+      {
+        uid: 'wp-starter-02',
+        templateId: 'wp_star_lance',
+        name: '星輝脈衝長槍',
+        baseAttack: 32,
+        enhanceLevel: 5,
+        ascensionPath: 'base',
+        rarity: 'epic',
+        socketedGems: [null, null, null],
+      },
+    ],
+    equippedWeaponUid: 'wp-starter-02',
+    gemBag: [
+      { uid: 'g-seed-1', element: 'ink_ruby', level: 1 },
+      { uid: 'g-seed-2', element: 'ink_ruby', level: 1 },
+      { uid: 'g-seed-3', element: 'ink_ruby', level: 1 },
+      { uid: 'g-seed-4', element: 'star_sapphire', level: 1 },
+      { uid: 'g-seed-5', element: 'gear_topaz', level: 1 },
+      { uid: 'g-seed-6', element: 'leaf_emerald', level: 1 },
+    ],
+    items: {
+      wisdom_potion: 2,
+      combo_charm: 2,
+      shield_scroll: 2,
+      time_hourglass: 2,
+      forge_guard: 2,
+    },
+    selectedTitle: 'title_novice',
+    unlockedTitles: ['title_novice'],
+    grade: 4,
+    semester: 'upper',
+    playMode: 'adventure',
+    muted: false,
+    subjectStats: {
+      chinese: { answered: 0, correct: 0, bestScore: 0, starsEarned: 0, clears: 0 },
+      english: { answered: 0, correct: 0, bestScore: 0, starsEarned: 0, clears: 0 },
+      math: { answered: 0, correct: 0, bestScore: 0, starsEarned: 0, clears: 0 },
+      science: { answered: 0, correct: 0, bestScore: 0, starsEarned: 0, clears: 0 },
+    },
+    wrongRecords: [],
+    unlockedCards: [],
+    trajectory: [],
+    dailyQuests: createInitialDailyQuests(),
+    dailyPlaySeconds: 0,
+    lastPlayDate: todayKey(),
+    pvp: {
+      rating: 1000,
+      wins: 0,
+      losses: 0,
+      winStreak: 0,
+      bestWinStreak: 0,
+      honorTokens: 60,
+    },
+    parentSettings: {
+      pinCode: '1234',
+      dailyLimitMinutes: 45,
+      pvpEnabled: true,
+      forcePracticeMode: false,
+    },
+  };
+}
+
+function hydrateSave(raw: Partial<PlayerSaveData> | null | undefined): PlayerSaveData {
+  const base = createInitialPlayerSave();
+  if (!raw) return base;
+  const merged: PlayerSaveData = {
+    ...base,
+    ...raw,
+    guardianBonds: { ...base.guardianBonds, ...(raw.guardianBonds || {}) },
+    equipment: { ...base.equipment, ...(raw.equipment || {}) },
+    items: { ...base.items, ...(raw.items || {}) },
+    subjectStats: {
+      chinese: { ...base.subjectStats.chinese, ...(raw.subjectStats?.chinese || {}) },
+      english: { ...base.subjectStats.english, ...(raw.subjectStats?.english || {}) },
+      math: { ...base.subjectStats.math, ...(raw.subjectStats?.math || {}) },
+      science: { ...base.subjectStats.science, ...(raw.subjectStats?.science || {}) },
+    },
+    pvp: { ...base.pvp, ...(raw.pvp || {}) },
+    parentSettings: { ...base.parentSettings, ...(raw.parentSettings || {}) },
+    weapons: Array.isArray(raw.weapons) && raw.weapons.length > 0 ? raw.weapons : base.weapons,
+    gemBag: Array.isArray(raw.gemBag) ? raw.gemBag : base.gemBag,
+    wrongRecords: Array.isArray(raw.wrongRecords) ? raw.wrongRecords : [],
+    trajectory: Array.isArray(raw.trajectory) ? raw.trajectory : [],
+    dailyQuests:
+      Array.isArray(raw.dailyQuests) && raw.dailyQuests.length > 0
+        ? raw.dailyQuests
+        : base.dailyQuests,
+  };
+  if (merged.lastPlayDate !== todayKey()) {
+    merged.lastPlayDate = todayKey();
+    merged.dailyPlaySeconds = 0;
+    merged.dailyQuests = createInitialDailyQuests();
+  }
+  return merged;
+}
+
+function extractRevengeOptions(q: AnyQuestion): string[] {
+  if (q.subject === 'chinese') {
+    if (q.payload.mode === 'slash') return q.payload.options;
+    if (q.payload.mode === 'radical') {
+      return [q.payload.targetChar, q.payload.partA, q.payload.partB, '明'].slice(0, 4);
+    }
+    return [q.payload.correctChar, q.payload.wrongChar, '的', '得'];
+  }
+  if (q.subject === 'english') {
+    if (q.payload.mode === 'spell') {
+      return [q.payload.word, `${q.payload.word}s`, `un${q.payload.word}`, `${q.payload.word}ed`];
+    }
+    return q.payload.choices;
+  }
+  if (q.subject === 'math') return q.payload.options;
+  return [
+    q.answer,
+    ...q.payload.ingredients.filter((i) => !i.isCorrect).map((i) => i.name),
+    '純水蒸餾',
+  ].slice(0, 4);
+}
+
+export interface ActionFeedback {
+  ok: boolean;
+  message: string;
+}
+
+interface GameStateContextValue {
+  save: PlayerSaveData;
+  combatStats: EffectiveCombatStats;
+  equippedWeapon: WeaponInstance;
+  isRestReminderVisible: boolean;
+  dismissRestReminder: () => void;
+  setGrade: (g: GradeLevel) => void;
+  setSemester: (s: SemesterId) => void;
+  setPlayMode: (m: PlayMode) => void;
+  toggleMute: () => void;
+  selectGuardian: (id: GuardianId) => void;
+  petGuardian: () => void;
+  selectTitle: (titleId: string) => void;
+  recordAnswer: (question: AnyQuestion, isCorrect: boolean) => void;
+  resolveWrongRecord: (questionId: string) => void;
+  applyWorldResult: (result: WorldRunResult) => { leveledUp: boolean };
+  applyPvPResult: (result: PvPRunResult) => { leveledUp: boolean };
+  claimDailyQuest: (questId: string) => ActionFeedback;
+  // Forge
+  equipWeapon: (weaponUid: string) => void;
+  enhanceWeapon: (weaponUid: string, useGuardScroll: boolean) => ActionFeedback;
+  ascendWeapon: (weaponUid: string, path: AscensionPath) => ActionFeedback;
+  fuseWeapons: (uidA: string, uidB: string) => ActionFeedback;
+  // Socketing
+  socketGem: (weaponUid: string, slotIndex: number, gemUid: string) => ActionFeedback;
+  unsocketGem: (weaponUid: string, slotIndex: number) => ActionFeedback;
+  synthesizeGems: (element: GemElementId, level: 1 | 2 | 3 | 4) => ActionFeedback;
+  // Shop
+  buyWeapon: (templateId: string, useHonor: boolean, discountFactor?: number) => ActionFeedback;
+  buyGem: (element: GemElementId, discountFactor?: number) => ActionFeedback;
+  buyBattleItem: (itemId: BattleItemId, useHonor: boolean, discountFactor?: number) => ActionFeedback;
+  consumeBattleItem: (itemId: BattleItemId) => boolean;
+  unlockOrBondGuardian: (guardianId: GuardianId) => ActionFeedback;
+  // Parent
+  updateParentSettings: (patch: Partial<ParentSettings>) => void;
+  buildLearningCsv: () => string;
+}
+
+const GameStateContext = createContext<GameStateContextValue | null>(null);
+
+export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
+  const [save, setSave] = useState<PlayerSaveData>(() => {
+    try {
+      const raw = localStorage.getItem(SAVE_PREFIX + user.uid);
+      return hydrateSave(raw ? (JSON.parse(raw) as Partial<PlayerSaveData>) : null);
+    } catch {
+      return createInitialPlayerSave();
+    }
+  });
+  const [restDismissed, setRestDismissed] = useState(false);
+
+  // Reload per-account save whenever user switches account (Google or local)
+  useEffect(() => {
+    let cancelled = false;
+    const loadAccountSave = async () => {
+      let localLoaded = createInitialPlayerSave();
+      try {
+        const raw = localStorage.getItem(SAVE_PREFIX + user.uid);
+        if (raw) localLoaded = hydrateSave(JSON.parse(raw) as Partial<PlayerSaveData>);
+      } catch {
+        // fallback to default
+      }
+      if (!cancelled) {
+        setSave(localLoaded);
+        soundEngine.setMuted(localLoaded.muted);
+      }
+
+      // If authenticated via verified Google account, sync from Firestore /users/{uid}
+      if (user.provider === 'google' && user.emailVerified && isFirebaseReady() && db) {
+        const path = `users/${user.uid}`;
+        try {
+          const snap = await getDoc(doc(db, 'users', user.uid));
+          if (!cancelled && snap.exists()) {
+            const data = snap.data();
+            if (data && data.saveData && typeof data.saveData === 'object') {
+              const cloudSave = hydrateSave(data.saveData as Partial<PlayerSaveData>);
+              setSave(cloudSave);
+              soundEngine.setMuted(cloudSave.muted);
+              try {
+                localStorage.setItem(SAVE_PREFIX + user.uid, JSON.stringify(cloudSave));
+              } catch {
+                // ignore
+              }
+            }
+          }
+        } catch (err) {
+          // Do not crash offline preview, log structured error via helper
+          try {
+            handleFirestoreError(err, OperationType.GET, path);
+          } catch {
+            // gracefully keep local save
+          }
+        }
+      }
+    };
+    loadAccountSave();
+    return () => {
+      cancelled = true;
+    };
+  }, [user.uid, user.provider, user.emailVerified]);
+
+  // Persist save to localStorage + debounced Firestore cloud sync for Google users
+  useEffect(() => {
+    try {
+      localStorage.setItem(SAVE_PREFIX + user.uid, JSON.stringify(save));
+    } catch {
+      // ignore
+    }
+    soundEngine.setMuted(save.muted);
+
+    if (user.provider !== 'google' || !user.emailVerified || !isFirebaseReady() || !db) return;
+    const firestoreDb = db;
+    const timer = window.setTimeout(async () => {
+      const path = `users/${user.uid}`;
+      try {
+        const ref = doc(firestoreDb, 'users', user.uid);
+        const existingSnap = await getDoc(ref);
+        const compactSaveData = {
+          level: save.level,
+          xp: save.xp,
+          coins: save.coins,
+          crystals: save.crystals,
+          bestStreak: save.bestStreak,
+          selectedGuardian: save.selectedGuardian,
+          guardianBonds: save.guardianBonds,
+          equipment: save.equipment,
+          weapons: save.weapons.slice(0, 12),
+          equippedWeaponUid: save.equippedWeaponUid,
+          gemBag: save.gemBag.slice(0, 40),
+          items: save.items,
+          selectedTitle: save.selectedTitle,
+          unlockedTitles: save.unlockedTitles.slice(0, 12),
+          grade: save.grade,
+          semester: save.semester,
+          playMode: save.playMode,
+          muted: save.muted,
+          subjectStats: save.subjectStats,
+          wrongRecords: save.wrongRecords.slice(0, 30),
+          trajectory: save.trajectory.slice(0, 25),
+          pvp: save.pvp,
+          parentSettings: save.parentSettings,
+        };
+        const payload = {
+          uid: user.uid,
+          displayName: user.displayName.slice(0, 60) || '智光守護者',
+          level: Math.min(200, Math.max(1, save.level)),
+          xp: Math.max(0, save.xp),
+          coins: Math.max(0, save.coins),
+          crystals: Math.max(0, save.crystals),
+          honorTokens: Math.max(0, save.pvp.honorTokens),
+          pvpRating: Math.min(9999, Math.max(0, save.pvp.rating)),
+          pvpWins: Math.max(0, save.pvp.wins),
+          pvpLosses: Math.max(0, save.pvp.losses),
+          grade: save.grade,
+          semester: save.semester,
+          selectedGuardian: save.selectedGuardian,
+          saveData: compactSaveData,
+          createdAt: existingSnap.exists() ? existingSnap.data().createdAt : serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        await setDoc(ref, payload);
+      } catch (err) {
+        try {
+          handleFirestoreError(err, OperationType.WRITE, path);
+        } catch {
+          // non-blocking sync fallback
+        }
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [save, user.displayName, user.emailVerified, user.provider, user.uid]);
+
+  // Anti-addiction healthy play timer (increments every 10s)
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setSave((prev) => ({
+        ...prev,
+        dailyPlaySeconds: prev.dailyPlaySeconds + 10,
+      }));
+    }, 10000);
+    return () => clearInterval(id);
+  }, []);
+
+  const equippedWeapon = useMemo(
+    () => save.weapons.find((w) => w.uid === save.equippedWeaponUid) ?? save.weapons[0] ?? createStarterWeapon(),
+    [save.weapons, save.equippedWeaponUid]
+  );
+
+  const combatStats = useMemo(() => computeSaveCombatStats(save), [save]);
+
+  const isRestReminderVisible =
+    !restDismissed && save.dailyPlaySeconds >= save.parentSettings.dailyLimitMinutes * 60;
+
+  const setGrade = useCallback((grade: GradeLevel) => setSave((p) => ({ ...p, grade })), []);
+  const setSemester = useCallback((semester: SemesterId) => setSave((p) => ({ ...p, semester })), []);
+  const setPlayMode = useCallback((playMode: PlayMode) => setSave((p) => ({ ...p, playMode })), []);
+  const toggleMute = useCallback(() => setSave((p) => ({ ...p, muted: !p.muted })), []);
+
+  const selectGuardian = useCallback((id: GuardianId) => {
+    setSave((p) => ({ ...p, selectedGuardian: id }));
+  }, []);
+
+  const petGuardian = useCallback(() => {
+    setSave((p) => ({
+      ...p,
+      guardianBonds: {
+        ...p.guardianBonds,
+        [p.selectedGuardian]: (p.guardianBonds[p.selectedGuardian] ?? 1) + 1,
+      },
+    }));
+  }, []);
+
+  const selectTitle = useCallback((titleId: string) => {
+    setSave((p) => (p.unlockedTitles.includes(titleId) ? { ...p, selectedTitle: titleId } : p));
+  }, []);
+
+  const recordAnswer = useCallback((question: AnyQuestion, isCorrect: boolean) => {
+    setSave((prev) => {
+      const curr = prev.subjectStats[question.subject];
+      const nextStats = {
+        ...prev.subjectStats,
+        [question.subject]: {
+          ...curr,
+          answered: curr.answered + 1,
+          correct: curr.correct + (isCorrect ? 1 : 0),
+        },
+      };
+
+      let nextWrong = [...prev.wrongRecords];
+      if (!isCorrect) {
+        const idx = nextWrong.findIndex((w) => w.questionId === question.id);
+        const rec: WrongRecord = {
+          questionId: question.id,
+          subject: question.subject,
+          grade: question.grade,
+          prompt: question.prompt,
+          correctAnswer: question.answer,
+          explanation: question.explanation,
+          knowledgeTag: question.knowledgeTag,
+          wrongCount: idx >= 0 ? nextWrong[idx].wrongCount + 1 : 1,
+          lastWrongAt: Date.now(),
+          revengeOptions: extractRevengeOptions(question),
+        };
+        if (idx >= 0) nextWrong[idx] = rec;
+        else nextWrong = [rec, ...nextWrong].slice(0, 60);
+      }
+
+      const nextQuests = prev.dailyQuests.map((q) =>
+        q.id === 'q_answer_5' && isCorrect ? { ...q, current: Math.min(q.target, q.current + 1) } : q
+      );
+
+      return {
+        ...prev,
+        subjectStats: nextStats,
+        wrongRecords: nextWrong,
+        dailyQuests: nextQuests,
+      };
+    });
+  }, []);
+
+  const resolveWrongRecord = useCallback((questionId: string) => {
+    setSave((prev) => ({
+      ...prev,
+      wrongRecords: prev.wrongRecords.filter((w) => w.questionId !== questionId),
+      coins: prev.coins + 25,
+    }));
+  }, []);
+
+  const applyWorldResult = useCallback((result: WorldRunResult): { leveledUp: boolean } => {
+    let didLevel = false;
+    setSave((prev) => {
+      const xpOutcome = applyXpGain(prev.level, prev.xp, result.xpEarned);
+      didLevel = xpOutcome.leveledUp;
+      const st = prev.subjectStats[result.subject];
+      const nextSubjectStats = {
+        ...prev.subjectStats,
+        [result.subject]: {
+          ...st,
+          bestScore: Math.max(st.bestScore, result.score),
+          starsEarned: Math.max(st.starsEarned, result.stars),
+          clears: st.clears + (result.victory ? 1 : 0),
+        },
+      };
+
+      const nextStreak = Math.max(prev.bestStreak, result.maxCombo);
+      const nextTitles = new Set(prev.unlockedTitles);
+      if (nextStreak >= 5) nextTitles.add('title_combo5');
+      if (nextStreak >= 15) nextTitles.add('title_mythic_grandmaster');
+      if (
+        nextSubjectStats.chinese.clears > 0 &&
+        nextSubjectStats.english.clears > 0 &&
+        nextSubjectStats.math.clears > 0 &&
+        nextSubjectStats.science.clears > 0
+      ) {
+        nextTitles.add('title_quad_clear');
+      }
+
+      const nextQuests = prev.dailyQuests.map((q) =>
+        q.id === 'q_clear_1' && result.victory ? { ...q, current: q.target } : q
+      );
+
+      const newEntry = {
+        id: `tr-${Date.now()}`,
+        timestamp: Date.now(),
+        subject: result.subject,
+        grade: prev.grade,
+        correctCount: result.correctCount,
+        totalAttempts: result.totalAttempts,
+        score: result.score,
+        durationSeconds: result.clearSeconds,
+        victory: result.victory,
+        note: result.progressSummary,
+      };
+
+      // Drop a random Lv.1 knowledge gem on victory!
+      const subjectGemMap: Record<SubjectId, GemElementId> = {
+        chinese: 'ink_ruby',
+        english: 'star_sapphire',
+        math: 'gear_topaz',
+        science: 'leaf_emerald',
+      };
+      const droppedGem: GemInstance | null = result.victory
+        ? {
+            uid: `gem-drop-${Date.now().toString(36)}`,
+            element: subjectGemMap[result.subject],
+            level: 1,
+          }
+        : null;
+
+      return {
+        ...prev,
+        level: xpOutcome.level,
+        xp: xpOutcome.xp,
+        coins: prev.coins + result.coinsEarned,
+        crystals: prev.crystals + result.crystalsEarned,
+        bestStreak: nextStreak,
+        subjectStats: nextSubjectStats,
+        unlockedTitles: Array.from(nextTitles),
+        unlockedCards: Array.from(new Set([...prev.unlockedCards, ...result.knowledgeTags])),
+        trajectory: [newEntry, ...prev.trajectory].slice(0, 50),
+        dailyQuests: nextQuests,
+        gemBag: droppedGem ? [droppedGem, ...prev.gemBag] : prev.gemBag,
+      };
+    });
+    return { leveledUp: didLevel };
+  }, []);
+
+  const applyPvPResult = useCallback((result: PvPRunResult): { leveledUp: boolean } => {
+    let didLevel = false;
+    setSave((prev) => {
+      const xpOutcome = applyXpGain(prev.level, prev.xp, result.xpEarned);
+      didLevel = xpOutcome.leveledUp;
+      const nextWinStreak = result.victory ? prev.pvp.winStreak + 1 : 0;
+      const nextRating = Math.max(600, prev.pvp.rating + result.ratingDelta);
+      const nextTitles = new Set(prev.unlockedTitles);
+      if (result.victory) nextTitles.add('title_arena_winner');
+      if (nextRating >= 1500) nextTitles.add('title_mythic_grandmaster');
+
+      const nextQuests = prev.dailyQuests.map((q) =>
+        q.id === 'q_pvp_1' ? { ...q, current: q.target } : q
+      );
+
+      const newEntry = {
+        id: `tr-pvp-${Date.now()}`,
+        timestamp: Date.now(),
+        subject: 'pvp' as const,
+        grade: prev.grade,
+        correctCount: result.correctCount,
+        totalAttempts: result.totalAttempts,
+        score: result.myScore,
+        durationSeconds: result.durationSeconds,
+        victory: result.victory,
+        note: `競技場對戰 ${result.opponentName}（${result.victory ? '勝利' : '惜敗'}，積分 ${result.ratingDelta >= 0 ? '+' : ''}${result.ratingDelta}）`,
+      };
+
+      return {
+        ...prev,
+        level: xpOutcome.level,
+        xp: xpOutcome.xp,
+        coins: prev.coins + result.coinsEarned,
+        bestStreak: Math.max(prev.bestStreak, result.maxCombo),
+        unlockedTitles: Array.from(nextTitles),
+        trajectory: [newEntry, ...prev.trajectory].slice(0, 50),
+        dailyQuests: nextQuests,
+        pvp: {
+          rating: nextRating,
+          wins: prev.pvp.wins + (result.victory ? 1 : 0),
+          losses: prev.pvp.losses + (result.victory ? 0 : 1),
+          winStreak: nextWinStreak,
+          bestWinStreak: Math.max(prev.pvp.bestWinStreak, nextWinStreak),
+          honorTokens: prev.pvp.honorTokens + result.honorEarned,
+        },
+      };
+    });
+    return { leveledUp: didLevel };
+  }, []);
+
+  const claimDailyQuest = useCallback((questId: string): ActionFeedback => {
+    let feedback: ActionFeedback = { ok: false, message: '任務尚未達成或已領取。' };
+    setSave((prev) => {
+      const target = prev.dailyQuests.find((q) => q.id === questId);
+      if (!target || target.claimed || target.current < target.target) return prev;
+      feedback = {
+        ok: true,
+        message: `領取成功！獲得 +${target.rewardCoins} 金幣、+${target.rewardCrystals} 智光晶石！`,
+      };
+      return {
+        ...prev,
+        coins: prev.coins + target.rewardCoins,
+        crystals: prev.crystals + target.rewardCrystals,
+        dailyQuests: prev.dailyQuests.map((q) => (q.id === questId ? { ...q, claimed: true } : q)),
+      };
+    });
+    return feedback;
+  }, []);
+
+  // ==================== FORGE SYSTEM ====================
+  const equipWeapon = useCallback((weaponUid: string) => {
+    setSave((prev) =>
+      prev.weapons.some((w) => w.uid === weaponUid) ? { ...prev, equippedWeaponUid: weaponUid } : prev
+    );
+  }, []);
+
+  const enhanceWeapon = useCallback((weaponUid: string, useGuardScroll: boolean): ActionFeedback => {
+    const target = save.weapons.find((w) => w.uid === weaponUid);
+    if (!target) return { ok: false, message: '找不到該神兵。' };
+    if (target.enhanceLevel >= 15) return { ok: false, message: '此神兵已達最高強化 +15！' };
+
+    const cost = getEnhanceCost(target.enhanceLevel);
+    if (save.coins < cost.coins) return { ok: false, message: `金幣不足（需要 ${cost.coins}）。` };
+    if (save.crystals < cost.crystals) return { ok: false, message: `智光晶石不足（需要 ${cost.crystals}）。` };
+    if (useGuardScroll && save.items.forge_guard <= 0) {
+      return { ok: false, message: '神匠保護卷軸不足，請至魔法商店購買。' };
+    }
+
+    const rate = getEnhanceSuccessRate(target.enhanceLevel);
+    const success = Math.random() * 100 <= rate;
+    const newLevel = success
+      ? target.enhanceLevel + 1
+      : target.enhanceLevel >= 7 && !useGuardScroll
+        ? target.enhanceLevel - 1
+        : target.enhanceLevel;
+
+    setSave((prev) => ({
+      ...prev,
+      coins: prev.coins - cost.coins,
+      crystals: prev.crystals - cost.crystals,
+      items: useGuardScroll
+        ? { ...prev.items, forge_guard: Math.max(0, prev.items.forge_guard - 1) }
+        : prev.items,
+      weapons: prev.weapons.map((w) =>
+        w.uid === weaponUid ? { ...w, enhanceLevel: newLevel } : w
+      ),
+    }));
+
+    if (success) {
+      soundEngine.playPerfectBell();
+      return { ok: true, message: `鍛造大成功！${target.name} 強化至 +${newLevel}！` };
+    }
+    soundEngine.playWrongBuzz();
+    return {
+      ok: false,
+      message: useGuardScroll
+        ? `強化未能突破，神匠保護卷軸發動，維持 +${newLevel} 不掉階！`
+        : newLevel < target.enhanceLevel
+          ? `鍛造過熱未能突破，強化暫降為 +${newLevel}（使用保護卷軸可防掉階）。`
+          : `強化未能突破，但維持 +${newLevel} 不掉階！`,
+    };
+  }, [save.coins, save.crystals, save.items.forge_guard, save.weapons]);
+
+  const ascendWeapon = useCallback((weaponUid: string, path: AscensionPath): ActionFeedback => {
+    if (path === 'base') return { ok: false, message: '請選擇英雄、神話或地獄路線。' };
+    const target = save.weapons.find((w) => w.uid === weaponUid);
+    if (!target) return { ok: false, message: '找不到該神兵。' };
+    const def = ASCENSION_PATHS[path];
+    if (target.enhanceLevel < def.minEnhanceLevel) {
+      return { ok: false, message: `需先強化至 +${def.minEnhanceLevel} 才可覺醒路線！` };
+    }
+    if (save.coins < def.coinCost || save.crystals < def.crystalCost) {
+      return {
+        ok: false,
+        message: `資源不足！需要 ${def.coinCost} 金幣與 ${def.crystalCost} 智光晶石。`,
+      };
+    }
+
+    soundEngine.playUltimateRoar();
+    setSave((prev) => ({
+      ...prev,
+      coins: prev.coins - def.coinCost,
+      crystals: prev.crystals - def.crystalCost,
+      unlockedTitles: Array.from(new Set([...prev.unlockedTitles, 'title_forge_master'])),
+      weapons: prev.weapons.map((w) =>
+        w.uid === weaponUid
+          ? { ...w, ascensionPath: path, rarity: path === 'inferno' || path === 'mythic' ? 'mythic' : 'legendary' }
+          : w
+      ),
+    }));
+    return { ok: true, message: `覺醒成功！${target.name} 獲得【${def.name}】專屬光環與被動！` };
+  }, [save.coins, save.crystals, save.weapons]);
+
+  const fuseWeapons = useCallback((uidA: string, uidB: string): ActionFeedback => {
+    if (uidA === uidB) return { ok: false, message: '請選擇兩把不同的神兵進行融合。' };
+    const wA = save.weapons.find((w) => w.uid === uidA);
+    const wB = save.weapons.find((w) => w.uid === uidB);
+    if (!wA || !wB) return { ok: false, message: '找不到指定的融合武器。' };
+
+    const recipe = FUSION_RECIPES[0];
+    if (save.coins < recipe.coinCost || save.crystals < recipe.crystalCost) {
+      return {
+        ok: false,
+        message: `融合需要 ${recipe.coinCost} 金幣與 ${recipe.crystalCost} 智光晶石。`,
+      };
+    }
+
+    const recoveredGems: GemInstance[] = [
+      ...wA.socketedGems.filter((g): g is GemInstance => g !== null),
+      ...wB.socketedGems.filter((g): g is GemInstance => g !== null),
+    ];
+    const inheritedEnhance = Math.min(15, Math.max(wA.enhanceLevel, wB.enhanceLevel) + 1);
+    const inheritedPath = wA.ascensionPath !== 'base' ? wA.ascensionPath : wB.ascensionPath;
+    const fusedWeapon: WeaponInstance = {
+      uid: `wp-fused-${Date.now().toString(36)}`,
+      templateId: recipe.resultTemplateId,
+      name: recipe.resultName,
+      baseAttack: recipe.resultBaseAttack,
+      enhanceLevel: inheritedEnhance,
+      ascensionPath: inheritedPath,
+      rarity: recipe.resultRarity,
+      isFused: true,
+      socketedGems: [null, null, null],
+    };
+
+    soundEngine.playPerfectBell();
+    setSave((prev) => ({
+      ...prev,
+      coins: prev.coins - recipe.coinCost,
+      crystals: prev.crystals - recipe.crystalCost,
+      weapons: [fusedWeapon, ...prev.weapons.filter((w) => w.uid !== uidA && w.uid !== uidB)],
+      equippedWeaponUid: fusedWeapon.uid,
+      gemBag: [...recoveredGems, ...prev.gemBag],
+    }));
+
+    return {
+      ok: true,
+      message: `神兵融合成功！誕生【${fusedWeapon.name} +${inheritedEnhance}】，原有寶石已無損歸還背包！`,
+    };
+  }, [save.coins, save.crystals, save.weapons]);
+
+  // ==================== SOCKETING & GEM SYNTHESIS ====================
+  const socketGem = useCallback((weaponUid: string, slotIndex: number, gemUid: string): ActionFeedback => {
+    const weapon = save.weapons.find((w) => w.uid === weaponUid);
+    const gem = save.gemBag.find((g) => g.uid === gemUid);
+    if (!weapon || !gem) return { ok: false, message: '找不到指定武器或寶石。' };
+    if (slotIndex < 0 || slotIndex > 2) return { ok: false, message: '無效的寶石槽位。' };
+
+    const previousGem = weapon.socketedGems[slotIndex];
+    soundEngine.playGemSynth();
+    setSave((prev) => ({
+      ...prev,
+      gemBag: [
+        ...(previousGem ? [previousGem] : []),
+        ...prev.gemBag.filter((g) => g.uid !== gemUid),
+      ],
+      weapons: prev.weapons.map((w) => {
+        if (w.uid !== weaponUid) return w;
+        const nextSlots = [...w.socketedGems];
+        nextSlots[slotIndex] = gem;
+        return { ...w, socketedGems: nextSlots };
+      }),
+    }));
+    return {
+      ok: true,
+      message: `已無損鑲嵌 Lv.${gem.level} ${GEM_ELEMENTS[gem.element].name}！戰力立即提升。`,
+    };
+  }, [save.gemBag, save.weapons]);
+
+  const unsocketGem = useCallback((weaponUid: string, slotIndex: number): ActionFeedback => {
+    const weapon = save.weapons.find((w) => w.uid === weaponUid);
+    if (!weapon) return { ok: false, message: '找不到武器。' };
+    const existingGem = weapon.socketedGems[slotIndex];
+    if (!existingGem) return { ok: false, message: '此槽位目前沒有寶石。' };
+
+    soundEngine.playClick();
+    setSave((prev) => ({
+      ...prev,
+      gemBag: [existingGem, ...prev.gemBag],
+      weapons: prev.weapons.map((w) => {
+        if (w.uid !== weaponUid) return w;
+        const nextSlots = [...w.socketedGems];
+        nextSlots[slotIndex] = null;
+        return { ...w, socketedGems: nextSlots };
+      }),
+    }));
+    return {
+      ok: true,
+      message: `已無損拆下 Lv.${existingGem.level} ${GEM_ELEMENTS[existingGem.element].name} 並放回背包！`,
+    };
+  }, [save.weapons]);
+
+  const synthesizeGems = useCallback((element: GemElementId, level: 1 | 2 | 3 | 4): ActionFeedback => {
+    const matching = save.gemBag.filter((g) => g.element === element && g.level === level);
+    if (matching.length < 3) {
+      return { ok: false, message: `需要 3 顆相同的 Lv.${level} ${GEM_ELEMENTS[element].name} 才能合成升階！` };
+    }
+    const consumeUids = new Set(matching.slice(0, 3).map((g) => g.uid));
+    const upgraded: GemInstance = {
+      uid: `gem-syn-${Date.now().toString(36)}`,
+      element,
+      level: (level + 1) as 2 | 3 | 4 | 5,
+    };
+    soundEngine.playGemSynth();
+    setSave((prev) => ({
+      ...prev,
+      gemBag: [upgraded, ...prev.gemBag.filter((g) => !consumeUids.has(g.uid))],
+    }));
+    return {
+      ok: true,
+      message: `3 合 1 寶石合成成功！獲得 Lv.${upgraded.level} ${GEM_ELEMENTS[element].name}！`,
+    };
+  }, [save.gemBag]);
+
+  // ==================== MAGIC SHOP ====================
+  const buyWeapon = useCallback((templateId: string, useHonor: boolean, discountFactor = 1): ActionFeedback => {
+    const tpl = WEAPON_CATALOG.find((w) => w.templateId === templateId);
+    if (!tpl) return { ok: false, message: '找不到該商品。' };
+    if (useHonor) {
+      const honorCost = tpl.priceHonor ?? 9999;
+      if (save.pvp.honorTokens < honorCost) {
+        return { ok: false, message: `競技榮譽幣不足（需要 ${honorCost}）。` };
+      }
+    } else {
+      const finalCoins = Math.round(tpl.priceCoins * discountFactor);
+      if (save.coins < finalCoins) {
+        return { ok: false, message: `金幣不足（需要 ${finalCoins}）。` };
+      }
+    }
+
+    const newWeapon: WeaponInstance = {
+      uid: `wp-shop-${Date.now().toString(36)}`,
+      templateId: tpl.templateId,
+      name: tpl.name,
+      baseAttack: tpl.baseAttack,
+      enhanceLevel: tpl.rarity === 'mythic' ? 5 : 0,
+      ascensionPath: 'base',
+      rarity: tpl.rarity,
+      socketedGems: [null, null, null],
+    };
+
+    soundEngine.playPerfectBell();
+    setSave((prev) => ({
+      ...prev,
+      coins: useHonor ? prev.coins : prev.coins - Math.round(tpl.priceCoins * discountFactor),
+      pvp: useHonor
+        ? { ...prev.pvp, honorTokens: prev.pvp.honorTokens - (tpl.priceHonor ?? 0) }
+        : prev.pvp,
+      weapons: [newWeapon, ...prev.weapons],
+    }));
+    return { ok: true, message: `購買成功！已獲得【${tpl.name}】，可至鍛造屋強化與裝備！` };
+  }, [save.coins, save.pvp.honorTokens]);
+
+  const buyGem = useCallback((element: GemElementId, discountFactor = 1): ActionFeedback => {
+    const def = GEM_ELEMENTS[element];
+    const price = Math.round(def.shopPriceCoins * discountFactor);
+    if (save.coins < price) return { ok: false, message: `金幣不足（需要 ${price}）。` };
+    const gem: GemInstance = {
+      uid: `gem-shop-${Date.now().toString(36)}-${Math.floor(Math.random() * 99)}`,
+      element,
+      level: 1,
+    };
+    soundEngine.playGemSynth();
+    setSave((prev) => ({
+      ...prev,
+      coins: prev.coins - price,
+      gemBag: [gem, ...prev.gemBag],
+    }));
+    return { ok: true, message: `購入 Lv.1 ${def.name}！集滿 3 顆可在寶石工坊合成升階。` };
+  }, [save.coins]);
+
+  const buyBattleItem = useCallback((itemId: BattleItemId, useHonor: boolean, discountFactor = 1): ActionFeedback => {
+    const def = BATTLE_ITEMS[itemId];
+    if (useHonor) {
+      const honorCost = def.priceHonor ?? 999;
+      if (save.pvp.honorTokens < honorCost) {
+        return { ok: false, message: `競技榮譽幣不足（需要 ${honorCost}）。` };
+      }
+    } else {
+      const price = Math.round(def.priceCoins * discountFactor);
+      if (save.coins < price) return { ok: false, message: `金幣不足（需要 ${price}）。` };
+    }
+    soundEngine.playCorrectChord(2);
+    setSave((prev) => ({
+      ...prev,
+      coins: useHonor ? prev.coins : prev.coins - Math.round(def.priceCoins * discountFactor),
+      pvp: useHonor
+        ? { ...prev.pvp, honorTokens: prev.pvp.honorTokens - (def.priceHonor ?? 0) }
+        : prev.pvp,
+      items: { ...prev.items, [itemId]: (prev.items[itemId] ?? 0) + 1 },
+    }));
+    return { ok: true, message: `已獲得道具【${def.name}】×1！` };
+  }, [save.coins, save.pvp.honorTokens]);
+
+  const consumeBattleItem = useCallback((itemId: BattleItemId): boolean => {
+    if ((save.items[itemId] ?? 0) <= 0) return false;
+    setSave((prev) => ({
+      ...prev,
+      items: { ...prev.items, [itemId]: Math.max(0, (prev.items[itemId] ?? 0) - 1) },
+    }));
+    return true;
+  }, [save.items]);
+
+  const unlockOrBondGuardian = useCallback((guardianId: GuardianId): ActionFeedback => {
+    const cost = GUARDIAN_SHOP_COSTS[guardianId];
+    const bondCost = 90;
+    if (save.coins < bondCost) {
+      return { ok: false, message: `金幣不足（餵食精靈靈果需要 ${bondCost} 金幣）。` };
+    }
+    soundEngine.playPetChime();
+    setSave((prev) => ({
+      ...prev,
+      coins: prev.coins - bondCost,
+      selectedGuardian: guardianId,
+      unlockedGuardians: Array.from(new Set([...prev.unlockedGuardians, guardianId])),
+      guardianBonds: {
+        ...prev.guardianBonds,
+        [guardianId]: (prev.guardianBonds[guardianId] ?? 1) + 2,
+      },
+    }));
+    return {
+      ok: true,
+      message: `餵食靈果成功！守護精靈羈絆 +2（原價 ${cost.coins} 免費覺醒）！`,
+    };
+  }, [save.coins]);
+
+  // ==================== PARENT CONTROLS & CSV ====================
+  const updateParentSettings = useCallback((patch: Partial<ParentSettings>) => {
+    setSave((prev) => {
+      const nextParent = { ...prev.parentSettings, ...patch };
+      return {
+        ...prev,
+        parentSettings: nextParent,
+        playMode: nextParent.forcePracticeMode ? 'practice' : prev.playMode,
+      };
+    });
+  }, []);
+
+  const buildLearningCsv = useCallback((): string => {
+    const header = '時間,科目/模式,年級,答對題數,總作答題數,正確率(%),得分,時長(秒),結果,學習備註';
+    const subjectMap: Record<SubjectId | 'pvp', string> = {
+      chinese: '國語文',
+      english: '英語文',
+      math: '數學',
+      science: '自然科學',
+      pvp: '線上知識對戰',
+    };
+    const rows = save.trajectory.map((t) => {
+      const acc = t.totalAttempts > 0 ? Math.round((t.correctCount / t.totalAttempts) * 100) : 100;
+      const dt = new Date(t.timestamp).toLocaleString('zh-TW');
+      const safeNote = t.note.replace(/"/g, '""');
+      return `"${dt}","${subjectMap[t.subject]}",${t.grade}年級,${t.correctCount},${t.totalAttempts},${acc},${t.score},${t.durationSeconds},"${t.victory ? '勝利/通關' : '挑戰中'}","${safeNote}"`;
+    });
+    const summaryRows = (['chinese', 'english', 'math', 'science'] as SubjectId[]).map((sub) => {
+      const s = save.subjectStats[sub];
+      const acc = s.answered > 0 ? Math.round((s.correct / s.answered) * 100) : 0;
+      return `"累計統計","${subjectMap[sub]}",${save.grade}年級,${s.correct},${s.answered},${acc},${s.bestScore},0,"通關${s.clears}次","最高星數 ${s.starsEarned} 星"`;
+    });
+    return '\uFEFF' + [header, ...rows, ...summaryRows].join('\n');
+  }, [save.grade, save.subjectStats, save.trajectory]);
+
+  return (
+    <GameStateContext.Provider
+      value={{
+        save,
+        combatStats,
+        equippedWeapon,
+        isRestReminderVisible,
+        dismissRestReminder: () => setRestDismissed(true),
+        setGrade,
+        setSemester,
+        setPlayMode,
+        toggleMute,
+        selectGuardian,
+        petGuardian,
+        selectTitle,
+        recordAnswer,
+        resolveWrongRecord,
+        applyWorldResult,
+        applyPvPResult,
+        claimDailyQuest,
+        equipWeapon,
+        enhanceWeapon,
+        ascendWeapon,
+        fuseWeapons,
+        socketGem,
+        unsocketGem,
+        synthesizeGems,
+        buyWeapon,
+        buyGem,
+        buyBattleItem,
+        consumeBattleItem,
+        unlockOrBondGuardian,
+        updateParentSettings,
+        buildLearningCsv,
+      }}
+    >
+      {children}
+    </GameStateContext.Provider>
+  );
+};
+
+export function useGameState(): GameStateContextValue {
+  const ctx = useContext(GameStateContext);
+  if (!ctx) throw new Error('useGameState must be used within GameStateProvider');
+  return ctx;
+}

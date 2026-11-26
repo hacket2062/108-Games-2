@@ -1,0 +1,267 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: default deny everything
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ==================== PRIMITIVES ====================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    function isValidGuardian(g) {
+      return g in ['qilin', 'stardragon', 'griffin', 'deer'];
+    }
+
+    function isValidWeaponPath(p) {
+      return p in ['base', 'hero', 'mythic', 'inferno'];
+    }
+
+    // ==================== VALIDATION BLUEPRINTS ====================
+    function isValidUserSave(data) {
+      return data.keys().hasAll([
+        'uid', 'displayName', 'level', 'xp', 'coins', 'crystals',
+        'honorTokens', 'pvpRating', 'pvpWins', 'pvpLosses',
+        'grade', 'semester', 'selectedGuardian', 'saveData',
+        'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'uid', 'displayName', 'level', 'xp', 'coins', 'crystals',
+        'honorTokens', 'pvpRating', 'pvpWins', 'pvpLosses',
+        'grade', 'semester', 'selectedGuardian', 'saveData',
+        'createdAt', 'updatedAt'
+      ])
+      && data.uid is string && data.uid == request.auth.uid && isValidId(data.uid)
+      && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60
+      && data.level is number && data.level >= 1 && data.level <= 200
+      && data.xp is number && data.xp >= 0 && data.xp <= 10000000
+      && data.coins is number && data.coins >= 0 && data.coins <= 10000000
+      && data.crystals is number && data.crystals >= 0 && data.crystals <= 1000000
+      && data.honorTokens is number && data.honorTokens >= 0 && data.honorTokens <= 1000000
+      && data.pvpRating is number && data.pvpRating >= 0 && data.pvpRating <= 9999
+      && data.pvpWins is number && data.pvpWins >= 0 && data.pvpWins <= 100000
+      && data.pvpLosses is number && data.pvpLosses >= 0 && data.pvpLosses <= 100000
+      && data.grade is number && data.grade >= 3 && data.grade <= 6
+      && data.semester is string && data.semester in ['upper', 'lower']
+      && data.selectedGuardian is string && isValidGuardian(data.selectedGuardian)
+      && data.saveData is map && data.saveData.size() <= 40
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidPvPRoom(data) {
+      return data.keys().hasAll([
+        'roomCode', 'status', 'grade', 'subjectFilter',
+        'hostUid', 'hostName', 'hostWeaponPath', 'hostWeaponLevel', 'hostGuardian',
+        'hostHp', 'hostScore', 'hostCombo',
+        'guestUid', 'guestName', 'guestWeaponPath', 'guestWeaponLevel', 'guestGuardian',
+        'guestHp', 'guestScore', 'guestCombo',
+        'winnerUid', 'questionSeed', 'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'roomCode', 'status', 'grade', 'subjectFilter',
+        'hostUid', 'hostName', 'hostWeaponPath', 'hostWeaponLevel', 'hostGuardian',
+        'hostHp', 'hostScore', 'hostCombo',
+        'guestUid', 'guestName', 'guestWeaponPath', 'guestWeaponLevel', 'guestGuardian',
+        'guestHp', 'guestScore', 'guestCombo',
+        'winnerUid', 'questionSeed', 'createdAt', 'updatedAt'
+      ])
+      && data.roomCode is string && data.roomCode.size() >= 4 && data.roomCode.size() <= 16 && data.roomCode.matches('^[A-Z0-9]+$')
+      && data.status is string && data.status in ['waiting', 'playing', 'finished']
+      && data.grade is number && data.grade >= 3 && data.grade <= 6
+      && data.subjectFilter is string && data.subjectFilter in ['all', 'chinese', 'english', 'math', 'science']
+      && data.hostUid is string && isValidId(data.hostUid)
+      && data.hostName is string && data.hostName.size() >= 1 && data.hostName.size() <= 40
+      && data.hostWeaponPath is string && isValidWeaponPath(data.hostWeaponPath)
+      && data.hostWeaponLevel is number && data.hostWeaponLevel >= 0 && data.hostWeaponLevel <= 15
+      && data.hostGuardian is string && isValidGuardian(data.hostGuardian)
+      && data.hostHp is number && data.hostHp >= 0 && data.hostHp <= 500
+      && data.hostScore is number && data.hostScore >= 0 && data.hostScore <= 99999
+      && data.hostCombo is number && data.hostCombo >= 0 && data.hostCombo <= 99
+      && data.guestUid is string && data.guestUid.size() <= 128
+      && data.guestName is string && data.guestName.size() <= 40
+      && data.guestWeaponPath is string && isValidWeaponPath(data.guestWeaponPath)
+      && data.guestWeaponLevel is number && data.guestWeaponLevel >= 0 && data.guestWeaponLevel <= 15
+      && data.guestGuardian is string && isValidGuardian(data.guestGuardian)
+      && data.guestHp is number && data.guestHp >= 0 && data.guestHp <= 500
+      && data.guestScore is number && data.guestScore >= 0 && data.guestScore <= 99999
+      && data.guestCombo is number && data.guestCombo >= 0 && data.guestCombo <= 99
+      && data.winnerUid is string && data.winnerUid.size() <= 128
+      && data.questionSeed is number && data.questionSeed >= 1 && data.questionSeed <= 999999
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidPvPEvent(data) {
+      return data.keys().hasAll(['senderUid', 'hostUid', 'guestUid', 'actionType', 'damage', 'label', 'createdAt'])
+      && data.keys().hasOnly(['senderUid', 'hostUid', 'guestUid', 'actionType', 'damage', 'label', 'createdAt'])
+      && data.senderUid is string && data.senderUid == request.auth.uid && isValidId(data.senderUid)
+      && data.hostUid is string && isValidId(data.hostUid)
+      && data.guestUid is string && isValidId(data.guestUid)
+      && data.actionType is string && data.actionType in ['attack', 'jam_fog', 'jam_haste', 'jam_shield', 'ultimate']
+      && data.damage is number && data.damage >= 0 && data.damage <= 250
+      && data.label is string && data.label.size() >= 1 && data.label.size() <= 64
+      && data.createdAt is timestamp;
+    }
+
+    // ==================== COLLECTION: USERS (OWNER-ONLY) ====================
+    match /users/{userId} {
+      allow list: if false;
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId)
+        && isValidId(userId)
+        && isValidUserSave(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(userId)
+        && isValidId(userId)
+        && isValidUserSave(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'level', 'xp', 'coins', 'crystals',
+          'honorTokens', 'pvpRating', 'pvpWins', 'pvpLosses',
+          'grade', 'semester', 'selectedGuardian', 'saveData', 'updatedAt'
+        ]);
+      allow delete: if isOwner(userId) && isValidId(userId);
+    }
+
+    // ==================== COLLECTION: PVP ROOMS ====================
+    match /pvpRooms/{roomId} {
+      allow get: if isVerifiedUser()
+        && isValidId(roomId)
+        && (
+          existing().status == 'waiting'
+          || existing().hostUid == request.auth.uid
+          || existing().guestUid == request.auth.uid
+        );
+
+      allow list: if isVerifiedUser()
+        && (
+          resource.data.status == 'waiting'
+          || resource.data.hostUid == request.auth.uid
+          || resource.data.guestUid == request.auth.uid
+        );
+
+      allow create: if isVerifiedUser()
+        && isValidId(roomId)
+        && isValidPvPRoom(incoming())
+        && incoming().hostUid == request.auth.uid
+        && incoming().status == 'waiting'
+        && incoming().guestUid == ''
+        && incoming().winnerUid == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(roomId)
+        && isValidPvPRoom(incoming())
+        && incoming().hostUid == existing().hostUid
+        && incoming().roomCode == existing().roomCode
+        && incoming().questionSeed == existing().questionSeed
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Guest joins a waiting room
+          (
+            existing().status == 'waiting'
+            && existing().guestUid == ''
+            && request.auth.uid != existing().hostUid
+            && incoming().guestUid == request.auth.uid
+            && incoming().guestName.size() >= 1
+            && incoming().status == 'playing'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'guestUid', 'guestName', 'guestWeaponPath', 'guestWeaponLevel',
+              'guestGuardian', 'status', 'updatedAt'
+            ])
+          )
+          ||
+          // Action 2: Host syncs combat progress or finishes match
+          (
+            existing().status == 'playing'
+            && request.auth.uid == existing().hostUid
+            && incoming().guestUid == existing().guestUid
+            && incoming().status in ['playing', 'finished']
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'hostHp', 'guestHp', 'hostScore', 'hostCombo',
+              'status', 'winnerUid', 'updatedAt'
+            ])
+          )
+          ||
+          // Action 3: Guest syncs combat progress or finishes match
+          (
+            existing().status == 'playing'
+            && request.auth.uid == existing().guestUid
+            && incoming().guestUid == existing().guestUid
+            && incoming().status in ['playing', 'finished']
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'hostHp', 'guestHp', 'guestScore', 'guestCombo',
+              'status', 'winnerUid', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isVerifiedUser()
+        && isValidId(roomId)
+        && existing().hostUid == request.auth.uid
+        && existing().status == 'waiting';
+
+      // ==================== SUBCOLLECTION: PVP EVENTS (MASTER GATE) ====================
+      match /events/{eventId} {
+        allow get: if isVerifiedUser()
+          && isValidId(roomId)
+          && isValidId(eventId)
+          && (
+            get(/databases/$(database)/documents/pvpRooms/$(roomId)).data.hostUid == request.auth.uid
+            || get(/databases/$(database)/documents/pvpRooms/$(roomId)).data.guestUid == request.auth.uid
+          );
+
+        allow list: if isVerifiedUser()
+          && (
+            resource.data.hostUid == request.auth.uid
+            || resource.data.guestUid == request.auth.uid
+          );
+
+        allow create: if isVerifiedUser()
+          && isValidId(roomId)
+          && isValidId(eventId)
+          && isValidPvPEvent(incoming())
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/pvpRooms/$(roomId))
+          && get(/databases/$(database)/documents/pvpRooms/$(roomId)).data.status == 'playing'
+          && incoming().hostUid == get(/databases/$(database)/documents/pvpRooms/$(roomId)).data.hostUid
+          && incoming().guestUid == get(/databases/$(database)/documents/pvpRooms/$(roomId)).data.guestUid
+          && (
+            incoming().hostUid == request.auth.uid
+            || incoming().guestUid == request.auth.uid
+          );
+
+        allow update, delete: if false;
+      }
+    }
+  }
+}

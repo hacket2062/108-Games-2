@@ -1,0 +1,286 @@
+{
+  "entities": {
+    "UserProfileSave": {
+      "title": "UserProfileSave",
+      "description": "Private player progression, equipment, gems, PvP stats, and learning stats synced per authenticated Google account.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the account owner."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Display nickname shown inside the game."
+        },
+        "level": {
+          "type": "number",
+          "description": "Player RPG level (1-200)."
+        },
+        "xp": {
+          "type": "number",
+          "description": "Current experience points."
+        },
+        "coins": {
+          "type": "number",
+          "description": "Gold coins balance."
+        },
+        "crystals": {
+          "type": "number",
+          "description": "Wisdom crystal balance."
+        },
+        "honorTokens": {
+          "type": "number",
+          "description": "PvP Arena honor tokens."
+        },
+        "pvpRating": {
+          "type": "number",
+          "description": "PvP rank rating points."
+        },
+        "pvpWins": {
+          "type": "number",
+          "description": "Total PvP wins."
+        },
+        "pvpLosses": {
+          "type": "number",
+          "description": "Total PvP losses."
+        },
+        "grade": {
+          "type": "number",
+          "description": "Selected elementary grade (3-6)."
+        },
+        "semester": {
+          "type": "string",
+          "enum": ["upper", "lower"],
+          "description": "Selected semester."
+        },
+        "selectedGuardian": {
+          "type": "string",
+          "enum": ["qilin", "stardragon", "griffin", "deer"],
+          "description": "Active Guardian Spirit ID."
+        },
+        "saveData": {
+          "type": "object",
+          "description": "Native map holding weapons, gems, consumables, titles, mistake records, and trajectory logs."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "level",
+        "xp",
+        "coins",
+        "crystals",
+        "honorTokens",
+        "pvpRating",
+        "pvpWins",
+        "pvpLosses",
+        "grade",
+        "semester",
+        "selectedGuardian",
+        "saveData",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PvPRoom": {
+      "title": "PvPRoom",
+      "description": "Real-time dual-player Knowledge Arena room synchronized via Firestore.",
+      "type": "object",
+      "properties": {
+        "roomCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9]+$",
+          "description": "Room invitation code."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["waiting", "playing", "finished"],
+          "description": "Lifecycle state of the match."
+        },
+        "grade": {
+          "type": "number",
+          "description": "Question grade level (3-6)."
+        },
+        "subjectFilter": {
+          "type": "string",
+          "enum": ["all", "chinese", "english", "math", "science"],
+          "description": "Subject pool filter for the match."
+        },
+        "hostUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "hostName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "hostWeaponPath": {
+          "type": "string",
+          "enum": ["base", "hero", "mythic", "inferno"]
+        },
+        "hostWeaponLevel": {
+          "type": "number"
+        },
+        "hostGuardian": {
+          "type": "string",
+          "enum": ["qilin", "stardragon", "griffin", "deer"]
+        },
+        "hostHp": {
+          "type": "number"
+        },
+        "hostScore": {
+          "type": "number"
+        },
+        "hostCombo": {
+          "type": "number"
+        },
+        "guestUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "guestName": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "guestWeaponPath": {
+          "type": "string",
+          "enum": ["base", "hero", "mythic", "inferno"]
+        },
+        "guestWeaponLevel": {
+          "type": "number"
+        },
+        "guestGuardian": {
+          "type": "string",
+          "enum": ["qilin", "stardragon", "griffin", "deer"]
+        },
+        "guestHp": {
+          "type": "number"
+        },
+        "guestScore": {
+          "type": "number"
+        },
+        "guestCombo": {
+          "type": "number"
+        },
+        "winnerUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "questionSeed": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "roomCode",
+        "status",
+        "grade",
+        "subjectFilter",
+        "hostUid",
+        "hostName",
+        "hostWeaponPath",
+        "hostWeaponLevel",
+        "hostGuardian",
+        "hostHp",
+        "hostScore",
+        "hostCombo",
+        "guestUid",
+        "guestName",
+        "guestWeaponPath",
+        "guestWeaponLevel",
+        "guestGuardian",
+        "guestHp",
+        "guestScore",
+        "guestCombo",
+        "winnerUid",
+        "questionSeed",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PvPEvent": {
+      "title": "PvPEvent",
+      "description": "Immutable real-time attack or jammer spell event inside an active PvP room.",
+      "type": "object",
+      "properties": {
+        "senderUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "hostUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "guestUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "actionType": {
+          "type": "string",
+          "enum": ["attack", "jam_fog", "jam_haste", "jam_shield", "ultimate"]
+        },
+        "damage": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["senderUid", "hostUid", "guestUid", "actionType", "damage", "label", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfileSave" },
+      "description": "Owner-isolated player cloud save document."
+    },
+    "/pvpRooms/{roomId}": {
+      "schema": { "$ref": "#/entities/PvPRoom" },
+      "description": "Active and waiting PvP Arena rooms."
+    },
+    "/pvpRooms/{roomId}/events/{eventId}": {
+      "schema": { "$ref": "#/entities/PvPEvent" },
+      "description": "Combat and jammer spell events emitted by match participants."
+    }
+  }
+}
