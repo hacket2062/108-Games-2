@@ -190,10 +190,61 @@ export interface SubjectStats {
   clears: number;
 }
 
+export type EquipmentSlotId = 'weapon' | 'helm' | 'armor' | 'gloves' | 'boots' | 'amulet';
+
 export interface EquipmentLevels {
   weapon: number;
+  helm?: number;
   armor: number;
+  gloves?: number;
   boots: number;
+  amulet?: number;
+}
+
+export type StageTier = 'explore' | 'trial' | 'elite' | 'brawl' | 'boss';
+
+export interface CampaignStageConfig {
+  stageKey: string; // e.g. "chinese_g4_c1_s1"
+  subject: SubjectId;
+  grade: GradeLevel;
+  chapterIndex: 1 | 2 | 3;
+  chapterTitle: string;
+  stageNumber: number; // 1..10
+  title: string;
+  subtitle: string;
+  tier: StageTier;
+  enemyName: string;
+  bossPhase2Name?: string;
+  enemyHpScale: number;
+  enemySpeedScale: number;
+  waveCount: number;
+  comboRewardMultiplier: number;
+  focusTags: string[];
+  starChestReward?: {
+    coins: number;
+    crystals: number;
+    weaponTemplateId?: string;
+    label: string;
+  };
+}
+
+export interface CampaignChapter {
+  id: string;
+  subject: SubjectId;
+  grade: GradeLevel;
+  chapterIndex: 1 | 2 | 3;
+  title: string;
+  unitSummary: string;
+  themeColor: string;
+  bossName: string;
+  stages: CampaignStageConfig[];
+}
+
+export interface StageProgressRecord {
+  cleared: boolean;
+  stars: 0 | 1 | 2 | 3;
+  bestScore: number;
+  chestClaimed?: boolean;
 }
 
 export interface LearningTrajectoryEntry {
@@ -264,10 +315,16 @@ export interface PlayerSaveData {
   lastPlayDate: string; // YYYY-MM-DD
   pvp: PvPProfileStats;
   parentSettings: ParentSettings;
+  stageProgress?: Record<string, StageProgressRecord>;
+  masteredQuestionIds?: string[];
+  knowledgeMastery?: Record<string, { subject: SubjectId; tag: string; answered: number; correct: number }>;
+  rapidGuessCount?: number;
 }
 
 export interface WorldRunResult {
   subject: SubjectId;
+  stageKey?: string;
+  stageLabel?: string;
   victory: boolean;
   score: number;
   stars: 0 | 1 | 2 | 3;
@@ -280,6 +337,7 @@ export interface WorldRunResult {
   crystalsEarned: number;
   knowledgeTags: string[];
   progressSummary: string;
+  chestRewardText?: string;
 }
 
 export interface PvPRunResult {
@@ -319,7 +377,10 @@ export interface EngineCommonProps {
   playMode: PlayMode;
   guardianId: GuardianId;
   playerStats: EffectiveCombatStats;
-  onAnswerResult: (question: AnyQuestion, isCorrect: boolean) => void;
+  stageConfig?: CampaignStageConfig;
+  masteredQuestionIds?: string[];
+  wrongQuestionIds?: string[];
+  onAnswerResult: (question: AnyQuestion, isCorrect: boolean, responseMs?: number) => void;
   onFinish: (result: WorldRunResult) => void;
   onExit: () => void;
 }
@@ -337,6 +398,7 @@ export interface AppUserAccount {
 
 export type ActiveScreen =
   | 'lobby'
+  | 'stage_select'
   | 'world_chinese'
   | 'world_english'
   | 'world_math'

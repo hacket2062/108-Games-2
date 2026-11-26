@@ -161,7 +161,13 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
     particles: new ParticlePool(320),
     floats: new FloatingTextPool(40),
     feel: createGameFeel(),
+    myEmote: null as { text: string; ttl: number } | null,
   });
+
+  const handleSendEmote = (text: string) => {
+    soundEngine.playClick();
+    vfxRef.current.myEmote = { text, ttl: 2.4 };
+  };
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -801,6 +807,10 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
       if (v.oppAttackAnim > 0) v.oppAttackAnim = Math.max(0, v.oppAttackAnim - dt * 2.8);
       if (v.myHitFlash > 0) v.myHitFlash = Math.max(0, v.myHitFlash - dt * 4.5);
       if (v.oppHitFlash > 0) v.oppHitFlash = Math.max(0, v.oppHitFlash - dt * 4.5);
+      if (v.myEmote) {
+        v.myEmote.ttl -= dt;
+        if (v.myEmote.ttl <= 0) v.myEmote = null;
+      }
 
       if (phaseRef.current === 'fighting' && dt > 0 && !finishedRef.current) {
         if (myFogRef.current > 0) myFogRef.current = Math.max(0, myFogRef.current - dt);
@@ -946,6 +956,26 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
         fogged: myFogRef.current > 0,
         scale: W < 760 ? 1.15 : 1.45,
       });
+
+      // Safe Friendly Quick-Emote Speech Bubble over Player Duelist
+      if (v.myEmote) {
+        const bx = W * 0.25;
+        const by = H * 0.27;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, v.myEmote.ttl * 2);
+        ctx.fillStyle = '#FFFBEB';
+        ctx.strokeStyle = '#F59E0B';
+        ctx.lineWidth = 3;
+        drawRoundedRect(ctx, bx - 66, by - 22, 132, 38, 16);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#0F172A';
+        ctx.font = '900 15px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(v.myEmote.text, bx, by - 3);
+        ctx.restore();
+      }
 
       // Right Duelist: Opponent (or preview rival in lobby)
       const opp = opponentRef.current;
@@ -1375,11 +1405,27 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
               ))}
             </div>
 
-            {answerFeedback && (
-              <div className="text-xs font-bold text-amber-200 bg-slate-950/90 border border-slate-700 rounded-xl px-3.5 py-2">
-                {answerFeedback}
+            {/* Safe Friendly Quick-Emote Strip (Zero Free-Text Chat) */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-400">安全互動表情：</span>
+                {['加油！', '好厲害！', '接招吧！', '太神啦！'].map((msg) => (
+                  <button
+                    key={msg}
+                    type="button"
+                    onClick={() => handleSendEmote(msg)}
+                    className="min-h-[38px] px-3 rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 border border-slate-600 text-amber-200 font-black text-xs transition-colors active:scale-95"
+                  >
+                    {msg}
+                  </button>
+                ))}
               </div>
-            )}
+              {answerFeedback && (
+                <div className="text-xs font-bold text-amber-200 bg-slate-950/90 border border-slate-700 rounded-xl px-3.5 py-2">
+                  {answerFeedback}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

@@ -8,6 +8,7 @@ import {
   WorldRunResult,
 } from '../types/game';
 import { getEnglishQuestions, shuffleArray } from '../data/questionBank';
+import { QuestionManager } from '../core/questionManager';
 import { GUARDIANS } from '../data/guardians';
 import {
   calculateCombatDamage,
@@ -88,6 +89,9 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   playMode,
   guardianId,
   playerStats,
+  stageConfig,
+  masteredQuestionIds,
+  wrongQuestionIds,
   onAnswerResult,
   onFinish,
   onExit,
@@ -95,15 +99,32 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const guardian = GUARDIANS[guardianId];
 
-  const droneQuestionsRef = useRef<EnglishQuestion[]>(
-    shuffleArray([
-      ...getEnglishQuestions(grade, semester, 'listen'),
-      ...getEnglishQuestions(grade, semester, 'fill'),
-    ])
+  const droneMgrRef = useRef(
+    new QuestionManager<EnglishQuestion>(
+      [
+        ...getEnglishQuestions(grade, semester, 'listen'),
+        ...getEnglishQuestions(grade, semester, 'fill'),
+      ],
+      {
+        masteredQuestionIds,
+        wrongQuestionIds,
+        focusTags: stageConfig?.focusTags,
+      }
+    )
   );
-  const spellQuestionsRef = useRef<EnglishQuestion[]>(
-    getEnglishQuestions(grade, semester, 'spell')
+  const spellMgrRef = useRef(
+    new QuestionManager<EnglishQuestion>(getEnglishQuestions(grade, semester, 'spell'), {
+      masteredQuestionIds,
+      wrongQuestionIds,
+      focusTags: stageConfig?.focusTags,
+    })
   );
+  const [bossWarning, setBossWarning] = useState(stageConfig?.tier === 'boss');
+  useEffect(() => {
+    if (!bossWarning) return;
+    const t = window.setTimeout(() => setBossWarning(false), 2600);
+    return () => clearTimeout(t);
+  }, [bossWarning]);
 
   const [paused, setPaused] = useState(false);
   const [shipVariant, setShipVariant] = useState<'blaster' | 'falcon'>('blaster');
@@ -151,7 +172,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   const shieldTimerRef = useRef(0);
   const doubleNextRef = useRef(false);
 
-  const TOTAL_DRONE_WAVES = 4;
+  const TOTAL_DRONE_WAVES = stageConfig ? Math.max(3, stageConfig.waveCount - 1) : 4;
 
   const simRef = useRef({
     time: 0,
@@ -235,21 +256,20 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         crystalsEarned: victory ? stars * 2 + 1 : 0,
         knowledgeTags: Array.from(tagsRef.current),
         progressSummary: victory
-          ? `擊毀星際母艦！完成 ${TOTAL_DRONE_WAVES} 波單字戰線與拼字決戰！`
+          ? `擊毀${stageConfig?.enemyName ?? '星際母艦'}！完成 ${TOTAL_DRONE_WAVES} 波單字戰線與拼字決戰！`
           : `止步於第 ${simRef.current.waveIndex + 1} 波星際防線，再調整走位挑戰！`,
+        stageKey: stageConfig?.stageKey,
+        stageLabel: stageConfig ? `第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」` : undefined,
+        chestRewardText: victory && stars === 3 ? stageConfig?.starChestReward?.label : undefined,
       };
       onFinish(result);
     },
-    [onFinish, playerStats.maxHp]
+    [onFinish, playerStats.maxHp, stageConfig]
   );
 
   const spawnBossSpellingRound = useCallback(() => {
     const s = simRef.current;
-    if (spellQuestionsRef.current.length === 0) {
-      spellQuestionsRef.current = getEnglishQuestions(grade, semester, 'spell');
-    }
-    const sq = spellQuestionsRef.current.shift()!;
-    spellQuestionsRef.current.push(sq);
+    const sq = spellMgrRef.current.next();
     const payload = sq.payload as EnglishSpellPayload;
 
     s.bossMode = true;
@@ -277,7 +297,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
 
     setWave(TOTAL_DRONE_WAVES + 1);
     setRadarInfo({
-      prompt: `BOSS 拼字充能！依序射擊字母拼出「${payload.zhMeaning}」`,
+      prompt: `${stageConfig?.enemyName ?? 'BOSS'} 拼字充能！依序射擊字母拼出「${payload.zhMeaning}」`,
       speakText: payload.speakText,
       zhHint: payload.zhMeaning,
       isBoss: true,
@@ -285,26 +305,19 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       spellTarget: payload.word,
     });
     soundEngine.speakText(payload.speakText, 'en-US');
-  }, [grade, semester]);
+  }, [TOTAL_DRONE_WAVES, stageConfig?.enemyName]);
 
   const spawnDroneWave = useCallback(
     (waveNum: number) => {
       const s = simRef.current;
       if (waveNum >= TOTAL_DRONE_WAVES) {
-        s.bossHp = 2; // 2 spelling words defeat the Mothership!
-        s.bossMaxHp = 2;
+        s.bossHp = stageConfig?.tier === 'boss' ? 3 : 2;
+        s.bossMaxHp = s.bossHp;
         spawnBossSpellingRound();
         return;
       }
 
-      if (droneQuestionsRef.current.length === 0) {
-        droneQuestionsRef.current = shuffleArray([
-          ...getEnglishQuestions(grade, semester, 'listen'),
-          ...getEnglishQuestions(grade, semester, 'fill'),
-        ]);
-      }
-      const q = droneQuestionsRef.current.shift()!;
-      droneQuestionsRef.current.push(q);
+      const q = droneMgrRef.current.next();
       const payload = q.payload as EnglishDronePayload;
 
       s.waveIndex = waveNum;
@@ -1073,7 +1086,9 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         <div className="pointer-events-auto rounded-2xl bg-slate-900/92 border-2 border-cyan-400/80 px-3.5 py-2 shadow-xl flex items-center gap-3.5">
           <div>
             <div className="text-[11px] font-bold text-cyan-300">
-              英語文・Word Galaxy（{grade}年級）
+              {stageConfig
+                ? `Word Galaxy・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」`
+                : `英語文・Word Galaxy（${grade}年級）`}
             </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs font-black text-rose-300">SHIELD</span>
@@ -1184,6 +1199,22 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         </button>
       </div>
 
+      {bossWarning && stageConfig?.tier === 'boss' && (
+        <div className="fixed inset-x-0 top-24 z-30 pointer-events-none flex justify-center px-4">
+          <div className="rounded-2xl bg-rose-950/95 border-2 border-cyan-300 px-6 py-3 text-center shadow-[0_0_32px_rgba(34,211,238,0.5)]">
+            <div className="text-xs font-black tracking-widest text-cyan-300">
+              WARNING · 第 10 關章節大魔王星艦逼近！
+            </div>
+            <div className="text-xl font-black text-white mt-0.5">{stageConfig.enemyName}</div>
+            {stageConfig.bossPhase2Name && (
+              <div className="text-xs text-rose-200 mt-0.5">
+                二階變身型態：{stageConfig.bossPhase2Name}（拼字核心擊破！）
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <ExplanationBanner message={banner} onDismiss={() => setBanner(null)} />
       <UltimateCutIn
         visible={cutIn}
@@ -1194,7 +1225,11 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       />
       <WorldPauseModal
         open={paused}
-        worldName="英語文・星際機甲戰線 Word Galaxy"
+        worldName={
+          stageConfig
+            ? `Word Galaxy・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關`
+            : '英語文・星際機甲戰線 Word Galaxy'
+        }
         onResume={() => setPaused(false)}
         onRestart={onExit}
         onExit={onExit}

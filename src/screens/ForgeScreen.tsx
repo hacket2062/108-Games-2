@@ -10,7 +10,7 @@ import {
   Swords,
   Zap,
 } from 'lucide-react';
-import { AscensionPath } from '../types/game';
+import { AscensionPath, EquipmentSlotId, WeaponInstance } from '../types/game';
 import { useGameState } from '../core/GameStateContext';
 import {
   ASCENSION_PATHS,
@@ -25,6 +25,33 @@ interface ForgeScreenProps {
   onExit: () => void;
 }
 
+const GEAR_SLOTS: {
+  slot: EquipmentSlotId;
+  name: string;
+  statLabel: string;
+  accent: string;
+}[] = [
+  { slot: 'weapon', name: '主武器槽', statLabel: '全科攻擊 +2/級', accent: '#F59E0B' },
+  { slot: 'helm', name: '智慧頭冠', statLabel: '最大 HP +12/級', accent: '#38BDF8' },
+  { slot: 'armor', name: '學園戰甲', statLabel: '護甲與耐力 +14/級', accent: '#10B981' },
+  { slot: 'gloves', name: '速寫護手', statLabel: '暴擊與攻速 +1.2%/級', accent: '#F43F5E' },
+  { slot: 'boots', name: '疾風戰靴', statLabel: '移動與連擊時間 +4%/級', accent: '#A855F7' },
+  { slot: 'amulet', name: '星光護符', statLabel: '經驗／必殺充能 +5%/級', accent: '#FACC15' },
+];
+
+function getWeaponRarity(w: WeaponInstance): { label: 'R' | 'SR' | 'SSR' | 'UR'; color: string } {
+  if (w.templateId === 'fused_eternal_blade' || (w.ascensionPath !== 'base' && w.enhanceLevel >= 12)) {
+    return { label: 'UR', color: '#F43F5E' };
+  }
+  if (w.ascensionPath !== 'base' || w.enhanceLevel >= 8) {
+    return { label: 'SSR', color: '#F59E0B' };
+  }
+  if (w.enhanceLevel >= 4 || w.baseAttack >= 20) {
+    return { label: 'SR', color: '#A855F7' };
+  }
+  return { label: 'R', color: '#38BDF8' };
+}
+
 export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
   const {
     save,
@@ -33,10 +60,11 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
     enhanceWeapon,
     ascendWeapon,
     fuseWeapons,
+    upgradeEquipmentSlot,
   } = useGameState();
 
   const [selectedUid, setSelectedUid] = useState<string>(equippedWeapon.uid);
-  const [tab, setTab] = useState<'enhance' | 'ascend' | 'fuse'>('enhance');
+  const [tab, setTab] = useState<'enhance' | 'ascend' | 'fuse' | 'gear'>('enhance');
   const [useGuard, setUseGuard] = useState(true);
   const [fusePartnerUid, setFusePartnerUid] = useState<string>('');
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
@@ -134,9 +162,17 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
               }}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-700 text-amber-300">
-                  {pathDef.name}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-xs font-black px-2 py-1 rounded-lg text-slate-950 font-mono-num"
+                    style={{ backgroundColor: getWeaponRarity(selectedWeapon).color }}
+                  >
+                    {getWeaponRarity(selectedWeapon).label}
+                  </span>
+                  <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-700 text-amber-300">
+                    {pathDef.name}
+                  </span>
+                </div>
                 {save.equippedWeaponUid === selectedWeapon.uid ? (
                   <span className="text-xs font-black text-emerald-400 inline-flex items-center gap-1">
                     <CheckCircle2 className="w-4 h-4" /> 目前裝備中
@@ -244,8 +280,14 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                       }`}
                     >
                       <div>
-                        <div className="text-sm font-black text-white">
-                          {w.name}{' '}
+                        <div className="text-sm font-black text-white flex items-center gap-1.5">
+                          <span
+                            className="text-[10px] font-black px-1.5 py-0.5 rounded text-slate-950 font-mono-num"
+                            style={{ backgroundColor: getWeaponRarity(w).color }}
+                          >
+                            {getWeaponRarity(w).label}
+                          </span>
+                          <span>{w.name}</span>
                           <span className="font-mono-num" style={{ color: p.auraPrimary }}>
                             +{w.enhanceLevel}
                           </span>
@@ -264,13 +306,14 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
             </div>
           </div>
 
-          {/* Right 7 cols: 3 Forge Tabs */}
+          {/* Right 7 cols: 4 Forge Tabs */}
           <div className="lg:col-span-7 flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-2 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
               {(
                 [
-                  ['enhance', '強化鍛造 (+0~+15)'],
-                  ['ascend', '英雄/神話/地獄升階'],
+                  ['enhance', '神兵強化'],
+                  ['ascend', '三路線升階'],
+                  ['gear', '六大裝備槽'],
                   ['fuse', '神兵融合爐'],
                 ] as const
               ).map(([id, label]) => (
@@ -428,6 +471,68 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* TAB 4: 6-SLOT EQUIPMENT NO-BREAK STRENGTHENING */}
+            {tab === 'gear' && (
+              <div className="rounded-3xl bg-slate-900 border-2 border-emerald-500/60 p-5 space-y-4">
+                <div>
+                  <div className="text-base font-black text-emerald-300 flex items-center gap-2">
+                    <Shield className="w-5 h-5" /> 六大防具與飾品強化（+0~+15 絕不爆裝）
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1">
+                    全面強化頭盔、戰甲、護手、戰靴、護符與主武器槽，大幅提升四大世界與競技場基礎戰力！
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {GEAR_SLOTS.map((g) => {
+                    const lv = save.equipment?.[g.slot] ?? 0;
+                    const costCoins = 55 + lv * 35;
+                    const costCrystals = lv >= 6 ? Math.floor((lv - 4) / 2) : 0;
+                    const maxed = lv >= 15;
+                    return (
+                      <div
+                        key={g.slot}
+                        className="rounded-2xl bg-slate-950 border-2 border-slate-800 p-3.5 flex flex-col justify-between gap-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-black text-white flex items-center gap-1.5">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full inline-block"
+                                style={{ backgroundColor: g.accent }}
+                              />
+                              {g.name}
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-0.5">{g.statLabel}</div>
+                          </div>
+                          <span
+                            className="text-base font-black font-mono-num"
+                            style={{ color: g.accent }}
+                          >
+                            +{lv}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={maxed}
+                          onClick={() => {
+                            soundEngine.playForgeHammer();
+                            const res = upgradeEquipmentSlot(g.slot);
+                            setFeedback(res);
+                          }}
+                          className="min-h-[44px] w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-black text-xs transition-transform active:scale-95"
+                        >
+                          {maxed
+                            ? '已滿級 +15'
+                            : `無爆強化（${costCoins}金幣${costCrystals > 0 ? ` + ${costCrystals}晶石` : ''}）`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

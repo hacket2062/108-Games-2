@@ -9,6 +9,7 @@ import {
   WorldRunResult,
 } from '../types/game';
 import { getChineseQuestions } from '../data/questionBank';
+import { QuestionManager } from '../core/questionManager';
 import { GUARDIANS } from '../data/guardians';
 import {
   calculateCombatDamage,
@@ -65,17 +66,45 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
   playMode,
   guardianId,
   playerStats,
+  stageConfig,
+  masteredQuestionIds,
+  wrongQuestionIds,
   onAnswerResult,
   onFinish,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const guardian = GUARDIANS[guardianId];
+  const hpScale = stageConfig?.enemyHpScale ?? 1;
 
-  // Question queues per skill
-  const slashQueueRef = useRef<ChineseQuestion[]>(getChineseQuestions(grade, semester, 'slash'));
-  const radicalQueueRef = useRef<ChineseQuestion[]>(getChineseQuestions(grade, semester, 'radical'));
-  const typoQueueRef = useRef<ChineseQuestion[]>(getChineseQuestions(grade, semester, 'typo'));
+  // Zero-Repeat QuestionManager per skill mode
+  const slashMgrRef = useRef(
+    new QuestionManager<ChineseQuestion>(getChineseQuestions(grade, semester, 'slash'), {
+      masteredQuestionIds,
+      wrongQuestionIds,
+      focusTags: stageConfig?.focusTags,
+    })
+  );
+  const radicalMgrRef = useRef(
+    new QuestionManager<ChineseQuestion>(getChineseQuestions(grade, semester, 'radical'), {
+      masteredQuestionIds,
+      wrongQuestionIds,
+      focusTags: stageConfig?.focusTags,
+    })
+  );
+  const typoMgrRef = useRef(
+    new QuestionManager<ChineseQuestion>(getChineseQuestions(grade, semester, 'typo'), {
+      masteredQuestionIds,
+      wrongQuestionIds,
+      focusTags: stageConfig?.focusTags,
+    })
+  );
+  const [bossWarning, setBossWarning] = useState(stageConfig?.tier === 'boss');
+  useEffect(() => {
+    if (!bossWarning) return;
+    const t = window.setTimeout(() => setBossWarning(false), 2600);
+    return () => clearTimeout(t);
+  }, [bossWarning]);
 
   const [phase, setPhase] = useState<InkPhase>('explore');
   const [paused, setPaused] = useState(false);
@@ -150,42 +179,42 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
     monsters: [
       {
         id: 'm1',
-        name: '錯字波利',
+        name: stageConfig ? `${stageConfig.title}先鋒` : '錯字波利',
         kind: 'poring' as const,
         x: 470,
         y: 350,
         homeX: 470,
         homeY: 350,
-        hp: 150,
-        maxHp: 150,
-        shielded: false,
+        hp: Math.round(145 * hpScale),
+        maxHp: Math.round(145 * hpScale),
+        shielded: stageConfig ? stageConfig.stageNumber >= 4 : false,
         defeated: false,
         angle: 0,
       },
       {
         id: 'm2',
-        name: '病句史萊姆',
+        name: stageConfig?.tier === 'elite' ? stageConfig.enemyName : '病句史萊姆',
         kind: 'slime' as const,
         x: 780,
         y: 440,
         homeX: 780,
         homeY: 440,
-        hp: 185,
-        maxHp: 185,
+        hp: Math.round(180 * hpScale),
+        maxHp: Math.round(180 * hpScale),
         shielded: true,
         defeated: false,
         angle: 2,
       },
       {
         id: 'm3',
-        name: '亂碼魔 Boss',
+        name: stageConfig?.tier === 'boss' ? stageConfig.enemyName : '亂碼魔 Boss',
         kind: 'boss' as const,
         x: 980,
         y: 230,
         homeX: 980,
         homeY: 230,
-        hp: 310,
-        maxHp: 310,
+        hp: Math.round(290 * hpScale),
+        maxHp: Math.round(290 * hpScale),
         shielded: true,
         defeated: false,
         angle: 4,
@@ -230,19 +259,14 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
   }, [activeSkill]);
 
   const pullQuestion = useCallback((mode: SkillMode): ChineseQuestion => {
-    const queue =
+    const mgr =
       mode === 'slash'
-        ? slashQueueRef
+        ? slashMgrRef.current
         : mode === 'radical'
-          ? radicalQueueRef
-          : typoQueueRef;
-    if (queue.current.length === 0) {
-      queue.current = getChineseQuestions(grade, semester, mode);
-    }
-    const q = queue.current.shift()!;
-    queue.current.push(q);
-    return q;
-  }, [grade, semester]);
+          ? radicalMgrRef.current
+          : typoMgrRef.current;
+    return mgr.next();
+  }, []);
 
   const concludeRun = useCallback(
     (victory: boolean) => {
@@ -274,12 +298,15 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         crystalsEarned: victory ? stars * 2 + 1 : 0,
         knowledgeTags: Array.from(unlockedTagsRef.current),
         progressSummary: victory
-          ? `淨化墨靈幻境全部魔物，耗時 ${clearSeconds} 秒！`
+          ? `淨化${stageConfig?.enemyName ? `「${stageConfig.enemyName}」與` : ''}墨靈幻境全部魔物，耗時 ${clearSeconds} 秒！`
           : `仍有 ${worldRef.current.monsters.filter((m) => !m.defeated).length} 隻魔物未被淨化，調整策略再戰！`,
+        stageKey: stageConfig?.stageKey,
+        stageLabel: stageConfig ? `第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」` : undefined,
+        chestRewardText: victory && stars === 3 ? stageConfig?.starChestReward?.label : undefined,
       };
       onFinish(result);
     },
-    [onFinish, playerStats.maxHp]
+    [onFinish, playerStats.maxHp, stageConfig]
   );
 
   const openSkillChallenge = useCallback(
@@ -1154,7 +1181,9 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         <div className="pointer-events-auto rounded-2xl bg-slate-900/92 border-2 border-amber-400/80 px-4 py-2.5 shadow-xl flex items-center gap-4">
           <div>
             <div className="text-[11px] font-bold text-amber-300 tracking-wide">
-              國語文・墨靈幻境（{grade}年級）
+              {stageConfig
+                ? `墨靈幻境・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」`
+                : `國語文・墨靈幻境（${grade}年級）`}
             </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs font-black text-emerald-300">HP</span>
@@ -1457,6 +1486,22 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         </div>
       )}
 
+      {bossWarning && stageConfig?.tier === 'boss' && (
+        <div className="fixed inset-x-0 top-24 z-30 pointer-events-none flex justify-center px-4">
+          <div className="rounded-2xl bg-rose-950/95 border-2 border-amber-400 px-6 py-3 text-center shadow-[0_0_32px_rgba(251,191,36,0.5)]">
+            <div className="text-xs font-black tracking-widest text-amber-300">
+              WARNING · 第 10 關章節大魔王現身！
+            </div>
+            <div className="text-xl font-black text-white mt-0.5">{stageConfig.enemyName}</div>
+            {stageConfig.bossPhase2Name && (
+              <div className="text-xs text-rose-200 mt-0.5">
+                二階變身型態：{stageConfig.bossPhase2Name}（破防必殺擊潰！）
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <ExplanationBanner message={banner} onDismiss={() => setBanner(null)} />
       <UltimateCutIn
         visible={cutIn}
@@ -1467,7 +1512,11 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       />
       <WorldPauseModal
         open={paused}
-        worldName="國語文・墨靈幻境"
+        worldName={
+          stageConfig
+            ? `墨靈幻境・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關`
+            : '國語文・墨靈幻境'
+        }
         onResume={() => setPaused(false)}
         onRestart={onExit}
         onExit={onExit}

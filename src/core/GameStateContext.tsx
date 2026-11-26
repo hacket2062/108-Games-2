@@ -6,6 +6,7 @@ import {
   BattleItemId,
   DailyQuestProgress,
   EffectiveCombatStats,
+  EquipmentSlotId,
   GemElementId,
   GemInstance,
   GradeLevel,
@@ -15,6 +16,7 @@ import {
   PlayerSaveData,
   PvPRunResult,
   SemesterId,
+  StageProgressRecord,
   SubjectId,
   WeaponInstance,
   WorldRunResult,
@@ -93,8 +95,11 @@ export function createInitialPlayerSave(): PlayerSaveData {
     },
     equipment: {
       weapon: 1,
+      helm: 1,
       armor: 1,
+      gloves: 1,
       boots: 1,
+      amulet: 1,
     },
     weapons: [
       starterWeapon,
@@ -157,6 +162,10 @@ export function createInitialPlayerSave(): PlayerSaveData {
       pvpEnabled: true,
       forcePracticeMode: false,
     },
+    stageProgress: {},
+    masteredQuestionIds: [],
+    knowledgeMastery: {},
+    rapidGuessCount: 0,
   };
 }
 
@@ -185,6 +194,11 @@ function hydrateSave(raw: Partial<PlayerSaveData> | null | undefined): PlayerSav
       Array.isArray(raw.dailyQuests) && raw.dailyQuests.length > 0
         ? raw.dailyQuests
         : base.dailyQuests,
+    stageProgress: raw.stageProgress && typeof raw.stageProgress === 'object' ? raw.stageProgress : {},
+    masteredQuestionIds: Array.isArray(raw.masteredQuestionIds) ? raw.masteredQuestionIds : [],
+    knowledgeMastery:
+      raw.knowledgeMastery && typeof raw.knowledgeMastery === 'object' ? raw.knowledgeMastery : {},
+    rapidGuessCount: typeof raw.rapidGuessCount === 'number' ? raw.rapidGuessCount : 0,
   };
   if (merged.lastPlayDate !== todayKey()) {
     merged.lastPlayDate = todayKey();
@@ -234,9 +248,9 @@ interface GameStateContextValue {
   selectGuardian: (id: GuardianId) => void;
   petGuardian: () => void;
   selectTitle: (titleId: string) => void;
-  recordAnswer: (question: AnyQuestion, isCorrect: boolean) => void;
+  recordAnswer: (question: AnyQuestion, isCorrect: boolean, responseMs?: number) => void;
   resolveWrongRecord: (questionId: string) => void;
-  applyWorldResult: (result: WorldRunResult) => { leveledUp: boolean };
+  applyWorldResult: (result: WorldRunResult) => { leveledUp: boolean; chestDropped?: string };
   applyPvPResult: (result: PvPRunResult) => { leveledUp: boolean };
   claimDailyQuest: (questId: string) => ActionFeedback;
   // Forge
@@ -244,6 +258,7 @@ interface GameStateContextValue {
   enhanceWeapon: (weaponUid: string, useGuardScroll: boolean) => ActionFeedback;
   ascendWeapon: (weaponUid: string, path: AscensionPath) => ActionFeedback;
   fuseWeapons: (uidA: string, uidB: string) => ActionFeedback;
+  upgradeEquipmentSlot: (slot: EquipmentSlotId) => ActionFeedback;
   // Socketing
   socketGem: (weaponUid: string, slotIndex: number, gemUid: string) => ActionFeedback;
   unsocketGem: (weaponUid: string, slotIndex: number) => ActionFeedback;
@@ -363,6 +378,10 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           trajectory: save.trajectory.slice(0, 25),
           pvp: save.pvp,
           parentSettings: save.parentSettings,
+          stageProgress: save.stageProgress ?? {},
+          masteredQuestionIds: (save.masteredQuestionIds ?? []).slice(-180),
+          knowledgeMastery: save.knowledgeMastery ?? {},
+          rapidGuessCount: save.rapidGuessCount ?? 0,
         };
         const payload = {
           uid: user.uid,
@@ -438,49 +457,81 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setSave((p) => (p.unlockedTitles.includes(titleId) ? { ...p, selectedTitle: titleId } : p));
   }, []);
 
-  const recordAnswer = useCallback((question: AnyQuestion, isCorrect: boolean) => {
-    setSave((prev) => {
-      const curr = prev.subjectStats[question.subject];
-      const nextStats = {
-        ...prev.subjectStats,
-        [question.subject]: {
-          ...curr,
-          answered: curr.answered + 1,
-          correct: curr.correct + (isCorrect ? 1 : 0),
-        },
-      };
-
-      let nextWrong = [...prev.wrongRecords];
-      if (!isCorrect) {
-        const idx = nextWrong.findIndex((w) => w.questionId === question.id);
-        const rec: WrongRecord = {
-          questionId: question.id,
-          subject: question.subject,
-          grade: question.grade,
-          prompt: question.prompt,
-          correctAnswer: question.answer,
-          explanation: question.explanation,
-          knowledgeTag: question.knowledgeTag,
-          wrongCount: idx >= 0 ? nextWrong[idx].wrongCount + 1 : 1,
-          lastWrongAt: Date.now(),
-          revengeOptions: extractRevengeOptions(question),
+  const recordAnswer = useCallback(
+    (question: AnyQuestion, isCorrect: boolean, responseMs?: number) => {
+      setSave((prev) => {
+        const curr = prev.subjectStats[question.subject];
+        const nextStats = {
+          ...prev.subjectStats,
+          [question.subject]: {
+            ...curr,
+            answered: curr.answered + 1,
+            correct: curr.correct + (isCorrect ? 1 : 0),
+          },
         };
-        if (idx >= 0) nextWrong[idx] = rec;
-        else nextWrong = [rec, ...nextWrong].slice(0, 60);
-      }
 
-      const nextQuests = prev.dailyQuests.map((q) =>
-        q.id === 'q_answer_5' && isCorrect ? { ...q, current: Math.min(q.target, q.current + 1) } : q
-      );
+        let nextWrong = [...prev.wrongRecords];
+        if (!isCorrect) {
+          const idx = nextWrong.findIndex((w) => w.questionId === question.id);
+          const rec: WrongRecord = {
+            questionId: question.id,
+            subject: question.subject,
+            grade: question.grade,
+            prompt: question.prompt,
+            correctAnswer: question.answer,
+            explanation: question.explanation,
+            knowledgeTag: question.knowledgeTag,
+            wrongCount: idx >= 0 ? nextWrong[idx].wrongCount + 1 : 1,
+            lastWrongAt: Date.now(),
+            revengeOptions: extractRevengeOptions(question),
+          };
+          if (idx >= 0) nextWrong[idx] = rec;
+          else nextWrong = [rec, ...nextWrong].slice(0, 60);
+        }
 
-      return {
-        ...prev,
-        subjectStats: nextStats,
-        wrongRecords: nextWrong,
-        dailyQuests: nextQuests,
-      };
-    });
-  }, []);
+        // Track mastered question IDs for zero-repeat prioritization
+        const masteredSet = new Set(prev.masteredQuestionIds ?? []);
+        if (isCorrect) masteredSet.add(question.id);
+        else masteredSet.delete(question.id);
+
+        // Track per-knowledgeTag mastery for Parent Heatmap
+        const tagKey = `${question.subject}:${question.knowledgeTag}`;
+        const prevMap = prev.knowledgeMastery ?? {};
+        const prevEntry = prevMap[tagKey] ?? {
+          subject: question.subject,
+          tag: question.knowledgeTag,
+          answered: 0,
+          correct: 0,
+        };
+        const nextKnowledgeMastery = {
+          ...prevMap,
+          [tagKey]: {
+            ...prevEntry,
+            answered: prevEntry.answered + 1,
+            correct: prevEntry.correct + (isCorrect ? 1 : 0),
+          },
+        };
+
+        // Detect rapid random guessing (<1.8s and wrong)
+        const isRapidGuess = !isCorrect && typeof responseMs === 'number' && responseMs < 1800;
+
+        const nextQuests = prev.dailyQuests.map((q) =>
+          q.id === 'q_answer_5' && isCorrect ? { ...q, current: Math.min(q.target, q.current + 1) } : q
+        );
+
+        return {
+          ...prev,
+          subjectStats: nextStats,
+          wrongRecords: nextWrong,
+          dailyQuests: nextQuests,
+          masteredQuestionIds: Array.from(masteredSet).slice(-350),
+          knowledgeMastery: nextKnowledgeMastery,
+          rapidGuessCount: (prev.rapidGuessCount ?? 0) + (isRapidGuess ? 1 : 0),
+        };
+      });
+    },
+    []
+  );
 
   const resolveWrongRecord = useCallback((questionId: string) => {
     setSave((prev) => ({
@@ -490,84 +541,138 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }));
   }, []);
 
-  const applyWorldResult = useCallback((result: WorldRunResult): { leveledUp: boolean } => {
-    let didLevel = false;
-    setSave((prev) => {
-      const xpOutcome = applyXpGain(prev.level, prev.xp, result.xpEarned);
-      didLevel = xpOutcome.leveledUp;
-      const st = prev.subjectStats[result.subject];
-      const nextSubjectStats = {
-        ...prev.subjectStats,
-        [result.subject]: {
-          ...st,
-          bestScore: Math.max(st.bestScore, result.score),
-          starsEarned: Math.max(st.starsEarned, result.stars),
-          clears: st.clears + (result.victory ? 1 : 0),
-        },
-      };
+  const applyWorldResult = useCallback(
+    (result: WorldRunResult): { leveledUp: boolean; chestDropped?: string } => {
+      let didLevel = false;
+      let chestDropped: string | undefined;
+      setSave((prev) => {
+        const xpOutcome = applyXpGain(prev.level, prev.xp, result.xpEarned);
+        didLevel = xpOutcome.leveledUp;
+        const st = prev.subjectStats[result.subject];
+        const nextSubjectStats = {
+          ...prev.subjectStats,
+          [result.subject]: {
+            ...st,
+            bestScore: Math.max(st.bestScore, result.score),
+            starsEarned: Math.max(st.starsEarned, result.stars),
+            clears: st.clears + (result.victory ? 1 : 0),
+          },
+        };
 
-      const nextStreak = Math.max(prev.bestStreak, result.maxCombo);
-      const nextTitles = new Set(prev.unlockedTitles);
-      if (nextStreak >= 5) nextTitles.add('title_combo5');
-      if (nextStreak >= 15) nextTitles.add('title_mythic_grandmaster');
-      if (
-        nextSubjectStats.chinese.clears > 0 &&
-        nextSubjectStats.english.clears > 0 &&
-        nextSubjectStats.math.clears > 0 &&
-        nextSubjectStats.science.clears > 0
-      ) {
-        nextTitles.add('title_quad_clear');
-      }
+        const nextStreak = Math.max(prev.bestStreak, result.maxCombo);
+        const nextTitles = new Set(prev.unlockedTitles);
+        if (nextStreak >= 5) nextTitles.add('title_combo5');
+        if (nextStreak >= 15) nextTitles.add('title_mythic_grandmaster');
+        if (
+          nextSubjectStats.chinese.clears > 0 &&
+          nextSubjectStats.english.clears > 0 &&
+          nextSubjectStats.math.clears > 0 &&
+          nextSubjectStats.science.clears > 0
+        ) {
+          nextTitles.add('title_quad_clear');
+        }
 
-      const nextQuests = prev.dailyQuests.map((q) =>
-        q.id === 'q_clear_1' && result.victory ? { ...q, current: q.target } : q
-      );
+        const nextQuests = prev.dailyQuests.map((q) =>
+          q.id === 'q_clear_1' && result.victory ? { ...q, current: q.target } : q
+        );
 
-      const newEntry = {
-        id: `tr-${Date.now()}`,
-        timestamp: Date.now(),
-        subject: result.subject,
-        grade: prev.grade,
-        correctCount: result.correctCount,
-        totalAttempts: result.totalAttempts,
-        score: result.score,
-        durationSeconds: result.clearSeconds,
-        victory: result.victory,
-        note: result.progressSummary,
-      };
+        // Update 10-stage campaign progress & Stage 10 3-star Boss chest reward
+        const nextStageProgress: Record<string, StageProgressRecord> = {
+          ...(prev.stageProgress ?? {}),
+        };
+        let bonusCoins = 0;
+        let bonusCrystals = 0;
+        const nextWeapons = [...prev.weapons];
 
-      // Drop a random Lv.1 knowledge gem on victory!
-      const subjectGemMap: Record<SubjectId, GemElementId> = {
-        chinese: 'ink_ruby',
-        english: 'star_sapphire',
-        math: 'gear_topaz',
-        science: 'leaf_emerald',
-      };
-      const droppedGem: GemInstance | null = result.victory
-        ? {
-            uid: `gem-drop-${Date.now().toString(36)}`,
-            element: subjectGemMap[result.subject],
-            level: 1,
+        if (result.stageKey) {
+          const prevRec = nextStageProgress[result.stageKey];
+          const bestStars = Math.max(prevRec?.stars ?? 0, result.victory ? result.stars : 0) as
+            | 0
+            | 1
+            | 2
+            | 3;
+          const isBossStage = result.stageKey.endsWith('_s10');
+          const shouldDropChest =
+            isBossStage && result.victory && result.stars >= 3 && !prevRec?.chestClaimed;
+
+          if (shouldDropChest) {
+            bonusCoins += 260;
+            bonusCrystals += 8;
+            const tpl = WEAPON_CATALOG[WEAPON_CATALOG.length - 1];
+            if (tpl) {
+              nextWeapons.push({
+                uid: `wp-boss-${Date.now().toString(36)}`,
+                templateId: tpl.templateId,
+                name: `${tpl.name}・星辰`,
+                baseAttack: tpl.baseAttack + 4,
+                enhanceLevel: 3,
+                ascensionPath: 'base',
+                rarity: 'legendary',
+                socketedGems: [null, null, null],
+              });
+            }
+            chestDropped = '三星大魔王寶箱：+260 金幣、+8 晶石與限定傳說神兵！';
           }
-        : null;
 
-      return {
-        ...prev,
-        level: xpOutcome.level,
-        xp: xpOutcome.xp,
-        coins: prev.coins + result.coinsEarned,
-        crystals: prev.crystals + result.crystalsEarned,
-        bestStreak: nextStreak,
-        subjectStats: nextSubjectStats,
-        unlockedTitles: Array.from(nextTitles),
-        unlockedCards: Array.from(new Set([...prev.unlockedCards, ...result.knowledgeTags])),
-        trajectory: [newEntry, ...prev.trajectory].slice(0, 50),
-        dailyQuests: nextQuests,
-        gemBag: droppedGem ? [droppedGem, ...prev.gemBag] : prev.gemBag,
-      };
-    });
-    return { leveledUp: didLevel };
-  }, []);
+          nextStageProgress[result.stageKey] = {
+            cleared: Boolean(prevRec?.cleared || result.victory),
+            stars: bestStars,
+            bestScore: Math.max(prevRec?.bestScore ?? 0, result.score),
+            chestClaimed: Boolean(prevRec?.chestClaimed || shouldDropChest),
+          };
+        }
+
+        const newEntry = {
+          id: `tr-${Date.now()}`,
+          timestamp: Date.now(),
+          subject: result.subject,
+          grade: prev.grade,
+          correctCount: result.correctCount,
+          totalAttempts: result.totalAttempts,
+          score: result.score,
+          durationSeconds: result.clearSeconds,
+          victory: result.victory,
+          note: result.stageLabel
+            ? `${result.stageLabel}｜${result.progressSummary}`
+            : result.progressSummary,
+        };
+
+        // Drop a random Lv.1 knowledge gem on victory!
+        const subjectGemMap: Record<SubjectId, GemElementId> = {
+          chinese: 'ink_ruby',
+          english: 'star_sapphire',
+          math: 'gear_topaz',
+          science: 'leaf_emerald',
+        };
+        const droppedGem: GemInstance | null = result.victory
+          ? {
+              uid: `gem-drop-${Date.now().toString(36)}`,
+              element: subjectGemMap[result.subject],
+              level: 1,
+            }
+          : null;
+
+        return {
+          ...prev,
+          level: xpOutcome.level,
+          xp: xpOutcome.xp,
+          coins: prev.coins + result.coinsEarned + bonusCoins,
+          crystals: prev.crystals + result.crystalsEarned + bonusCrystals,
+          bestStreak: nextStreak,
+          subjectStats: nextSubjectStats,
+          unlockedTitles: Array.from(nextTitles),
+          unlockedCards: Array.from(new Set([...prev.unlockedCards, ...result.knowledgeTags])),
+          trajectory: [newEntry, ...prev.trajectory].slice(0, 50),
+          dailyQuests: nextQuests,
+          gemBag: droppedGem ? [droppedGem, ...prev.gemBag] : prev.gemBag,
+          weapons: nextWeapons,
+          stageProgress: nextStageProgress,
+        };
+      });
+      return { leveledUp: didLevel, chestDropped };
+    },
+    []
+  );
 
   const applyPvPResult = useCallback((result: PvPRunResult): { leveledUp: boolean } => {
     let didLevel = false;
@@ -990,6 +1095,36 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return '\uFEFF' + [header, ...rows, ...summaryRows].join('\n');
   }, [save.grade, save.subjectStats, save.trajectory]);
 
+  const upgradeEquipmentSlot = useCallback(
+    (slot: EquipmentSlotId): ActionFeedback => {
+      const currLv = save.equipment[slot] ?? 1;
+      if (currLv >= 15) return { ok: false, message: '該部位裝備已達滿級 +15！' };
+      const coinCost = 70 + currLv * 45;
+      if (save.coins < coinCost) {
+        return { ok: false, message: `金幣不足！強化需要 ${coinCost} 金幣。` };
+      }
+      soundEngine.playForgeHammer();
+      setSave((prev) => ({
+        ...prev,
+        coins: prev.coins - coinCost,
+        equipment: {
+          ...prev.equipment,
+          [slot]: Math.min(15, (prev.equipment[slot] ?? 1) + 1),
+        },
+      }));
+      const slotNames: Record<EquipmentSlotId, string> = {
+        weapon: '主武器槽',
+        helm: '智慧頭冠',
+        armor: '學園戰甲',
+        gloves: '速寫護手',
+        boots: '疾風戰靴',
+        amulet: '星光護符',
+      };
+      return { ok: true, message: `${slotNames[slot]} 強化成功！升至 +${currLv + 1}（不爆裝保證）` };
+    },
+    [save.coins, save.equipment]
+  );
+
   return (
     <GameStateContext.Provider
       value={{
@@ -1014,6 +1149,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         enhanceWeapon,
         ascendWeapon,
         fuseWeapons,
+        upgradeEquipmentSlot,
         socketGem,
         unsocketGem,
         synthesizeGems,

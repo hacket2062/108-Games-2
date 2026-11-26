@@ -6,6 +6,7 @@ interface BattleEndModalProps {
   result: WorldRunResult | null;
   leveledUp?: boolean;
   onRetry: () => void;
+  onNextStage?: () => void;
   onReturnLobby: () => void;
 }
 
@@ -20,6 +21,7 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
   result,
   leveledUp,
   onRetry,
+  onNextStage,
   onReturnLobby,
 }) => {
   if (!result) return null;
@@ -44,7 +46,7 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
       >
         <div className="text-center">
           <div className="text-xs font-bold text-slate-400">
-            {SUBJECT_NAMES[result.subject]}
+            {result.stageLabel ?? SUBJECT_NAMES[result.subject]}
           </div>
           {leveledUp && (
             <div className="mt-1 inline-block rounded-lg bg-amber-400/20 border border-amber-300/60 px-2.5 py-0.5 text-xs font-black text-amber-200">
@@ -59,6 +61,12 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
             {result.victory ? '關卡大勝利！' : '差一點就通關了！'}
           </h2>
           <p className="text-sm text-slate-300 mt-1">{result.progressSummary}</p>
+
+          {result.chestRewardText && (
+            <div className="mt-3 rounded-2xl bg-amber-950/80 border-2 border-amber-400 px-3.5 py-2 text-xs font-black text-amber-200">
+              {result.chestRewardText}
+            </div>
+          )}
 
           {/* 3-Star Display */}
           <div className="flex items-center justify-center gap-3 my-4">
@@ -117,22 +125,34 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
           </div>
         )}
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            data-start="true"
-            onClick={onRetry}
-            className="min-h-[48px] rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-base flex items-center justify-center gap-2 transition-transform active:scale-95"
-          >
-            <RotateCcw className="w-4 h-4" /> {result.victory ? '再戰一局' : '立即重試'}
-          </button>
-          <button
-            type="button"
-            onClick={onReturnLobby}
-            className="min-h-[48px] rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-base border border-slate-600 flex items-center justify-center gap-2 transition-transform active:scale-95"
-          >
-            <Home className="w-4 h-4" /> 返回廣場
-          </button>
+        <div className="mt-6 flex flex-col gap-2.5">
+          {onNextStage && (
+            <button
+              type="button"
+              data-start="true"
+              onClick={onNextStage}
+              className="w-full min-h-[50px] rounded-xl bg-gradient-to-r from-emerald-400 to-amber-400 hover:brightness-110 text-slate-950 font-black text-base flex items-center justify-center gap-2 shadow-xl transition-transform active:scale-95"
+            >
+              推進下一關！
+            </button>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              data-start={!onNextStage ? 'true' : undefined}
+              onClick={onRetry}
+              className="min-h-[48px] rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-base flex items-center justify-center gap-2 transition-transform active:scale-95"
+            >
+              <RotateCcw className="w-4 h-4" /> {result.victory ? '重刷三星' : '立即重試'}
+            </button>
+            <button
+              type="button"
+              onClick={onReturnLobby}
+              className="min-h-[48px] rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-base border border-slate-600 flex items-center justify-center gap-2 transition-transform active:scale-95"
+            >
+              <Home className="w-4 h-4" /> 返回章節地圖
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -19,11 +19,33 @@ import {
   BONUS_MATH_QUESTIONS,
   BONUS_SCIENCE_QUESTIONS,
 } from './questions/bonusQuestions';
+import {
+  EPIC_CHINESE_QUESTIONS,
+  EPIC_ENGLISH_QUESTIONS,
+  EPIC_MATH_QUESTIONS,
+  EPIC_SCIENCE_QUESTIONS,
+} from './questions/epicExpansion';
 
-export const CHINESE_QUESTIONS: ChineseQuestion[] = [...BASE_CHINESE, ...BONUS_CHINESE_QUESTIONS];
-export const ENGLISH_QUESTIONS: EnglishQuestion[] = [...BASE_ENGLISH, ...BONUS_ENGLISH_QUESTIONS];
-export const MATH_QUESTIONS: MathQuestion[] = [...BASE_MATH, ...BONUS_MATH_QUESTIONS];
-export const SCIENCE_QUESTIONS: ScienceQuestion[] = [...BASE_SCIENCE, ...BONUS_SCIENCE_QUESTIONS];
+export const CHINESE_QUESTIONS: ChineseQuestion[] = [
+  ...BASE_CHINESE,
+  ...BONUS_CHINESE_QUESTIONS,
+  ...EPIC_CHINESE_QUESTIONS,
+];
+export const ENGLISH_QUESTIONS: EnglishQuestion[] = [
+  ...BASE_ENGLISH,
+  ...BONUS_ENGLISH_QUESTIONS,
+  ...EPIC_ENGLISH_QUESTIONS,
+];
+export const MATH_QUESTIONS: MathQuestion[] = [
+  ...BASE_MATH,
+  ...BONUS_MATH_QUESTIONS,
+  ...EPIC_MATH_QUESTIONS,
+];
+export const SCIENCE_QUESTIONS: ScienceQuestion[] = [
+  ...BASE_SCIENCE,
+  ...BONUS_SCIENCE_QUESTIONS,
+  ...EPIC_SCIENCE_QUESTIONS,
+];
 
 export const ALL_QUESTIONS: AnyQuestion[] = [
   ...CHINESE_QUESTIONS,

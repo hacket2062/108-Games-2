@@ -6,6 +6,7 @@ import {
   WorldRunResult,
 } from '../types/game';
 import { getMathQuestions } from '../data/questionBank';
+import { QuestionManager } from '../core/questionManager';
 import { GUARDIANS } from '../data/guardians';
 import {
   calculateCombatDamage,
@@ -98,13 +99,28 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   playMode,
   guardianId,
   playerStats,
+  stageConfig,
+  masteredQuestionIds,
+  wrongQuestionIds,
   onAnswerResult,
   onFinish,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const guardian = GUARDIANS[guardianId];
-  const qQueueRef = useRef<MathQuestion[]>(getMathQuestions(grade, semester));
+  const qMgrRef = useRef(
+    new QuestionManager<MathQuestion>(getMathQuestions(grade, semester), {
+      masteredQuestionIds,
+      wrongQuestionIds,
+      focusTags: stageConfig?.focusTags,
+    })
+  );
+  const [bossWarning, setBossWarning] = useState(stageConfig?.tier === 'boss');
+  useEffect(() => {
+    if (!bossWarning) return;
+    const t = window.setTimeout(() => setBossWarning(false), 2600);
+    return () => clearTimeout(t);
+  }, [bossWarning]);
 
   const [paused, setPaused] = useState(false);
   const [selectedTower, setSelectedTower] = useState<MathTowerKind>('raccoon');
@@ -149,7 +165,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   const doubleNextRef = useRef(false);
   const selectedTowerRef = useRef<MathTowerKind>('raccoon');
 
-  const TOTAL_WAVES = 3;
+  const TOTAL_WAVES = stageConfig ? stageConfig.waveCount : 3;
 
   const tdRef = useRef({
     time: 0,
@@ -207,13 +223,8 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   }, [selectedTower]);
 
   const pullMathQ = useCallback((): MathQuestion => {
-    if (qQueueRef.current.length === 0) {
-      qQueueRef.current = getMathQuestions(grade, semester);
-    }
-    const q = qQueueRef.current.shift()!;
-    qQueueRef.current.push(q);
-    return q;
-  }, [grade, semester]);
+    return qMgrRef.current.next();
+  }, []);
 
   const concludeRun = useCallback(
     (victory: boolean) => {
@@ -244,12 +255,15 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         crystalsEarned: victory ? stars * 2 + 1 : 0,
         knowledgeTags: Array.from(tagsRef.current),
         progressSummary: victory
-          ? `守住機械城堡並擊倒歸零巨人 Boss！共答對 ${correctRef.current} 題數學算式！`
+          ? `守住機械城堡並擊倒${stageConfig?.enemyName ?? '歸零巨人 Boss'}！共答對 ${correctRef.current} 題數學算式！`
           : `第 ${tdRef.current.waveIndex + 1} 波防線遭突破，多用算數超頻與狙擊雷射再戰！`,
+        stageKey: stageConfig?.stageKey,
+        stageLabel: stageConfig ? `第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」` : undefined,
+        chestRewardText: victory && stars === 3 ? stageConfig?.starChestReward?.label : undefined,
       };
       onFinish(result);
     },
-    [onFinish, playerStats.maxHp]
+    [onFinish, playerStats.maxHp, stageConfig]
   );
 
   const openHarvestSolver = () => {
@@ -925,7 +939,9 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         <div className="pointer-events-auto rounded-2xl bg-slate-900/94 border-2 border-blue-400/80 px-4 py-2 shadow-xl flex items-center gap-4">
           <div>
             <div className="text-[11px] font-bold text-sky-300">
-              數學・數境建築王國（{grade}年級）
+              {stageConfig
+                ? `數境建築王國・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」`
+                : `數學・數境建築王國（${grade}年級）`}
             </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs font-black text-emerald-300">城門</span>
@@ -1095,6 +1111,22 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         </div>
       )}
 
+      {bossWarning && stageConfig?.tier === 'boss' && (
+        <div className="fixed inset-x-0 top-24 z-30 pointer-events-none flex justify-center px-4">
+          <div className="rounded-2xl bg-rose-950/95 border-2 border-amber-400 px-6 py-3 text-center shadow-[0_0_32px_rgba(244,63,94,0.55)]">
+            <div className="text-xs font-black tracking-widest text-amber-300">
+              WARNING · 第 10 關章節大魔王進軍！
+            </div>
+            <div className="text-xl font-black text-white mt-0.5">{stageConfig.enemyName}</div>
+            {stageConfig.bossPhase2Name && (
+              <div className="text-xs text-rose-200 mt-0.5">
+                二階變身型態：{stageConfig.bossPhase2Name}（算式狙擊破防！）
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <ExplanationBanner message={banner} onDismiss={() => setBanner(null)} />
       <UltimateCutIn
         visible={cutIn}
@@ -1105,7 +1137,11 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       />
       <WorldPauseModal
         open={paused}
-        worldName="數學・數境建築王國"
+        worldName={
+          stageConfig
+            ? `數境建築王國・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關`
+            : '數學・數境建築王國'
+        }
         onResume={() => setPaused(false)}
         onRestart={onExit}
         onExit={onExit}

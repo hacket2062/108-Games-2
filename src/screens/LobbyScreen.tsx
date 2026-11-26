@@ -42,8 +42,11 @@ import {
   ParticlePool,
 } from '../core/canvasEffects';
 
+import { getWorldTotalStars } from '../data/campaignMap';
+
 interface LobbyScreenProps {
   onNavigate: (screen: ActiveScreen) => void;
+  onOpenWorldMap: (subject: SubjectId) => void;
   onOpenMistakes: () => void;
 }
 
@@ -106,7 +109,11 @@ const PLANET_PORTALS: PlanetPortalConfig[] = [
   },
 ];
 
-export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onNavigate, onOpenMistakes }) => {
+export const LobbyScreen: React.FC<LobbyScreenProps> = ({
+  onNavigate,
+  onOpenWorldMap,
+  onOpenMistakes,
+}) => {
   const {
     user,
     localAccounts,
@@ -153,7 +160,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onNavigate, onOpenMist
     auraColorRef.current = ASCENSION_PATHS[equippedWeapon.ascensionPath].auraPrimary;
   }, [equippedWeapon.ascensionPath]);
 
-  // Enter / Space quick launch
+  // Enter / Space quick launch to Stage Map
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (drawer !== 'none') return;
@@ -162,12 +169,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onNavigate, onOpenMist
       if (e.key === 'Enter' || e.code === 'Space') {
         e.preventDefault();
         soundEngine.playClick();
-        onNavigate(focusedScreen);
+        if (focusedScreen === 'world_english') onOpenWorldMap('english');
+        else if (focusedScreen === 'world_math') onOpenWorldMap('math');
+        else if (focusedScreen === 'world_science') onOpenWorldMap('science');
+        else onOpenWorldMap('chinese');
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [drawer, focusedScreen, onNavigate]);
+  }, [drawer, focusedScreen, onOpenWorldMap]);
 
   // Live Interactive Plaza Canvas (Guardian cleanly above the interaction card!)
   useEffect(() => {
@@ -351,7 +361,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onNavigate, onOpenMist
         {/* TOP STRIP: Account + Resources + Secondary Utility Buttons */}
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <div className="pointer-events-auto flex flex-wrap items-center gap-2.5">
-            {/* Account Switcher Pill-free Card */}
+            {/* Account Badge with Real Google Photo or Local Avatar */}
             <button
               type="button"
               onClick={() => {
@@ -360,12 +370,21 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onNavigate, onOpenMist
               }}
               className="min-h-[48px] rounded-2xl bg-slate-900/94 hover:bg-slate-800 border-2 border-amber-400/75 px-3.5 py-2 shadow-xl flex items-center gap-3 text-left"
             >
-              <span
-                className="w-9 h-9 rounded-xl font-black text-sm text-slate-950 flex items-center justify-center shrink-0"
-                style={{ backgroundColor: user.avatarColor }}
-              >
-                {user.displayName.slice(0, 1)}
-              </span>
+              {user.photoURL ? (
+                <img
+                  src={user.photoURL}
+                  alt={user.displayName}
+                  referrerPolicy="no-referrer"
+                  className="w-9 h-9 rounded-xl border border-amber-300 object-cover shrink-0"
+                />
+              ) : (
+                <span
+                  className="w-9 h-9 rounded-xl font-black text-sm text-slate-950 flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: user.avatarColor }}
+                >
+                  {user.displayName.slice(0, 1)}
+                </span>
+              )}
               <div>
                 <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-white">
                   <span>{user.displayName}</span>
@@ -379,11 +398,25 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onNavigate, onOpenMist
                     />
                   </div>
                   <span className="text-[10px] text-slate-400">
-                    {user.provider === 'google' ? 'Google 雲端' : '本機檔案'} · {currentTitle}
+                    {user.provider === 'google' ? 'Google 雲端已同步' : '本機檔案'} · {currentTitle}
                   </span>
                 </div>
               </div>
             </button>
+
+            {/* Prominent One-Click Real Google OAuth Sign-In CTA */}
+            {user.provider !== 'google' && (
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick();
+                  signInWithGoogle();
+                }}
+                className="min-h-[46px] px-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-950 border-2 border-sky-300 font-black text-xs inline-flex items-center gap-1.5 shadow-xl transition-transform active:scale-95"
+              >
+                <LogIn className="w-4 h-4 text-sky-600" /> Google 帳號登入
+              </button>
+            )}
 
             {/* Compact Resource Numbers */}
             <div className="rounded-2xl bg-slate-900/92 border border-slate-700 px-3.5 py-2.5 shadow-xl flex items-center gap-3.5 text-xs sm:text-sm font-black font-mono-num">
@@ -613,10 +646,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onNavigate, onOpenMist
               </div>
             </div>
 
-            {/* 4 Subject Planets */}
+            {/* 4 Subject Planets -> 3 Chapters x 10 Stages World Map */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {PLANET_PORTALS.map((planet) => {
-                const st = save.subjectStats[planet.id];
+                const worldStats = getWorldTotalStars(planet.id, save.grade, save.stageProgress);
                 return (
                   <button
                     key={planet.id}
@@ -624,7 +657,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onNavigate, onOpenMist
                     onMouseEnter={() => setFocusedScreen(planet.screen)}
                     onClick={() => {
                       soundEngine.playClick();
-                      onNavigate(planet.screen);
+                      onOpenWorldMap(planet.id);
                     }}
                     data-start={planet.id === 'chinese' ? 'true' : undefined}
                     className={`group rounded-2xl bg-slate-900/94 border-2 ${planet.accentBorder} p-3.5 text-left shadow-2xl transition-transform hover:-translate-y-0.5 active:scale-[0.98] flex items-center gap-3.5`}
@@ -643,17 +676,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onNavigate, onOpenMist
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-[11px] font-bold text-slate-400">
-                          {planet.subjectLabel} · {save.grade}年級
+                          {planet.subjectLabel} · {save.grade}年級 · 3章30關
                         </span>
-                        <span className="inline-flex items-center gap-0.5 text-amber-400">
-                          {[1, 2, 3].map((i) => (
-                            <Star
-                              key={i}
-                              className={`w-3.5 h-3.5 ${
-                                i <= st.starsEarned ? 'fill-amber-400 text-amber-400' : 'text-slate-700'
-                              }`}
-                            />
-                          ))}
+                        <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-300 font-mono-num">
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                          {worldStats.earned}/90
                         </span>
                       </div>
                       <div className="text-base sm:text-lg font-black text-white mt-0.5">

@@ -9,6 +9,7 @@ import {
   WorldRunResult,
 } from '../types/game';
 import { getScienceQuestions } from '../data/questionBank';
+import { QuestionManager } from '../core/questionManager';
 import { GUARDIANS } from '../data/guardians';
 import {
   calculateCombatDamage,
@@ -40,18 +41,27 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   playMode,
   guardianId,
   playerStats,
+  stageConfig,
+  masteredQuestionIds,
+  wrongQuestionIds,
   onAnswerResult,
   onFinish,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const guardian = GUARDIANS[guardianId];
-  const dishQueueRef = useRef<ScienceQuestion[]>(getScienceQuestions(grade, semester));
+  const dishMgrRef = useRef(
+    new QuestionManager<ScienceQuestion>(getScienceQuestions(grade, semester), {
+      masteredQuestionIds,
+      wrongQuestionIds,
+      focusTags: stageConfig?.focusTags,
+    })
+  );
 
   const [paused, setPaused] = useState(false);
   const [chef, setChef] = useState<'redpanda' | 'penguin' | 'mantis'>('redpanda');
-  const [bossHp, setBossHp] = useState(400);
-  const bossMaxHp = 400;
+  const bossMaxHp = Math.round(380 * (stageConfig?.enemyHpScale ?? 1));
+  const [bossHp, setBossHp] = useState(bossMaxHp);
   const [kitchenHp, setKitchenHp] = useState(playerStats.maxHp);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
@@ -60,13 +70,15 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   const [freezeSecs, setFreezeSecs] = useState(0);
   const [orderTimer, setOrderTimer] = useState(32);
   const [cutIn, setCutIn] = useState(false);
+  const [bossWarning, setBossWarning] = useState(stageConfig?.tier === 'boss');
+  useEffect(() => {
+    if (!bossWarning) return;
+    const t = window.setTimeout(() => setBossWarning(false), 2600);
+    return () => clearTimeout(t);
+  }, [bossWarning]);
 
-  // 4-Step Cooking Workbench State
-  const [currentDish, setCurrentDish] = useState<ScienceQuestion>(() => {
-    const q = dishQueueRef.current.shift()!;
-    dishQueueRef.current.push(q);
-    return q;
-  });
+  // 4-Step Cooking Workbench State (Zero-Repeat)
+  const [currentDish, setCurrentDish] = useState<ScienceQuestion>(() => dishMgrRef.current.next());
   const [step, setStep] = useState<CookingStep>('ingredients');
   const [pickedIds, setPickedIds] = useState<string[]>([]);
   const [tempResult, setTempResult] = useState<'PERFECT' | 'GREAT' | 'GOOD' | null>(null);
@@ -135,11 +147,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   }, [step]);
 
   const loadNextDish = useCallback(() => {
-    if (dishQueueRef.current.length === 0) {
-      dishQueueRef.current = getScienceQuestions(grade, semester);
-    }
-    const next = dishQueueRef.current.shift()!;
-    dishQueueRef.current.push(next);
+    const next = dishMgrRef.current.next();
     setCurrentDish(next);
     setStep('ingredients');
     setPickedIds([]);
@@ -149,7 +157,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
     setOrderTimer(orderTimeRef.current);
     simRef.current.potColor = '#7C3AED';
     soundEngine.speakText(`新訂單，${next.payload.dishName}。${next.payload.orderRequirement}`, 'zh-TW');
-  }, [grade, guardianId, semester]);
+  }, [guardianId]);
 
   const concludeRun = useCallback(
     (victory: boolean) => {
@@ -180,12 +188,15 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
         crystalsEarned: victory ? stars * 2 + 1 : 0,
         knowledgeTags: Array.from(tagsRef.current),
         progressSummary: victory
-          ? `用完美元素料理征服黑暗饕餮！解鎖 ${tagsRef.current.size} 個自然科學原理！`
-          : `黑暗饕餮吃太飽大鬧廚房了，調整實驗步驟再挑戰一次！`,
+          ? `用完美元素料理征服${stageConfig?.enemyName ?? '黑暗饕餮'}！解鎖 ${tagsRef.current.size} 個自然科學原理！`
+          : `${stageConfig?.enemyName ?? '黑暗饕餮'}大鬧廚房了，調整實驗步驟再挑戰一次！`,
+        stageKey: stageConfig?.stageKey,
+        stageLabel: stageConfig ? `第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」` : undefined,
+        chestRewardText: victory && stars === 3 ? stageConfig?.starChestReward?.label : undefined,
       };
       onFinish(result);
     },
-    [onFinish, playerStats.maxHp]
+    [onFinish, playerStats.maxHp, stageConfig]
   );
 
   // Step 1: Pick scientific ingredients from Cold Storage
@@ -689,7 +700,9 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
         <div className="absolute top-3 left-3 z-20 rounded-2xl bg-slate-900/92 border-2 border-orange-400 px-3.5 py-2 shadow-xl flex items-center gap-3.5">
           <div>
             <div className="text-[11px] font-bold text-orange-300">
-              自然科學・元素料理大亂鬥（{grade}年級）
+              {stageConfig
+                ? `元素料理大亂鬥・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關「${stageConfig.title}」`
+                : `自然科學・元素料理大亂鬥（${grade}年級）`}
             </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs font-black text-emerald-300">廚房耐力</span>
@@ -967,6 +980,22 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
         </div>
       </div>
 
+      {bossWarning && stageConfig?.tier === 'boss' && (
+        <div className="fixed inset-x-0 top-24 z-30 pointer-events-none flex justify-center px-4">
+          <div className="rounded-2xl bg-rose-950/95 border-2 border-orange-400 px-6 py-3 text-center shadow-[0_0_32px_rgba(251,146,60,0.55)]">
+            <div className="text-xs font-black tracking-widest text-orange-300">
+              WARNING · 第 10 關章節大魔王饕餮現身！
+            </div>
+            <div className="text-xl font-black text-white mt-0.5">{stageConfig.enemyName}</div>
+            {stageConfig.bossPhase2Name && (
+              <div className="text-xs text-rose-200 mt-0.5">
+                二階變身型態：{stageConfig.bossPhase2Name}（五星控溫破防！）
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <ExplanationBanner message={banner} onDismiss={() => setBanner(null)} />
       <UltimateCutIn
         visible={cutIn}
@@ -977,7 +1006,11 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       />
       <WorldPauseModal
         open={paused}
-        worldName="自然科學・元素料理大亂鬥"
+        worldName={
+          stageConfig
+            ? `元素料理大亂鬥・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關`
+            : '自然科學・元素料理大亂鬥'
+        }
         onResume={() => setPaused(false)}
         onRestart={onExit}
         onExit={onExit}

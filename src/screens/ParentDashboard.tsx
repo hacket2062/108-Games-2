@@ -78,6 +78,14 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ onExit }) => {
     return Array.from(map.values()).sort((a, b) => b.count - a.count).slice(0, 5);
   }, [save.wrongRecords]);
 
+  const knowledgeHeatmap = useMemo(() => {
+    const entries = Object.entries(save.knowledgeMastery ?? {}).map(([tag, rec]) => {
+      const pct = rec.answered > 0 ? Math.round((rec.correct / rec.answered) * 100) : 0;
+      return { tag, answered: rec.answered, correct: rec.correct, pct };
+    });
+    return entries.sort((a, b) => a.pct - b.pct || b.answered - a.answered).slice(0, 12);
+  }, [save.knowledgeMastery]);
+
   const totalAnswered =
     save.subjectStats.chinese.answered +
     save.subjectStats.english.answered +
@@ -89,6 +97,8 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ onExit }) => {
     save.subjectStats.math.correct +
     save.subjectStats.science.correct;
   const overallAcc = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+  const rapidGuessCount = save.rapidGuessCount ?? 0;
+  const rapidGuessRate = totalAnswered > 0 ? Math.round((rapidGuessCount / totalAnswered) * 100) : 0;
 
   // Radar Chart coordinates
   const scores: Record<SubjectId, number> = {
@@ -436,6 +446,82 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ onExit }) => {
                       })}
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+            {/* 108 Curriculum Knowledge Tag Heatmap + Rapid-Guessing Detection */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              <div className="lg:col-span-8 rounded-3xl bg-slate-900 border border-slate-700 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div className="text-sm font-black text-amber-300">
+                    108 課綱知識點掌握度熱力圖
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> 精熟 ≥80%
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" /> 加強 50~79%
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" /> 需複習 &lt;50%
+                    </span>
+                  </div>
+                </div>
+                {knowledgeHeatmap.length === 0 ? (
+                  <div className="text-xs text-slate-400 py-4">
+                    孩子開始冒險答題後，系統會即時依照 108 課綱知識標籤繪製綠／黃／紅熱力格子！
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                    {knowledgeHeatmap.map((item) => {
+                      const tone =
+                        item.pct >= 80
+                          ? 'bg-emerald-950/80 border-emerald-500/80 text-emerald-200'
+                          : item.pct >= 50
+                            ? 'bg-amber-950/80 border-amber-400/80 text-amber-200'
+                            : 'bg-rose-950/80 border-rose-500/80 text-rose-200';
+                      return (
+                        <div key={item.tag} className={`rounded-xl border-2 p-2.5 ${tone}`}>
+                          <div className="text-xs font-black truncate">{item.tag}</div>
+                          <div className="mt-1 flex items-baseline justify-between font-mono-num">
+                            <span className="text-base font-black">{item.pct}%</span>
+                            <span className="text-[10px] opacity-80">
+                              {item.correct}/{item.answered}題
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="lg:col-span-4 rounded-3xl bg-slate-900 border border-slate-700 p-5 flex flex-col justify-between gap-3">
+                <div>
+                  <div className="text-sm font-black text-rose-300">
+                    亂猜行為偵測（作答專注度監測）
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    偵測未滿 1.2 秒即點錯選項的快速盲猜次數，協助家長與老師及早開啟「練習模式」培養閱讀審題習慣。
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-950 border border-slate-800 p-4">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-xs font-bold text-slate-400">疑似盲猜次數</span>
+                    <span
+                      className={`text-2xl font-black font-mono-num ${
+                        rapidGuessCount >= 4 ? 'text-rose-400' : 'text-emerald-400'
+                      }`}
+                    >
+                      {rapidGuessCount} 次
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-1">
+                    {rapidGuessCount >= 4
+                      ? `盲猜比例約 ${rapidGuessRate}%，建議開啟上方「強制練習模式（不計時）」引導慢慢審題。`
+                      : '目前審題節奏穩定良好，無頻繁亂猜行為！'}
+                  </div>
                 </div>
               </div>
             </div>
