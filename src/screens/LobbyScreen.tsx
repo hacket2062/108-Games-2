@@ -404,19 +404,31 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               </div>
             </button>
 
-            {/* Prominent One-Click Real Google OAuth Sign-In CTA */}
-            {user.provider !== 'google' && (
+            {/* Prominent Top-Left Google Login & Switch Account Buttons */}
+            <div className="flex items-center gap-1.5">
+              {user.provider !== 'google' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playClick();
+                    signInWithGoogle();
+                  }}
+                  className="min-h-[46px] px-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-950 border-2 border-sky-300 font-black text-xs inline-flex items-center gap-1.5 shadow-xl transition-transform active:scale-95"
+                >
+                  <LogIn className="w-4 h-4 text-sky-600" /> Google 帳號登入
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {
                   soundEngine.playClick();
-                  signInWithGoogle();
+                  setDrawer('account');
                 }}
-                className="min-h-[46px] px-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-950 border-2 border-sky-300 font-black text-xs inline-flex items-center gap-1.5 shadow-xl transition-transform active:scale-95"
+                className="min-h-[46px] px-3 rounded-xl bg-slate-900/92 hover:bg-slate-800 border-2 border-sky-400/75 text-sky-200 font-black text-xs inline-flex items-center gap-1.5 shadow-xl transition-transform active:scale-95"
               >
-                <LogIn className="w-4 h-4 text-sky-600" /> Google 帳號登入
+                <Users className="w-4 h-4" /> 切換帳號
               </button>
-            )}
+            </div>
 
             {/* Compact Resource Numbers */}
             <div className="rounded-2xl bg-slate-900/92 border border-slate-700 px-3.5 py-2.5 shadow-xl flex items-center gap-3.5 text-xs sm:text-sm font-black font-mono-num">
