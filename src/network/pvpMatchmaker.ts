@@ -14,7 +14,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
-import {
+import type {
   AscensionPath,
   GradeLevel,
   GuardianId,
@@ -24,6 +24,7 @@ import {
   SubjectId,
 } from '../types/game';
 import { db, handleFirestoreError, isFirebaseReady, OperationType } from '../core/firebase';
+import { ONLINE_MATCHES_READY, ONLINE_SAFETY_NOTICE } from './onlineSafety';
 
 export interface PlayerLoadout {
   uid: string;
@@ -113,6 +114,7 @@ export async function createOnlinePvPRoom(
   grade: GradeLevel,
   subjectFilter: SubjectId | 'all'
 ): Promise<PvPRoomState | null> {
+  if (!ONLINE_MATCHES_READY) return null;
   if (!loadout.canUseOnlineFirestore || !isFirebaseReady() || !db) return null;
 
   const roomCode = generateRoomCode();
@@ -163,6 +165,7 @@ export async function joinOnlinePvPRoom(
   rawCode: string,
   loadout: PlayerLoadout
 ): Promise<{ room: PvPRoomState | null; error?: string }> {
+  if (!ONLINE_MATCHES_READY) return { room: null, error: ONLINE_SAFETY_NOTICE };
   const roomCode = rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (roomCode.length < 4) return { room: null, error: '請輸入正確的 6 碼好友房號。' };
   if (!loadout.canUseOnlineFirestore || !isFirebaseReady() || !db) {
@@ -217,6 +220,7 @@ export async function tryFindWaitingOnlineRoom(
   loadout: PlayerLoadout,
   grade: GradeLevel
 ): Promise<PvPRoomState | null> {
+  if (!ONLINE_MATCHES_READY) return null;
   if (!loadout.canUseOnlineFirestore || !isFirebaseReady() || !db) return null;
   const path = 'pvpRooms';
   try {

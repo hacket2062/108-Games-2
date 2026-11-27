@@ -12,7 +12,7 @@ import {
   Star,
   Swords,
 } from 'lucide-react';
-import { CampaignStageConfig, SubjectId } from '../types/game';
+import type { CampaignStageConfig, SubjectId } from '../types/game';
 import { useGameState } from '../core/GameStateContext';
 import {
   getChaptersForWorld,

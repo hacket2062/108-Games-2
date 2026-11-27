@@ -1,0 +1,258 @@
+108-Games-2-main 嚴格上線審核報告
+審核日期：2026-11-27（Asia/Taipei）
+目標：D:\108課綱遊戲\108-Games-2-main
+
+審核結論：目前不通過正式公開上線驗收。單機原型可繼續開發，但現有版本尚不足以承載可信的學童帳號、跨裝置資產與競技排位。
+
+共 27 項問題：P1 高優先 11 項、P2 中優先 15 項、P3 低優先 1 項。P1 代表以此產品預期用途上線前應先解決，不代表全部是外部未登入遠端入侵。未證實可跨使用者讀取存檔、管理員提權或任意程式執行，沒有把它們列為已發現漏洞。
+
+一、範圍與證據邊界
+清冊包含 54 個檔案，其中 42 個 TS/TSX/CSS 檔共約 20,169 行，版本指紋記於 source-inventory.json。審核集中在架構、Auth/存檔/權限、PvP、四科引擎、商店鍛造、學習統計與現有測試；題庫全量做結構檢查，未逐題作學科專家正確性及 108 課綱教材版本認證。
+沒有修改遊戲原始碼、沒有部署、沒有向正式 Firebase 寫入或嘗試攻擊。
+本地未提供 node_modules；shell 的 node/npm/bun 不可用，Python 啟動也受權限限制。使用內建 Node 執行環境的 stripTypeScriptTypes 將純邏輯與測試轉為稽核副本，執行現有同步斷言及補充 probe。
+未完成：正式 npm/bun 安裝、tsc、Vite production build、套件弱點資料庫掃描、Firestore Emulator、實際 Google OAuth/雙客戶端對戰、真機 UI/FPS、正式站 HTTP 安全標頭、IAM/App Check/費用/備份與實際已部署規則查驗。這些均不能標記為通過。
+
+二、架構判斷
+現有流程：React AppShell → AuthContext/GameStateContext → 四科 Canvas 引擎與 PvP；Context 同時負責狀態、學習統計、商城經濟與存檔；localStorage 為本機快照，Firebase Auth 為 Google 身份，瀏覽器直接寫 Firestore users/pvpRooms/events。沒有倉庫內的可信遊戲後端。
+可保留的基礎：題庫/型別/戰鬥數學已有模組拆分、各科獨立引擎、粒子池有固定容量、RAF/ResizeObserver 具有清理、規則有預設拒絕與個人存檔 owner/email_verified 檢查、PvP finished 有終態鎖，既有確定性牌組測試通過。
+核心缺口：身份驗證不等於業務權威；有範圍的任意寫入仍可作弊；顯示用設定不等於已實現的效果。正式競技需由可信後端決定答題、傷害、結果與發獎。四科即時動畫可以繼續留在前端。
+建議職責：AccountSession（身份與載入狀態）、SaveRepository（schema/migration/revision/衝突與完整序列化）、GameReducer（純狀態變更）、CombatSession（runId/時鐘/排程/終態）、LearningEventService（原始作答事件）、RewardService（一次性獎勵）、MatchService（權威對戰與清理）。
+
+三、驗證結果
+1. 原有 8 項同步測試斷言：8/8 通過。僅替換 node:test 註冊為捕捉結果，cwd 固定原專案；不等於跑過完整正式 test runner、型別檢查或 build。firestore.rules 那 1 項仍然只是文字結構測試。詳 existing-test-results.json。
+2. 題庫 430 題：國語 108、英語 108、數學 108、自然 106。全量檢查未發現重複 ID、選項索引與 answer 不一致、重複選項、錯字索引錯位或自然 neededCount 不一致；這不證明題意/答案學科內容皆正確。
+3. 補充 probe：裝備四部位無效果、雲端每日欄位重設、13 把武器截斷後裝備 UID 斷參照、錯題重複領獎、延遲 updater 同步回傳錯誤、無效巢狀武器造成計算崩潰、同一料理多次出餐均已重現。
+4. QuestionManager 的 predicate 模式可在其他 fresh 題仍存在時重建全牌庫，立即重出同一題；目前四科使用各自 manager 並呼叫 next()，因此此項列為 API 潛在契約缺陷而非目前玩家必然遇到的正式發現。
+5. 原始 React updater/自然出餐 handler 以抽取程式測試，UI、特效、排程/回呼採最小 stub。這些證據證明函式邏輯，不代替瀏覽器 E2E；見 logic-probe-results.json 與 runtime 稽核副本。
+
+四、詳細發現
+
+F01 [P1] PvP 參與者可以直接宣布勝利與修改雙方血量
+位置：firestore.rules:180,203,215；src/network/pvpMatchmaker.ts:307
+證據/觸發：host 與 guest 都可把 hostHp、guestHp、status、winnerUid 寫成任意通過型別與範圍檢查的值。規則沒有驗證答題、技能成本、攻擊間隔、傷害計算或 winnerUid 必須是參賽者。已加入對戰的玩家可提交對手 HP=0、status=finished、winnerUid=自己，不需要作答。
+影響：正式競技公平性失效；finished 終態鎖反而固定先寫入的偽造結果。
+建議：由可信後端處理帶 matchId、actionId、questionId 的作答與技能指令，伺服器核對答案、順序、時間與冷卻後更新狀態及結算；客戶端禁止直接改勝負與血量。
+驗收：兩個參賽帳號及第三人於 Emulator 測試；參賽者直接改血量、偽造勝者、超頻攻擊、重播 action 均拒絕；合法流程通過。
+
+F02 [P1] 雲端資產與競技紀錄完全信任使用者；saveData 內層可繞過表層檢查
+位置：firestore.rules:44,70,139；src/core/GameStateContext.tsx:315,357
+證據/觸發：擁有者可以任意增加允許範圍內的 coins、rating、wins 等，不必證明獎勵來源。saveData 只驗證 map 與最多 40 個頂層 key；載入實際使用 saveData，未驗證巢狀資產、武器攻擊力、強化、羈絆、parentSettings 或與表層欄位一致。
+影響：可以用合法外層搭配偽造內層資產、戰力或設定；若錯誤值超出表層限制，後續同步可能持續失敗。此項不等於可讀取其他人的存檔。
+建議：資產、評分與競技紀錄改為後端權威；個人偏好和遊戲資產分離；saveData 使用有版本的完整 schema，禁止未知欄位並檢查內外一致及整數範圍。
+驗收：合法外層加內層 coins=-1、極大 attack、無效 ascensionPath、任意 rating 等均不得接受。
+
+F03 [P1] PvP 事件 listener 查詢與規則不相容
+位置：src/network/pvpMatchmaker.ts:270,278；firestore.rules:243
+證據/觸發：事件 list 權限依 resource.data.hostUid 或 guestUid 等於登入者決定；客戶端只 orderBy(createdAt) 和 limit(15)，沒有對 hostUid/guestUid 的約束。父房間路徑本身不能證明每個事件都符合此 list 條件。
+影響：依倉庫規則部署時，正常事件查詢會被拒絕；墨霧、加速、護盾與攻擊演出失去同步；錯誤只被記錄而沒有可見連線失敗。
+建議：優先用父房間會員身份授權該子集合 list；或依房主/訪客角色使用與規則一致的查詢與索引。
+驗收：在 Emulator 用目前 listener 的完整 query 驗證雙方均成功訂閱、第三人失敗；不可只測單一文件 get。
+
+F04 [P1] 存檔讀取與自動寫入沒有載入屏障及版本控制
+位置：src/core/GameStateContext.tsx:291,311,315,341,356,405
+證據/觸發：讀取雲端與 1500ms debounce 寫入由不同 effect 啟動。雲端回覆可直接 setSave 覆蓋載入期間的遊玩；寫入閉包保存舊 save，getDoc 後 setDoc 沒有 revision、transaction 或過期請求檢查。換帳號的第一個 persist effect 也會以新 uid 暫寫舊 save；一般下一輪 render 會修回，不能宣稱每次換帳號都永久串檔。
+影響：慢網、雙分頁、雙裝置或讀取失敗後可回滾進度、以本機舊檔覆蓋雲端。
+建議：狀態綁定 ownerUid 與 loading/ready；完成帳號載入後才可寫入，加入 revision 與衝突策略，序列化寫入，過期請求不得落盤；讀取失敗不得默認覆蓋。
+驗收：延遲載入超過 1.5 秒、斷線重連、載入中作答、快速換帳號、雙裝置同時修改皆不得遺失進度。
+
+F05 [P1] 雲端儲存靜默截斷資產，甚至遺失裝備中的武器
+位置：src/core/GameStateContext.tsx:366,368,371,377
+證據/觸發：武器只存前 12 把、寶石前 40 顆、錯題前 30 筆、軌跡前 25 筆，遊戲端卻可持續增加。equippedWeaponUid 沒有保證對應保留武器。已重現 13 把武器裝備 w12，儲存後只剩 w0~w11，實際戰力回退 w0。
+影響：換裝置或再次讀取雲端時資產消失；雲端覆蓋本機，可能把原本完整本機背包也縮掉。
+建議：背包拆分子集合或明確容量制度，禁止以 slice 丟棄已擁有資產；存檔前後驗證參照完整性。
+驗收：至少 20 把武器、80 顆寶石與最後一把已裝備的跨裝置 round-trip 必須完全一致。
+
+F06 [P1] 雲端遺漏每日時間與領獎狀態，重新登入可重設
+位置：src/core/GameStateContext.tsx:149,172,357
+證據/觸發：compactSaveData 缺少 dailyQuests、dailyPlaySeconds、lastPlayDate、unlockedCards、unlockedGuardians。hydrateSave 以預設值填補。實際抽取函式驗證：2600 秒與 claimed=true 經缺欄位雲端載入後成為 0 秒與 claimed=false。
+影響：每日任務獎勵可再次完成領取，跨裝置護眼時間不可信，收藏與解鎖資料不完整。
+建議：設計完整 Save DTO 與遷移，增加序列化往返測試；競技資產與每日領獎用後端按 uid/date/questId 保證只發一次。
+驗收：完成每日任務、累積時間與解鎖資料後，重新登入及換裝置全部保持。
+
+F07 [P1] 自然料理出餐不鎖定，同一料理可連續刷分與傷害
+位置：src/engines/ScienceCookingEngine.tsx:312,320,348,385,968
+證據/觸發：handleRingServeBell 只檢查 step=serve；點擊後未切 serving 或設定同步鎖。直到 360ms 命中再等 650ms 換題期間按鈕仍可用。使用原 handler 與特效 stub 連點 3 次，得到 3 次答對紀錄與 3 個命中回呼。
+影響：無須解新題即可累計正確數、連擊、傷害、每日進度與獎勵，污染學習報告。
+建議：第一個輸入立即消耗該 questionAttemptId 並切 serving；命中與換題使用一次性事件，結束後停止接收。
+驗收：100ms 內連點及按鍵/觸控混用只計一題、一次傷害。
+
+F08 [P1] 錯題復仇可以重複領取金幣，答案判斷亦不精確
+位置：src/components/MistakeNotebookModal.tsx:43；src/core/GameStateContext.tsx:536
+證據/觸發：正確後保留 revengeRecord 1050ms，沒有立即鎖住作答；resolveWrongRecord 無論該題是否仍存在都加 25 金幣。原始 updater 驗證移除同一題兩次，520 變 570。includes(opt) 還會把部分字串當正解；顯示宣稱 +35，實際 +25。
+影響：一般 UI 連點即可重複領獎；複習成效與提示不可信。
+建議：只在待複習且尚未結算的 attempt 中發獎，原子移除與加錢；採完整正解比對或明確多選集合；統一顯示獎勵。
+驗收：同一題重複提交僅發獎一次；不存在題目不發獎；部分答案不得通過完整作答。
+
+F09 [P1] 家長限制可從正常入口與網址繞過
+位置：src/screens/ParentDashboard.tsx:43；src/screens/LobbyScreen.tsx:949；src/App.tsx:45；src/core/GameStateContext.tsx:159
+證據/觸發：家長解鎖是固定 47+28=75 或 PIN，改 PIN 後仍接受 75。PvP 只在大廳按鈕 disabled；網址 ?autostart=1&world=pvp 直接進 Arena，Arena 與建立/加入函式均不檢查 pvpEnabled。PIN 明文放本機與雲端玩家存檔，預設 1234。
+影響：學生能自行關閉限制；不能將目前機制宣稱為真正的家長權限。
+建議：移除通用算術繞過；以家長身份重新驗證敏感操作，設定與學生資產分離，於導覽、Arena 啟動及後端建立/加入均執行限制。
+驗收：改 PIN 後 75 與舊 PIN 不得通過；禁止 PvP 時深連結、快速配對與好友房均不可啟動。
+
+F10 [P1] 雙方同時覆寫整份 PvP 血量造成 lost update
+位置：src/network/pvpMatchmaker.ts:307；src/engines/PvPArenaEngine.tsx:373,623
+證據/觸發：每次攻擊都 update 雙方 HP，沒有 transaction/revision。例：初始 260/260，host 攻擊送 260/200，guest 同時送 200/260，後寫文件把另一筆傷害回復。客戶端又只接受更低 HP，會讓畫面與文件分歧。
+影響：合法玩家也會出現不同血量、傷害消失與結果競態；兩端看到的最低血量不等於伺服器目前狀態。
+建議：後端原子處理有序 action；權威版本遞增，客戶端按版本校正與重連補狀態。
+驗收：用雙客戶端同時攻擊 100 次，每次兩邊最終狀態一致且總傷害不消失。
+
+F11 [P1] 勝負結算容許兩端皆判定勝利
+位置：src/engines/PvPArenaEngine.tsx:210,244,387,645
+證據/觸發：finished 收到後以 winnerUid===user.uid OR 我方 HP>對手 HP 判勝；忽略權威勝者的優先性。另有 450/500ms 後無條件 settleMatch(true) 的本機擊殺回呼，對手 finished 尚未到達前便可發獎。applyPvPResult 不核對 matchId 或已領取。
+影響：終局快照、延遲與同時擊殺可能兩端都領勝利獎勵，勝敗總數不守恆。
+建議：定義平手規則，後端只產生一次最終結果，雙方均以該結果為準；獎勵用 matchId+uid 去重。
+驗收：同時致命、亂序 snapshot、finished 重播、重新開啟結果頁，勝負與獎勵均唯一一致。
+
+F12 [P2] PvP 藥水回血沒有同步且會被舊 HP 壓回
+位置：src/engines/PvPArenaEngine.tsx:378,696
+證據/觸發：藥水只增加本機 myHpRef；沒有當下提交事件或權威回血。listener 僅接受 remoteMyHp 更低，合法較高值也不接受；下一個仍含舊 HP 的遠端寫入可把本機回血抵銷。
+影響：消耗道具卻沒有穩定效果，對手無法看見正確血量。
+建議：回血作為消耗道具的權威 action，與背包扣除同一交易處理；客戶端按 revision 接受最新狀態而非只取最小值。
+驗收：回血後讓對手立刻攻擊、延遲到達、重連，兩端 HP 與道具數量一致。
+
+F13 [P2] 房間與事件缺少生命週期、配額及斷線處理
+位置：firestore.rules:170,249,263；src/network/pvpMatchmaker.ts:218；src/engines/PvPArenaEngine.tsx:1078
+證據/觸發：驗證帳號能持續建立 waiting 房及 playing 事件，沒有每人活動房上限或過期時間；finished 房不能由客戶端清理，events 永久不可刪。找房只取前 5 筆，沒有時間排序/過期排除；playing 離開不投降也沒有 heartbeat。
+影響：已驗證帳號可濫用寫入與監聽成本；殭屍房佔據配對候選，對手離線可卡住對局。雲端是否另有排程清理並未提供證據。
+建議：可信配對服務、每 uid 配額、expiresAt、heartbeat、斷線 timeout/投降；後端清理房及子集合，監測異常頻率並接入適當 App Check。App Check 不能替代反作弊。
+驗收：離線、關分頁、過期房、大量重試均可回收；單一帳號不能無限新增活動房。
+
+F14 [P2] 四個裝備部位可花錢升級但戰鬥屬性不變
+位置：src/screens/ForgeScreen.tsx:34；src/core/combatMath.ts:200；src/core/GameStateContext.tsx:1100
+證據/觸發：實際建立初始存檔逐部位 +1：weapon、helm、gloves、amulet 的 EffectiveCombatStats 完全不變，只有 armor、boots 改變。weapon 的備援公式僅在無實體武器時使用，而正常存檔一直有武器。
+影響：玩家花錢得到沒有宣稱效果的升級；頭冠 HP、護手暴擊、護符經驗/充能等文案與實作不一致。
+建議：由單一屬性表推導顯示與公式，為各裝備定義可觀察效果；未實作部位先停止販售升級。
+驗收：六部位每級的實際數值增益均與文案一致，並驗證公式下游確實消費該屬性。
+
+F15 [P2] 快速亂猜統計永遠無法正常累加；PvP 超時不算作答
+位置：src/core/GameStateContext.tsx:516；src/types/game.ts:383；src/engines/InkRpgEngine.tsx:344；src/engines/MathTowerDefenseEngine.tsx:309；src/engines/PvPArenaEngine.tsx:825
+證據/觸發：recordAnswer 檢查第三參數 responseMs，但四個世界所有呼叫只傳兩個參數；PvP 超時僅換題，未增加 attemptsRef，也未記為錯題。
+影響：家長看到的亂猜率常為 0；超時與跳過不進分母，正確率可偏高。
+建議：統一 AnswerAttempt 事件，包含時間、是否輔助、超時/跳過、題目與模式；各引擎共用記錄入口。
+驗收：1 秒內答錯應增加亂猜；超時應進總作答數且不得算正確。
+
+F16 [P2] 在 React updater 內改外層變數再立即回傳，結果不可靠
+位置：src/core/GameStateContext.tsx:544,672,677,727
+證據/觸發：applyWorldResult、applyPvPResult、claimDailyQuest 在 setSave(prev=>...) 內變更 didLevel/chestDropped/feedback，卻同步 return。React 不保證 updater 在 return 前執行。以原 claim callback 及延遲 updater 驗證：實際領得 120 金幣且 claimed=true，同步回覆卻是任務未達成。
+影響：升級提示、寶箱提示與領獎反饋可錯誤；updater 內 Date.now 與副作用亦不利重播/純度。
+建議：純 reducer 回傳 state+domain events，由事件/狀態顯示結果；不得把 updater 當同步交易回傳值。
+驗收：一般渲染、批次更新與 StrictMode 開發檢查均回報相同且正確結果。
+
+F17 [P2] 動畫計時器沒有完整取消，可在離開後仍結算舊場次
+位置：src/engines/ScienceCookingEngine.tsx:348,385,398；src/engines/InkRpgEngine.tsx:461,524；src/engines/PvPArenaEngine.tsx:645,713
+證據/觸發：大量遊戲 setTimeout 沒有登記於卸載清理，且回呼未一致檢查 runId、aborted、finished 或 paused。RAF 有 cleanup，不會因此自動取消其他 timer。自然出餐後立即退出，舊命中/勝利回呼仍可能呼叫上層 onFinish。
+影響：退出或換關後仍發音、扣血、顯示結果或發獎；暫停期間動畫傷害仍按牆鐘觸發。
+建議：run session 管理所有 timer 與訂閱，卸載/結束統一 abort；動作排程使用可暫停遊戲時鐘；結算入口再次檢查有效 runId。
+驗收：出餐/必殺/致命擊後立刻離開、重試或暫停，舊 run 不得再修改任何存檔。
+
+F18 [P2] 機器人與真人共用排位獎勵，真人對手評分也是假設值
+位置：src/engines/PvPArenaEngine.tsx:218,362,440,472；src/core/GameStateContext.tsx:677
+證據/觸發：找不到 waiting 真人就啟動固定 SMART_RIVAL_POOL，仍更新 rating、wins、honor 與線上每日任務。真人房沒有對方 rating 欄位，對手評分直接使用 save.pvp.rating。
+影響：排位不反映真人對戰；Elo 對不同實力對手仍等同自己；線上任務在離線對戰也完成。
+建議：清楚標示 AI 練習且分開統計/獎勵；正式排位僅後端確認真人對局後入帳，以可信參賽 rating 計算。
+驗收：斷網與沒有真人時不增加真人排名或線上任務；不同評分對手產生預期分差。
+
+F19 [P2] Boss 寶箱發獎與關卡設定不一致
+位置：src/data/campaignMap.ts:410；src/core/GameStateContext.tsx:599
+證據/觸發：設定依章節給 coins=260+chapter*80、crystals=6+chapter*2 與指定 weaponTemplateId；實際永遠 +260、+8 且取武器目錄最後一把，忽略指定模板。
+影響：第三章等獎勵少發，武器與標籤不一致；chestClaimed 已寫入後無法透過重打補領。
+建議：由 stageKey 解析可信關卡設定，唯一 RewardService 使用相同定義派發，保留獎勵版本與領取憑證。
+驗收：四科三章 Boss 三星首通逐一比對設定，第二次不得重發一次性寶箱。
+
+F20 [P2] 進階關卡參數與二階 Boss 宣稱未完整接入引擎
+位置：src/data/campaignMap.ts:363,366,371,404；src/engines/MathTowerDefenseEngine.tsx:516；四引擎 bossPhase2Name 顯示處
+證據/觸發：數學怪物 baseHp/baseSpeed 沒套 enemyHpScale/ enemySpeedScale；comboRewardMultiplier 在引擎沒有消費；bossPhase2Name 在四引擎只用於提示文字，未見依血量轉換機制的狀態機。
+影響：章節難度與雙倍獎勵/二階機制描述不一致，設定表看似完整卻不保證實際行為。
+建議：逐一映射關卡參數到引擎，新增明確 Boss phase transition；未實作的機制移除宣稱或停用。
+驗收：同科相同種敵人在不同章節呈現預期數值差異；二階實際改變技能/行為並有測試。
+
+F21 [P2] 商店部分戰鬥道具沒有使用路徑
+位置：src/data/itemsAndGems.ts:20；src/screens/ShopScreen.tsx:57；src/engines/PvPArenaEngine.tsx:696
+證據/觸發：全專案 consumeBattleItem 只有 Arena wisdom_potion 呼叫；combo_charm、shield_scroll、time_hourglass 沒有扣背包並發動效果的使用路徑。藥水文案回 45% 並驅散，但 Arena 實際回 35% 且沒有驅散。
+影響：購買後無法得到承諾功能；學生資源被無效消耗。
+建議：完成統一 ItemEffect 系統與各模式入口，或將未完成道具下架，顯示精確回復率與限制。
+驗收：每個販售道具均可在說明所列模式中實際使用、扣一次數量並產生正確效果。
+
+F22 [P2] 存檔 hydration 只合併資料，損壞資料可使整個 App 崩潰
+位置：src/core/GameStateContext.tsx:172；src/auth/AuthContext.tsx:51；src/core/combatMath.ts:175
+證據/觸發：陣列只檢查 Array.isArray，內部 weapon/gem/subjectStats 沒有 runtime schema。實際把武器路線設為 invalid，hydrate 通過後 computeSaveCombatStats 拋出 reading attackMultiplier。入口也沒有 ErrorBoundary。
+影響：舊版存檔、手改 localStorage 或雲端錯誤欄位可能導致持續白畫面，沒有修復/隔離壞檔流程。
+建議：加入 schemaVersion、完整 runtime 驗證與逐版 migration，隔離壞資料並保留備份，ErrorBoundary 提供安全復原。
+驗收：逐欄位缺漏、錯型別、NaN/極值、未知 enum、壞武器/寶石皆有明確復原且不清掉正常資產。
+
+F23 [P2] 每日重設與護眼時間依賴載入，長開頁面及換帳號不正確
+位置：src/core/GameStateContext.tsx:203,290,416,435；src/App.tsx:250
+證據/觸發：跨日重設只在 hydrateSave 執行；常駐頁面過午夜 dailyQuests 不刷新。timer 在大廳、背景、暫停與結果頁都累加；瀏覽器背景節流也不保證每 10 秒執行。restDismissed 沒有隨 uid/date 重設，提示可以直接關閉且未讓引擎暫停。
+影響：每日任務與遊玩時長統計失真；一個帳號關閉休息提醒會影響下一個帳號的同次 App 工作階段。若定位僅友善提醒應清楚說明。
+建議：明確定義有效遊玩時間，使用單調時間、visibility/phase 與日期事件；設定依帳號/日期隔離，若要求強制限制則需真正停止遊戲。
+驗收：跨午夜、背景 30 分鐘、暫停、休息提醒、換帳號與換裝置符合定義。
+
+F24 [P2] Firebase 有兩份相互衝突的專案設定且缺可追溯部署設定
+位置：src/core/firebase.ts:7,53；firebase-applet-config.json:2；專案根目錄
+證據/觸發：實際程式連 games-2-c3050 的預設 Firestore；applet config 指 gen-lang-client-0794076184 與 named database，但程式未引用它。根目錄未提供 firebase.json、.firebaserc、Firestore indexes 與部署流程證據。
+影響：維護者可能把規則部署到另一個專案/資料庫，程式則繼續使用不同後端；本地規則不等於線上已生效。
+建議：建立唯一環境設定與 dev/staging/prod 明確綁定；部署 pipeline 同步校驗 projectId、databaseId、rules、indexes。
+驗收：CI 顯示目標 project/database 與規則 hash；驗證實際 App 所連資料庫是同一份已測規則。
+
+F25 [P2] 測試及建置品質門檻不足，文字規則測試不能代表防護有效
+位置：firestore.rules.test.ts:10；package.json:6；tsconfig.json；eslint.config.mjs
+證據/觸發：規則測試僅 assert.match 文字，不會編譯或執行規則，也沒測 Dirty Dozen 的真實請求。package 沒有 test script/CI/Emulator 設定，lint 其實是 tsc --noEmit，tsconfig 未開 strict/noUncheckedIndexedAccess。無 normal source ESLint 或 hooks 依賴檢查配置。
+影響：8 項原始測試斷言都通過仍能存在上述漏洞；沒有可重現的上線驗證鏈。
+建議：補 Emulator allow+deny 整合測試、核心狀態與跨裝置 round-trip、關卡/道具效果測試、實際建置與雙客戶端 E2E；循序啟用 strict 與 React hooks lint。
+驗收：CI 固定套件版本，執行型別檢查、build、單元/規則整合/E2E 全通過；部署僅接受通過的版本。
+
+F26 [P3] 狀態、渲染、存檔與特效高度耦合，造成不必要的配置與 I/O
+位置：src/core/GameStateContext.tsx:279,341,416；src/engines/ScienceCookingEngine.tsx:54；src/engines/InkRpgEngine.tsx:162
+證據/觸發：單一 Context 包含完整 save 與全部操作，每次 10 秒 timer 更新重跑消費者。useRef(new QuestionManager(...)) 及 useRef({particles:new Pool(...)}) 的參數會在每次 render 重新建構，再被 useRef 忽略。timer 也每次觸發完整 JSON.stringify、本機寫入及後續雲端 get+set，即使沒有資產變更。
+影響：增加配置/GC 與雲端讀寫；主要引擎各超過千行，規則、UI 與動畫修改難以單獨驗證。效能影響尚未以真機 profiling 量測。
+建議：分離 Account/SaveRepository、純 reducer、CombatSession、LearningEvents、RewardService；lazy 初始化 ref，只持久化 dirty domain，Context selectors/拆分 Provider；先量測再優化渲染。
+驗收：以低階手機記錄 frame time、GC、長任務與 idle 雲端請求，建立前後對照。
+
+F27 [P2] 禁止縮放與 Canvas 操作缺少完整無障礙替代路徑
+位置：index.html:5；src/engines/MathTowerDefenseEngine.tsx:481；src/components/UltimateCutIn.tsx:112
+證據/觸發：viewport 使用 maximum-scale=1,user-scalable=no；多個 Canvas 遊戲核心內容沒有等價語義作答/操作路徑。Modal 有 aria-modal，但未見焦點圈限與回復；數學窄螢幕 cellW 最少 38、cellH 最少 48 可能超出固定畫布可見區。
+影響：低視力、鍵盤/輔助科技使用者及部分窄螢幕可能無法完成操作。窄螢幕實際裁切程度仍需瀏覽器實測，不能把程式推論當截圖證據。
+建議：允許縮放，提供語義 HTML 與鍵盤等價操作，管理 dialog focus；用實際可見區設計自適應畫布/捲動與安全區。
+驗收：320/375/390px、橫直向、200% 縮放、純鍵盤與螢幕閱讀器均可完成主要流程。
+
+五、修正順序與放行條件
+第一批：阻止資料與資產損失（F04/F05/F06/F22），修正同題重複領獎/出餐（F07/F08），建立帳號載入屏障與 schema；先備份現有玩家資料再做 migration。
+第二批：建立權威 Match/Reward 服務（F01/F02/F10/F11），修好正常事件查詢（F03）、家長入口（F09），加入 Emulator 的合法與惡意流程測試。完成前不要宣稱排位公平或開放正式真人排位。
+第三批：對齊裝備/道具/關卡獎勵與學習事件（F14/F15/F18/F19/F20/F21），補斷線與到期流程、跨日與回呼清理。
+第四批：可重現建置與部署（F24/F25）、真機無障礙與效能驗證（F26/F27），建立監控、備份復原演練與使用者可見的同步狀態。
+放行最低門檻：所有 P1 修復且有回歸測試；P2 逐項完成或有明確產品範圍調整；正式建置、Emulator、雙客戶端斷線/並發 E2E、存檔 round-trip、真機流程通過；驗證正式部署的規則/資料庫與測試版本一致。
+
+六、其他觀察與待查事項
+- 無雲端存檔成功/失敗提示：handleFirestoreError 多處被 catch 吞回；本機與雲端資料衝突後使用者無法判斷哪份最新。應顯示同步時間、失敗與重試，不可只 console。
+- Firebase analytics 在初始化時啟動，錯誤 helper 包含 email/uid/provider 資料，頁面載入 Google Fonts；學童產品需整理資料流、必要性、保留期限與家長可見說明。此報告沒有對個資法或兒童法規作違法判定。
+- Firebase Web API key 屬公開專案識別資訊，不能僅因出現在 src 就判定私鑰外洩；仍需查 API/來源限制與實際 IAM/Rules。倉庫未見私鑰或服務帳號 JSON，不代表正式環境已完成憑證治理。
+- 所有答案隨前端題庫提供，對單機教學可接受；若用於可信排名/評量，必須由可信服務驗證作答，且避免把尚未回答的標準答案直接作為可信客戶端輸入。
+- 本機帳號只是同瀏覽器檔案選擇，沒有身份驗證；預設三個本機檔案不應當作各學生有隱私隔離的正式帳號。
+- MathTowerDefense 星數在 totalAttempts=0 時以 accuracy=1 計算（combatMath.ts:255）。策略塔防可容許零答題通關，但若把星數當學科掌握度，應要求最低有效作答量並區分道具/精靈輔助。Galaxy 必殺自動打中也會記作答對，需分開『玩家作答』與『技能完成』。
+- useRef(manager) 已先打散整個題庫，QuestionManager 又重新洗牌，因此原先『上學期題先出』排序不保證保留。若要嚴格對應學期，應用過濾或 manager bucket 明確表達。
+- petGuardian 沒有次數/時間上限且羈絆直接提高攻擊/HP；可正常連點無限增強。若是有意提供無壓力模式可保留，但競技/進度平衡要明確隔離。
+- 商店/鍛造等操作在 updater 外檢查資源，在 updater 內扣款，批次/重入時沒有重新驗證。應把檢查與異動放同一純狀態轉移，資產後端另外原子驗證。未以一般雙擊必然負數作誇大宣稱。
+- 所有引擎 rawDt 上限 0.05 可避免動畫穿透，但背景停留後題目倒數會放慢；反應速度另用 Date.now，兩個時基不一致。正式競技倒數應採權威 deadline。
+- 部分『重新挑戰』按鈕實際 onRestart={onExit}，回到選關而非當場重開，文案需對齊。
+- 未聲稱依賴版本含已知 CVE；目前未執行 advisory 掃描，也未驗證所有版本可重新安裝，需以 lockfile 的確切版本另作供應鏈檢查。無使用的 express/@google/genai/dotenv 等依賴可評估移除以降低維護負擔。
+
+七、官方判讀依據（程式發現以本地檔案為主要證據）
+Firestore 查詢與安全規則：https://firebase.google.com/docs/firestore/security/rules-query
+Firestore 原子交易：https://firebase.google.com/docs/firestore/manage-data/transactions
+Rules Emulator 單元測試：https://firebase.google.com/docs/rules/unit-tests
+React useState updater 行為：https://react.dev/reference/react/useState
+Firebase API key 性質：https://firebase.google.com/docs/projects/api-keys
+App Check 範圍：https://firebase.google.com/docs/app-check
+Firestore 配額/文件上限：https://firebase.google.com/docs/firestore/quotas
+TTL 保留與清理：https://firebase.google.com/docs/firestore/ttl
+
+八、交付檔
+AUDIT_REPORT.zh-TW.txt：本報告。
+findings.json：27 項可追蹤 issue，含位置/證據/影響/建議/驗收。
+firestore-security-assessment.json：依 Firebase Security Rules Auditor 格式輸出的規則評估。
+existing-test-results.json：既有同步測試斷言結果與執行方法。
+logic-probe-results.json：額外驗證的實際結果。
+source-inventory.json：本次版本檔案清單、大小、行數與 SHA-256。
+runtime/：為本次純邏輯驗證產生的 JavaScript 副本與抽取 handler；不是遊戲修補或正式建置輸出。
+verify-audit.mjs：在支援 ESM 的 Node 重新執行既有斷言及最小 handler 驗證。

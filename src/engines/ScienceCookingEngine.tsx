@@ -1,6 +1,8 @@
+import { useLazyRef } from '../core/useLazyRef';
+import { useSessionScheduler } from '../core/useSessionScheduler';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Bell, Flame, Pause, Sparkles, Volume2, FlaskConical, CheckCircle2 } from 'lucide-react';
-import {
+import type {
   EngineCommonProps,
   PhType,
   ScienceIngredient,
@@ -33,7 +35,7 @@ import {
   WorldPauseModal,
 } from '../components/UltimateCutIn';
 
-type CookingStep = 'ingredients' | 'temperature' | 'ph' | 'serve';
+type CookingStep = 'ingredients' | 'temperature' | 'ph' | 'serve' | 'serving';
 
 export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   grade,
@@ -50,7 +52,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const guardian = GUARDIANS[guardianId];
-  const dishMgrRef = useRef(
+  const dishMgrRef = useLazyRef(() =>
     new QuestionManager<ScienceQuestion>(getScienceQuestions(grade, semester), {
       masteredQuestionIds,
       wrongQuestionIds,
@@ -59,6 +61,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   );
 
   const [paused, setPaused] = useState(false);
+  const { schedule, cancelAll } = useSessionScheduler(paused);
   const [chef, setChef] = useState<'redpanda' | 'penguin' | 'mantis'>('redpanda');
   const bossMaxHp = Math.round(380 * (stageConfig?.enemyHpScale ?? 1));
   const [bossHp, setBossHp] = useState(bossMaxHp);
@@ -108,6 +111,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   const tagsRef = useRef<Set<string>>(new Set());
   const startClockRef = useRef(Date.now());
   const finishedRef = useRef(false);
+  const servingRef = useRef(false);
   const ultRef = useRef(25);
   const freezeRef = useRef(0);
   const doubleNextRef = useRef(false);
@@ -147,6 +151,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   }, [step]);
 
   const loadNextDish = useCallback(() => {
+    servingRef.current = false;
     const next = dishMgrRef.current.next();
     setCurrentDish(next);
     setStep('ingredients');
@@ -163,6 +168,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
     (victory: boolean) => {
       if (finishedRef.current) return;
       finishedRef.current = true;
+      cancelAll();
       document.body.dataset.state = 'gameover';
       if (victory) soundEngine.playVictoryFanfare();
       else soundEngine.playDefeatSting();
@@ -310,7 +316,10 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 
   // Step 4: Ring Serving Attack Bell -> Launch Dish at Dark Glutton Boss!
   const handleRingServeBell = () => {
-    if (step !== 'serve') return;
+    if (step !== 'serve' || servingRef.current || finishedRef.current || pausedRef.current) return;
+    servingRef.current = true;
+    stepRef.current = 'serving';
+    setStep('serving');
     const s = simRef.current;
     soundEngine.playPerfectBell();
     soundEngine.playSlash();
@@ -328,6 +337,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
     const speedTier = tempResult ?? 'GREAT';
     const calc = calculateCombatDamage({
       baseAttack: playerStats.baseAttack,
+        critChance: playerStats.critChance,
       skillMultiplier: 2.8,
       isCorrect: true,
       speedGrade: speedTier,
@@ -345,7 +355,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
     };
 
     // Impact moment when dish hits Boss
-    setTimeout(() => {
+    schedule(() => {
       const bx = s.width * 0.5;
       const by = s.height * 0.34;
       bossHpRef.current = Math.max(0, bossHpRef.current - dishDmg);
@@ -378,13 +388,13 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 
       scoreRef.current += dishDmg * 4 + (speedTier === 'PERFECT' ? 180 : 90);
       setScore(scoreRef.current);
-      ultRef.current = Math.min(100, ultRef.current + getUltimateChargeGain(speedTier, nextCombo, guardianId));
+      ultRef.current = Math.min(100, ultRef.current + getUltimateChargeGain(speedTier, nextCombo, guardianId, playerStats.ultChargeBonus));
       setUltCharge(ultRef.current);
 
       if (bossHpRef.current <= 0) {
-        setTimeout(() => concludeRun(true), 700);
+        schedule(() => concludeRun(true), 700);
       } else {
-        setTimeout(() => loadNextDish(), 650);
+        schedule(() => loadNextDish(), 650);
       }
     }, 360);
   };
@@ -395,7 +405,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
     setUltCharge(0);
     soundEngine.playUltimateRoar();
     setCutIn(true);
-    setTimeout(() => {
+    schedule(() => {
       setCutIn(false);
       const s = simRef.current;
       const dmg = 165;
@@ -409,7 +419,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       s.floats.spawn(s.width * 0.5, s.height * 0.28, `-${dmg}`, 'perfect', '五星元素大滿貫！');
       scoreRef.current += 520;
       setScore(scoreRef.current);
-      if (bossHpRef.current <= 0) setTimeout(() => concludeRun(true), 700);
+      if (bossHpRef.current <= 0) schedule(() => concludeRun(true), 700);
     }, 1150);
   };
 

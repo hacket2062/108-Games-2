@@ -10,7 +10,7 @@ import {
   Swords,
   Trophy,
 } from 'lucide-react';
-import { BattleItemId, GemElementId, GuardianId } from '../types/game';
+import type { BattleItemId, GemElementId, GuardianId } from '../types/game';
 import { useGameState } from '../core/GameStateContext';
 import { BATTLE_ITEMS, GEM_ELEMENTS, WEAPON_CATALOG } from '../data/itemsAndGems';
 import { GUARDIAN_LIST } from '../data/spiritsAndTitles';

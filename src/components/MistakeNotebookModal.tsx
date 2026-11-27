@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, BookOpen, Swords, CheckCircle2, Volume2 } from 'lucide-react';
-import { PlayerSaveData, SubjectId, WrongRecord } from '../types/game';
+import type { PlayerSaveData, SubjectId, WrongRecord } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
+import { shuffleArray } from '../data/questionBank';
 
 interface MistakeNotebookModalProps {
   open: boolean;
@@ -26,6 +27,17 @@ export const MistakeNotebookModal: React.FC<MistakeNotebookModalProps> = ({
   const [filter, setFilter] = useState<'all' | SubjectId>('all');
   const [revengeRecord, setRevengeRecord] = useState<WrongRecord | null>(null);
   const [revengeFeedback, setRevengeFeedback] = useState<string | null>(null);
+  const activeAttempt = useRef<string | null>(null);
+  const revengeOptions = useMemo(() => revengeRecord ? shuffleArray(
+    Array.from(new Set([revengeRecord.correctAnswer, ...(revengeRecord.revengeOptions ?? []), '再想一下'])).slice(0, 4)
+  ) : [], [revengeRecord]);
+  useEffect(() => {
+    if (!open) {
+      activeAttempt.current = null;
+      setRevengeRecord(null);
+      setRevengeFeedback(null);
+    }
+  }, [open]);
 
   if (!open) return null;
 
@@ -35,6 +47,7 @@ export const MistakeNotebookModal: React.FC<MistakeNotebookModalProps> = ({
       : save.wrongRecords.filter((r) => r.subject === filter);
 
   const startRevenge = (rec: WrongRecord) => {
+    activeAttempt.current = rec.questionId;
     soundEngine.playSlash();
     setRevengeRecord(rec);
     setRevengeFeedback(null);
@@ -42,18 +55,13 @@ export const MistakeNotebookModal: React.FC<MistakeNotebookModalProps> = ({
   };
 
   const handleRevengeAnswer = (opt: string) => {
-    if (!revengeRecord) return;
-    const isCorrect =
-      opt === revengeRecord.correctAnswer ||
-      revengeRecord.correctAnswer.includes(opt);
+    if (!revengeRecord || activeAttempt.current !== revengeRecord.questionId) return;
+    const isCorrect = opt === revengeRecord.correctAnswer;
     if (isCorrect) {
+      activeAttempt.current = null;
       soundEngine.playPerfectBell();
       onClearMistake(revengeRecord.questionId);
-      setRevengeFeedback('復仇成功！已從錯題本移除並獲得 +35 金幣！');
-      setTimeout(() => {
-        setRevengeRecord(null);
-        setRevengeFeedback(null);
-      }, 1050);
+      setRevengeFeedback('複習成功！已移除錯題並獲得 +25 金幣。請按「返回錯題清單」繼續。');
     } else {
       soundEngine.playWrongBuzz();
       setRevengeFeedback(`再看一次解析：${revengeRecord.explanation}`);
@@ -140,13 +148,11 @@ export const MistakeNotebookModal: React.FC<MistakeNotebookModalProps> = ({
             </div>
             <div className="text-lg font-black text-white mb-4">{revengeRecord.prompt}</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {(revengeRecord.revengeOptions && revengeRecord.revengeOptions.length >= 2
-                ? revengeRecord.revengeOptions
-                : [revengeRecord.correctAnswer, '再想一下']
-              ).map((opt) => (
+              {revengeOptions.map((opt) => (
                 <button
                   key={opt}
                   type="button"
+                  disabled={activeAttempt.current === null}
                   onClick={() => handleRevengeAnswer(opt)}
                   className="min-h-[48px] rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 border border-slate-600 text-white font-bold text-sm px-4 transition-colors"
                 >
@@ -159,7 +165,7 @@ export const MistakeNotebookModal: React.FC<MistakeNotebookModalProps> = ({
             )}
             <button
               type="button"
-              onClick={() => setRevengeRecord(null)}
+              onClick={() => { activeAttempt.current = null; setRevengeRecord(null); setRevengeFeedback(null); }}
               className="mt-3 text-xs text-slate-400 hover:text-white underline"
             >
               返回錯題清單

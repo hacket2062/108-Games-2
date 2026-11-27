@@ -1,3 +1,5 @@
+import { useSessionScheduler } from '../core/useSessionScheduler';
+import { ONLINE_MATCHES_READY, ONLINE_SAFETY_NOTICE } from '../network/onlineSafety';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -12,7 +14,7 @@ import {
   Volume2,
   Zap,
 } from 'lucide-react';
-import {
+import type {
   AscensionPath,
   GradeLevel,
   GuardianId,
@@ -79,6 +81,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
   const { user, signInWithGoogle } = useAuth();
   const { save, combatStats, equippedWeapon, applyPvPResult, consumeBattleItem } = useGameState();
 
+  const { schedule, cancelAll } = useSessionScheduler();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<ArenaPhase>('lobby');
   const [subjectFilter, setSubjectFilter] = useState<SubjectId | 'all'>('all');
@@ -186,7 +189,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
     weaponLevel: equippedWeapon.enhanceLevel,
     guardian: save.selectedGuardian,
     rating: save.pvp.rating,
-    canUseOnlineFirestore: user.provider === 'google' && user.emailVerified,
+    canUseOnlineFirestore: ONLINE_MATCHES_READY && save.parentSettings.pvpEnabled && user.provider === 'google' && user.emailVerified,
   };
 
   const launchBeam = useCallback(
@@ -211,6 +214,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
     (victory: boolean) => {
       if (finishedRef.current) return;
       finishedRef.current = true;
+      cancelAll();
       setPhase('result');
 
       if (victory) soundEngine.playVictoryFanfare();
@@ -218,8 +222,8 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
 
       const opp = opponentRef.current;
       const oppRating = opp?.rating ?? save.pvp.rating;
-      const ratingDelta = calculatePvPRatingDelta(save.pvp.rating, oppRating, victory);
-      const honorEarned = victory ? 45 + Math.min(25, maxComboRef.current * 4) : 15;
+      const ratingDelta = isOnlineRef.current ? calculatePvPRatingDelta(save.pvp.rating, oppRating, victory) : 0;
+      const honorEarned = isOnlineRef.current ? (victory ? 45 + Math.min(25, maxComboRef.current * 4) : 15) : 0;
       const coinsEarned = victory ? 140 + maxComboRef.current * 10 : 45;
       const xpEarned = victory ? 110 : 35;
 
@@ -332,7 +336,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
       setShowVsBanner(true);
       soundEngine.playPerfectBell();
       soundEngine.hapticPulse(24);
-      window.setTimeout(() => setShowVsBanner(false), 1250);
+      schedule(() => setShowVsBanner(false), 1250);
     },
     []
   );
@@ -438,6 +442,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
 
   // Quick Matchmaking Handler (Online Firestore first -> Smart Rival instant fallback)
   const handleQuickMatch = async () => {
+    if (!save.parentSettings.pvpEnabled) { setLobbyError('家長設定已暫停競技模式。'); return; }
     soundEngine.playClick();
     setLobbyError(null);
     setPhase('matching');
@@ -469,7 +474,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
     }
 
     // Seamless smart human-paced matchmaking after short authentic search pulse
-    window.setTimeout(() => {
+    schedule(() => {
       if (phaseRef.current !== 'matching') return;
       const rival = pickSmartRival(save.pvp.rating);
       startFightSession({
@@ -494,6 +499,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
   };
 
   const handleCreateFriendRoom = async () => {
+    if (!ONLINE_MATCHES_READY || !save.parentSettings.pvpEnabled) { setLobbyError(ONLINE_SAFETY_NOTICE); return; }
     soundEngine.playClick();
     setLobbyError(null);
     if (!loadout.canUseOnlineFirestore) {
@@ -512,6 +518,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
   };
 
   const handleJoinFriendRoom = async () => {
+    if (!ONLINE_MATCHES_READY || !save.parentSettings.pvpEnabled) { setLobbyError(ONLINE_SAFETY_NOTICE); return; }
     soundEngine.playClick();
     setLobbyError(null);
     const joined = await joinOnlinePvPRoom(joinCodeInput, loadout);
@@ -642,7 +649,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
       }
 
       if (oppHpRef.current <= 0) {
-        window.setTimeout(() => settleMatch(true), 450);
+        schedule(() => settleMatch(true), 450);
       } else {
         advanceQuestion();
       }
@@ -710,7 +717,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
     soundEngine.playUltimateRoar();
     setCutIn(true);
 
-    window.setTimeout(() => {
+    schedule(() => {
       setCutIn(false);
       if (finishedRef.current) return;
       const calc = calculatePvPAttackDamage({
@@ -766,7 +773,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
       }
 
       if (oppHpRef.current <= 0) {
-        window.setTimeout(() => settleMatch(true), 500);
+        schedule(() => settleMatch(true), 500);
       }
     }, 1050);
   };
@@ -871,7 +878,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
                 }
 
                 if (myHpRef.current <= 0) {
-                  window.setTimeout(() => settleMatch(false), 450);
+                  schedule(() => settleMatch(false), 450);
                 }
               }
             } else {
@@ -1167,7 +1174,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
                   光環路線：{ASCENSION_PATHS[equippedWeapon.ascensionPath].name}
                 </div>
                 <div className="text-slate-400">
-                  連線狀態：{loadout.canUseOnlineFirestore ? 'Google 真人即時同步已就緒' : '本機快速配對就緒（登入 Google 可開好友房）'}
+                  {ONLINE_SAFETY_NOTICE}
                 </div>
               </div>
 
@@ -1210,7 +1217,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
                 onClick={handleQuickMatch}
                 className="w-full min-h-[68px] rounded-2xl bg-gradient-to-r from-indigo-500 via-fuchsia-500 to-rose-500 hover:brightness-110 text-white font-black text-lg shadow-xl border-2 border-white/40 flex items-center justify-center gap-2.5 transition-transform active:scale-[0.99]"
               >
-                <Swords className="w-6 h-6" /> 立即開始排位對戰（線上＋智慧配對）
+                <Swords className="w-6 h-6" /> 開始 AI 知識練習（不計排位）
               </button>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1293,7 +1300,7 @@ export const PvPArenaEngine: React.FC<PvPArenaEngineProps> = ({ onExit }) => {
                 onClick={() => {
                   navigator.clipboard?.writeText(roomCode).catch(() => {});
                   setCopiedCode(true);
-                  window.setTimeout(() => setCopiedCode(false), 1800);
+                  schedule(() => setCopiedCode(false), 1800);
                 }}
                 className="min-h-[46px] px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs inline-flex items-center gap-1.5"
               >

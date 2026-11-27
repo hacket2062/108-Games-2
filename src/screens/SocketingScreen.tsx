@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowLeft, Gem, Plus, Sparkles, Unlink } from 'lucide-react';
-import { GemElementId } from '../types/game';
+import type { GemElementId } from '../types/game';
 import { useGameState } from '../core/GameStateContext';
 import { GEM_ELEMENTS } from '../data/itemsAndGems';
 import { computeWeaponPower } from '../core/combatMath';

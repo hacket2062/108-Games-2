@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { ActiveScreen, CampaignStageConfig, SubjectId, WorldRunResult } from './types/game';
-import { AuthProvider } from './auth/AuthContext';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ActiveScreen, CampaignStageConfig, SubjectId, WorldRunResult } from './types/game';
+import { AuthProvider, useAuth } from './auth/AuthContext';
 import { GameStateProvider, useGameState } from './core/GameStateContext';
-import { getStageConfig } from './data/campaignMap';
+import { getStageConfig, isStageUnlocked } from './data/campaignMap';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { StageSelectScreen } from './screens/StageSelectScreen';
 import { ForgeScreen } from './screens/ForgeScreen';
@@ -86,6 +86,19 @@ const AppShell: React.FC = () => {
   const [pendingResult, setPendingResult] = useState<WorldRunResult | null>(null);
   const [leveledUpBanner, setLeveledUpBanner] = useState(false);
   const [mistakesOpen, setMistakesOpen] = useState(false);
+  const runIdentity = useMemo(() => crypto.randomUUID(), [runSeed, activeStage.stageKey]);
+  const activeRun = useRef<string | null>(runIdentity);
+  const settledRun = useRef<string | null>(null);
+  const renderedRun = useRef(runIdentity);
+  if (renderedRun.current !== runIdentity) {
+    renderedRun.current = runIdentity;
+    activeRun.current = runIdentity;
+  }
+
+  useEffect(() => {
+    if (screen === 'pvp_arena' && !save.parentSettings.pvpEnabled) setScreen('lobby');
+    if (screen.startsWith('world_') && !isStageUnlocked(activeStage, save.stageProgress)) setScreen('stage_select');
+  }, [screen, activeStage, save.stageProgress, save.parentSettings.pvpEnabled]);
 
   // Keep activeStage synchronized with grade changes when on menus
   useEffect(() => {
@@ -116,6 +129,7 @@ const AppShell: React.FC = () => {
   };
 
   const handleStartStage = (stage: CampaignStageConfig) => {
+    if (!isStageUnlocked(stage, save.stageProgress)) return;
     setSelectedSubject(stage.subject);
     setActiveStage(stage);
     setPendingResult(null);
@@ -123,7 +137,10 @@ const AppShell: React.FC = () => {
     setScreen(subjectToScreen(stage.subject));
   };
 
-  const handleFinishWorld = (result: WorldRunResult) => {
+  const handleFinishWorld = useCallback((result: WorldRunResult) => {
+    if (activeRun.current !== runIdentity || settledRun.current === runIdentity) return;
+    if (result.subject !== activeStage.subject || (result.stageKey && result.stageKey !== activeStage.stageKey)) return;
+    settledRun.current = runIdentity;
     const enriched: WorldRunResult = {
       ...result,
       stageKey: result.stageKey ?? activeStage.stageKey,
@@ -134,7 +151,7 @@ const AppShell: React.FC = () => {
     const { leveledUp, chestDropped } = applyWorldResult(enriched);
     setLeveledUpBanner(leveledUp);
     setPendingResult(chestDropped ? { ...enriched, chestRewardText: chestDropped } : enriched);
-  };
+  }, [runIdentity, activeStage, applyWorldResult]);
 
   const handleReplayWorld = () => {
     soundEngine.playClick();
@@ -159,12 +176,14 @@ const AppShell: React.FC = () => {
   };
 
   const handleReturnStageSelect = () => {
+    activeRun.current = null;
     soundEngine.playClick();
     setPendingResult(null);
     setScreen('stage_select');
   };
 
   const handleReturnLobby = () => {
+    activeRun.current = null;
     soundEngine.playClick();
     setPendingResult(null);
     setScreen('lobby');
@@ -196,7 +215,11 @@ const AppShell: React.FC = () => {
     <main className="w-screen h-screen overflow-hidden bg-slate-950 select-none">
       {screen === 'lobby' && (
         <LobbyScreen
-          onNavigate={setScreen}
+          onNavigate={(next) => {
+            if (next === 'pvp_arena' && !save.parentSettings.pvpEnabled) return;
+            activeRun.current = null;
+            setScreen(next);
+          }}
           onOpenWorldMap={handleOpenWorldMap}
           onOpenMistakes={() => setMistakesOpen(true)}
         />
@@ -220,7 +243,7 @@ const AppShell: React.FC = () => {
       {screen === 'world_science' && (
         <ScienceCookingEngine key={`sc-${activeStage.stageKey}-${runSeed}`} {...commonWorldProps} />
       )}
-      {screen === 'pvp_arena' && <PvPArenaEngine onExit={handleReturnLobby} />}
+      {screen === 'pvp_arena' && save.parentSettings.pvpEnabled && <PvPArenaEngine onExit={handleReturnLobby} />}
       {screen === 'forge' && <ForgeScreen onExit={handleReturnLobby} />}
       {screen === 'socketing' && <SocketingScreen onExit={handleReturnLobby} />}
       {screen === 'shop' && <ShopScreen onExit={handleReturnLobby} />}
@@ -266,12 +289,17 @@ const AppShell: React.FC = () => {
   );
 };
 
+function AccountGame() {
+  const { user, authLoading } = useAuth();
+  if (authLoading) return <main className="min-h-screen bg-slate-950 text-white p-8" role="status">正在確認登入帳號…</main>;
+  // A switch unmounts the entire old account session, including active engines.
+  return <GameStateProvider key={`${user.provider}:${user.uid}`}><AppShell /></GameStateProvider>;
+}
+
 export default function App() {
   return (
     <AuthProvider>
-      <GameStateProvider>
-        <AppShell />
-      </GameStateProvider>
+      <AccountGame />
     </AuthProvider>
   );
 }

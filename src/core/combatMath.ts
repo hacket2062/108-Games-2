@@ -1,4 +1,4 @@
-import {
+import type {
   AscensionPath,
   EffectiveCombatStats,
   EquipmentLevels,
@@ -214,8 +214,8 @@ export function computePlayerCombatStats(
         shieldMitigation: 0,
       };
 
-  const baseAttack = Math.round(18 + (level - 1) * 4 + weaponPower.attack + bondLevel * 1.5);
-  const rawMaxHp = 100 + (level - 1) * 10 + equipment.armor * 16 + weaponPower.hp + bondLevel * 4;
+  const baseAttack = Math.round(18 + (level - 1) * 4 + weaponPower.attack + bondLevel * 1.5 + Math.max(0, equipment.weapon - 1) * 2);
+  const rawMaxHp = 100 + (level - 1) * 10 + equipment.armor * 16 + weaponPower.hp + bondLevel * 4 + Math.max(0, (equipment.helm ?? 1) - 1) * 12;
   const maxHp = Math.round(guardianId === 'deer' ? rawMaxHp * 1.2 : rawMaxHp);
   const speedBonus = Number((equipment.boots * 0.06).toFixed(2));
 
@@ -224,9 +224,9 @@ export function computePlayerCombatStats(
     maxHp,
     speedBonus,
     bondLevel,
-    critChance: weaponPower.critChance,
+    critChance: Math.min(0.65, weaponPower.critChance + Math.max(0, (equipment.gloves ?? 1) - 1) * 0.012),
     shieldMitigation: weaponPower.shieldMitigation,
-    ultChargeBonus: weaponPower.ultBonus,
+    ultChargeBonus: weaponPower.ultBonus + Math.max(0, (equipment.amulet ?? 1) - 1) * 5,
     weaponPath: equippedWeapon?.ascensionPath ?? 'base',
     weaponEnhanceLevel: equippedWeapon?.enhanceLevel ?? 0,
     weaponName: equippedWeapon?.name ?? '學園墨光短刃',
@@ -252,7 +252,7 @@ export function calculateStarRating(
   hpRatio: number
 ): 0 | 1 | 2 | 3 {
   if (!victory) return 0;
-  const accuracy = totalAttempts > 0 ? correctCount / totalAttempts : 1;
+  const accuracy = totalAttempts > 0 ? correctCount / totalAttempts : 0;
   if (accuracy >= 0.85 && hpRatio >= 0.5) return 3;
   if (accuracy >= 0.65 || hpRatio >= 0.3) return 2;
   return 1;
@@ -266,12 +266,12 @@ export function applyXpGain(currentLevel: number, currentXp: number, xpEarned: n
   let level = currentLevel;
   let xp = currentXp + Math.max(0, Math.round(xpEarned));
   let leveledUp = false;
-  while (xp >= xpRequiredForLevel(level)) {
+  while (level < 200 && xp >= xpRequiredForLevel(level)) {
     xp -= xpRequiredForLevel(level);
     level += 1;
     leveledUp = true;
   }
-  return { level, xp, leveledUp };
+  return { level, xp: level >= 200 ? Math.min(xp, xpRequiredForLevel(200) - 1) : xp, leveledUp };
 }
 
 export function getStreakTitle(bestStreak: number): string {

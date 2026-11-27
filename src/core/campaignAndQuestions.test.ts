@@ -8,13 +8,39 @@ import {
   getScienceQuestions,
 } from '../data/questionBank';
 import { QuestionManager } from './questionManager';
+import { WEAPON_CATALOG } from '../data/itemsAndGems';
 import {
   getChaptersForWorld,
   getStageConfig,
   isStageUnlocked,
   getWorldTotalStars,
 } from '../data/campaignMap';
-import { GradeLevel, StageProgressRecord, SubjectId } from '../types/game';
+import type { GradeLevel, StageProgressRecord, SubjectId } from '../types/game';
+
+test('predicate sub-pool exhaustion cannot discard fresh questions or return the wrong payload', () => {
+  const sample = getMathQuestions(4, 'upper').slice(0, 3);
+  const manager = new QuestionManager(sample);
+  const requested = sample[0].id;
+  assert.equal(manager.next((q) => q.id === requested).id, requested);
+  assert.throws(() => manager.next((q) => q.id === requested), /本輪已用完/);
+  assert.equal(manager.getRemainingFreshCount(), 2);
+  assert.throws(() => manager.next(() => false), /沒有符合/);
+  const remaining = [manager.next().id, manager.next().id];
+  assert.ok(!remaining.includes(requested));
+});
+
+test('every grade and world boss chest points to an existing weapon and chapter-scaled rewards', () => {
+  for (const grade of [3, 4, 5, 6] as const) {
+    for (const subject of ['chinese', 'english', 'math', 'science'] as const) {
+      for (const chapter of [1, 2, 3] as const) {
+        const reward = getStageConfig(subject, grade, chapter, 10).starChestReward!;
+        assert.ok(WEAPON_CATALOG.some((weapon) => weapon.templateId === reward.weaponTemplateId));
+        assert.equal(reward.coins, 260 + chapter * 80);
+        assert.equal(reward.crystals, 6 + chapter * 2);
+      }
+    }
+  }
+});
 
 test('Question bank has 400+ original Taiwan 108 Curriculum questions with >= 25 per grade × subject and unique IDs', () => {
   assert.ok(ALL_QUESTIONS.length >= 400, `Expected >= 400 questions, got ${ALL_QUESTIONS.length}`);

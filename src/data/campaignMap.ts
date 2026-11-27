@@ -1,4 +1,4 @@
-import {
+import type {
   CampaignChapter,
   CampaignStageConfig,
   GradeLevel,
@@ -44,7 +44,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '飛花連擊道',
         '亂碼魔將軍殿',
       ],
-      chestWeaponId: 'star_lance',
+      chestWeaponId: 'wp_star_lance',
       chestLabel: '星輝脈衝長槍＋升階晶石 ×8',
     },
     {
@@ -68,7 +68,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '妙筆生花道',
         '病句妖王神殿',
       ],
-      chestWeaponId: 'golden_ratio_staff',
+      chestWeaponId: 'wp_golden_compass',
       chestLabel: '黃金比例裁決杖＋升階晶石 ×10',
     },
     {
@@ -92,7 +92,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '翰林連斬陣',
         '絕墨天尊頂樓',
       ],
-      chestWeaponId: 'academy_blade',
+      chestWeaponId: 'wp_arena_scepter',
       chestLabel: '傳說文華晶核＋升階晶石 ×12',
     },
   ],
@@ -118,7 +118,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '光束連擊軌',
         '靜默母艦決戰',
       ],
-      chestWeaponId: 'star_lance',
+      chestWeaponId: 'wp_star_lance',
       chestLabel: '星輝脈衝長槍＋升階晶石 ×8',
     },
     {
@@ -142,7 +142,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '超光速連擊',
         '錯序星艦核心',
       ],
-      chestWeaponId: 'golden_ratio_staff',
+      chestWeaponId: 'wp_golden_compass',
       chestLabel: '黃金比例裁決杖＋升階晶石 ×10',
     },
     {
@@ -166,7 +166,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '星河極限擊',
         '虛空語皇王座',
       ],
-      chestWeaponId: 'academy_blade',
+      chestWeaponId: 'wp_arena_scepter',
       chestLabel: '星語傳說晶核＋升階晶石 ×12',
     },
   ],
@@ -192,7 +192,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '黃金超頻陣',
         '零之巨像攻城',
       ],
-      chestWeaponId: 'star_lance',
+      chestWeaponId: 'wp_star_lance',
       chestLabel: '星輝脈衝長槍＋升階晶石 ×8',
     },
     {
@@ -216,7 +216,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '精準座標砲',
         '碎裂幾何王座',
       ],
-      chestWeaponId: 'golden_ratio_staff',
+      chestWeaponId: 'wp_golden_compass',
       chestLabel: '黃金比例裁決杖＋升階晶石 ×10',
     },
     {
@@ -240,7 +240,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '超頻軌道轟',
         '混沌公式帝殿',
       ],
-      chestWeaponId: 'academy_blade',
+      chestWeaponId: 'wp_arena_scepter',
       chestLabel: '數律傳說晶核＋升階晶石 ×12',
     },
   ],
@@ -266,7 +266,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '元素連擊宴',
         '黑暗饕餮王宴',
       ],
-      chestWeaponId: 'star_lance',
+      chestWeaponId: 'wp_star_lance',
       chestLabel: '星輝脈衝長槍＋升階晶石 ×8',
     },
     {
@@ -290,7 +290,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '精準溫控秀',
         '失衡魔廚決戰',
       ],
-      chestWeaponId: 'golden_ratio_staff',
+      chestWeaponId: 'wp_golden_compass',
       chestLabel: '黃金比例裁決杖＋升階晶石 ×10',
     },
     {
@@ -314,7 +314,7 @@ const CHAPTER_TEMPLATES: Record<SubjectId, ChapterTemplate[]> = {
         '黃金星廚連擊',
         '混沌熵滅最終宴',
       ],
-      chestWeaponId: 'academy_blade',
+      chestWeaponId: 'wp_arena_scepter',
       chestLabel: '森羅傳說晶核＋升階晶石 ×12',
     },
   ],

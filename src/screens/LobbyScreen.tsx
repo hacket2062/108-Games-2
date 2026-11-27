@@ -24,7 +24,7 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
-import {
+import type {
   ActiveScreen,
   GradeLevel,
   GuardianId,
@@ -211,6 +211,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   } = useAuth();
   const {
     save,
+    saveNotice,
+    exportSaveBackup,
     equippedWeapon,
     combatStats,
     setGrade,
@@ -640,6 +642,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           </div>
         </div>
       </header>
+
+      <div className="shrink-0 flex items-center justify-between gap-2 bg-slate-900 px-3 py-1 text-xs text-slate-200">
+        <span role="status" className="min-w-0">{saveNotice}</span>
+        <button type="button" className="shrink-0 min-h-9 underline text-sky-300" onClick={exportSaveBackup}>匯出備份</button>
+      </div>
 
       {/* Auto-Dismissing Floating Auth Notice Toast (2.5s, never blocks UI) */}
       {authNotice && (

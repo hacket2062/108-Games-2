@@ -1,6 +1,8 @@
+import { useLazyRef } from '../core/useLazyRef';
+import { useSessionScheduler } from '../core/useSessionScheduler';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Volume2, Pause, Shield, Sparkles, Compass, Swords, Wand2, BookOpen } from 'lucide-react';
-import {
+import type {
   ChineseQuestion,
   ChineseRadicalPayload,
   ChineseSlashPayload,
@@ -78,21 +80,21 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
   const hpScale = stageConfig?.enemyHpScale ?? 1;
 
   // Zero-Repeat QuestionManager per skill mode
-  const slashMgrRef = useRef(
+  const slashMgrRef = useLazyRef(() =>
     new QuestionManager<ChineseQuestion>(getChineseQuestions(grade, semester, 'slash'), {
       masteredQuestionIds,
       wrongQuestionIds,
       focusTags: stageConfig?.focusTags,
     })
   );
-  const radicalMgrRef = useRef(
+  const radicalMgrRef = useLazyRef(() =>
     new QuestionManager<ChineseQuestion>(getChineseQuestions(grade, semester, 'radical'), {
       masteredQuestionIds,
       wrongQuestionIds,
       focusTags: stageConfig?.focusTags,
     })
   );
-  const typoMgrRef = useRef(
+  const typoMgrRef = useLazyRef(() =>
     new QuestionManager<ChineseQuestion>(getChineseQuestions(grade, semester, 'typo'), {
       masteredQuestionIds,
       wrongQuestionIds,
@@ -108,6 +110,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
 
   const [phase, setPhase] = useState<InkPhase>('explore');
   const [paused, setPaused] = useState(false);
+  const { schedule, cancelAll } = useSessionScheduler(paused);
   const [partyHp, setPartyHp] = useState(playerStats.maxHp);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
@@ -274,6 +277,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
     (victory: boolean) => {
       if (finishedRef.current) return;
       finishedRef.current = true;
+      cancelAll();
       document.body.dataset.state = 'gameover';
       if (victory) soundEngine.playVictoryFanfare();
       else soundEngine.playDefeatSting();
@@ -341,7 +345,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       if (!enemy) return;
 
       totalAttemptsRef.current += 1;
-      onAnswerResult(q, isCorrect);
+      onAnswerResult(q, isCorrect, Math.max(0, Date.now() - qStartTime));
 
       const enemyX = w.width * 0.72;
       const enemyY = w.height * 0.48;
@@ -358,6 +362,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         const speedGrade = getSpeedGrade(elapsed, 12, playMode, guardianId);
         const calc = calculateCombatDamage({
           baseAttack: playerStats.baseAttack,
+        critChance: playerStats.critChance,
           skillMultiplier: skillMult,
           isCorrect: true,
           speedGrade,
@@ -438,7 +443,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         enemy.hp = Math.max(0, enemy.hp - finalDmg);
         scoreRef.current += finalDmg * 3 + (speedGrade === 'PERFECT' ? 120 : 60);
         setScore(scoreRef.current);
-        setUltCharge((u) => Math.min(100, u + getUltimateChargeGain(speedGrade, nextCombo, guardianId)));
+        setUltCharge((u) => Math.min(100, u + getUltimateChargeGain(speedGrade, nextCombo, guardianId, playerStats.ultChargeBonus)));
 
         // Reset used hero's ATB
         const heroIdx = skillMode === 'slash' ? 0 : skillMode === 'radical' ? 1 : 2;
@@ -458,7 +463,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
           w.particles.burst(enemyX, enemyY, 34, ['#F59E0B', '#F43F5E', '#FEF08A'], 80, 320, 8, 'circle');
           const remaining = w.monsters.filter((m) => !m.defeated).length;
           setMonstersLeft(remaining);
-          setTimeout(() => {
+          schedule(() => {
             if (remaining === 0) {
               concludeRun(true);
             } else {
@@ -494,7 +499,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
           setPartyHp(partyHpRef.current);
           w.floats.spawn(w.width * 0.26, w.height * 0.46, `-${dmg}`, 'crit', '反擊');
           if (partyHpRef.current <= 0) {
-            setTimeout(() => concludeRun(false), 550);
+            schedule(() => concludeRun(false), 550);
           }
         }
       }
@@ -521,7 +526,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
     soundEngine.playUltimateRoar();
     setUltCharge(0);
     setCutIn(true);
-    setTimeout(() => {
+    schedule(() => {
       setCutIn(false);
       const w = worldRef.current;
       const enemy = battleEnemyRef.current;
@@ -547,7 +552,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         enemy.defeated = true;
         const remaining = w.monsters.filter((m) => !m.defeated).length;
         setMonstersLeft(remaining);
-        setTimeout(() => {
+        schedule(() => {
           if (remaining === 0) concludeRun(true);
           else {
             battleEnemyRef.current = null;

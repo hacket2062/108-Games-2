@@ -1,4 +1,4 @@
-import { GradeLevel, MathQuestion, SemesterId } from '../../types/game';
+import type { GradeLevel, MathQuestion, SemesterId } from '../../types/game';
 
 type MathSpec = [
   string,

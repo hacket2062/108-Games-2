@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Star, Coins, Sparkles, RotateCcw, Home, Award, Gift, ArrowRight } from 'lucide-react';
-import { WorldRunResult } from '../types/game';
+import type { WorldRunResult } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
 
 interface BattleEndModalProps {
