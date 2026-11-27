@@ -1,7 +1,7 @@
 import type { PlayerSaveData } from '../types/game';
 
-const subjects = ['chinese', 'english', 'math', 'science'];
-const guardians = ['qilin', 'stardragon', 'griffin', 'deer'];
+const subjects = ['chinese', 'english', 'math', 'science'] as const;
+const guardians = ['qilin', 'stardragon', 'griffin', 'deer'] as const;
 const paths = ['base', 'hero', 'mythic', 'inferno'];
 const elements = ['ink_ruby', 'star_sapphire', 'gear_topaz', 'leaf_emerald'];
 
@@ -59,7 +59,7 @@ export function assertPlayerSave(save: PlayerSaveData): void {
   for (const slot of ['weapon', 'helm', 'armor', 'gloves', 'boots', 'amulet'] as const) {
     requireValue(natural(save.equipment[slot], 15) && save.equipment[slot]! >= 1, `equipment.${slot}`);
   }
-  requireValue(record(save.items) && ['wisdom_potion', 'combo_charm', 'shield_scroll', 'time_hourglass', 'forge_guard']
+  requireValue(record(save.items) && (['wisdom_potion', 'combo_charm', 'shield_scroll', 'time_hourglass', 'forge_guard'] as const)
     .every((id) => natural(save.items[id])), 'items');
   list(save.weapons, 'weapons');
   requireValue(save.weapons.length > 0, 'weapons');
@@ -79,7 +79,7 @@ export function assertPlayerSave(save: PlayerSaveData): void {
   requireValue(save.gemBag.every(gem), 'gemBag');
   for (const subject of subjects) {
     const stats = save.subjectStats?.[subject];
-    requireValue(record(stats) && ['answered', 'correct', 'bestScore', 'starsEarned', 'clears']
+    requireValue(record(stats) && (['answered', 'correct', 'bestScore', 'starsEarned', 'clears'] as const)
       .every((key) => natural(stats[key])), `subjectStats.${subject}`);
     requireValue(Number(stats.correct) <= Number(stats.answered), `subjectStats.${subject}.correct`);
   }
@@ -106,7 +106,7 @@ export function assertPlayerSave(save: PlayerSaveData): void {
       && ['target', 'current', 'rewardCoins', 'rewardCrystals'].every((k) => natural(quest[k])), 'dailyQuests');
     requireValue(quest.current <= quest.target, 'dailyQuests.current');
   }
-  requireValue(record(save.pvp) && ['rating', 'wins', 'losses', 'winStreak', 'bestWinStreak', 'honorTokens']
+  requireValue(record(save.pvp) && (['rating', 'wins', 'losses', 'winStreak', 'bestWinStreak', 'honorTokens'] as const)
     .every((key) => natural(save.pvp[key])), 'pvp');
   requireValue(record(save.parentSettings) && /^\d{4}$/.test(save.parentSettings.pinCode)
     && natural(save.parentSettings.dailyLimitMinutes, 120) && save.parentSettings.dailyLimitMinutes >= 15

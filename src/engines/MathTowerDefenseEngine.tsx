@@ -106,6 +106,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   wrongQuestionIds,
   onAnswerResult,
   onFinish,
+  onRestart,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1235,7 +1236,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
             : '數學・數境建築王國'
         }
         onResume={() => setPaused(false)}
-        onRestart={onExit}
+        onRestart={onRestart}
         onExit={onExit}
       />
     </div>

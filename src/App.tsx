@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ActiveScreen, CampaignStageConfig, SubjectId, WorldRunResult } from './types/game';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { GameStateProvider, useGameState } from './core/GameStateContext';
@@ -9,14 +9,15 @@ import { ForgeScreen } from './screens/ForgeScreen';
 import { SocketingScreen } from './screens/SocketingScreen';
 import { ShopScreen } from './screens/ShopScreen';
 import { ParentDashboard } from './screens/ParentDashboard';
-import { InkRpgEngine } from './engines/InkRpgEngine';
-import { GalaxyShooterEngine } from './engines/GalaxyShooterEngine';
-import { MathTowerDefenseEngine } from './engines/MathTowerDefenseEngine';
-import { ScienceCookingEngine } from './engines/ScienceCookingEngine';
-import { PvPArenaEngine } from './engines/PvPArenaEngine';
 import { BattleEndModal } from './components/BattleEndModal';
 import { MistakeNotebookModal } from './components/MistakeNotebookModal';
 import { soundEngine } from './audio/soundEngine';
+
+const InkRpgEngine = lazy(() => import('./engines/InkRpgEngine').then((module) => ({ default: module.InkRpgEngine })));
+const GalaxyShooterEngine = lazy(() => import('./engines/GalaxyShooterEngine').then((module) => ({ default: module.GalaxyShooterEngine })));
+const MathTowerDefenseEngine = lazy(() => import('./engines/MathTowerDefenseEngine').then((module) => ({ default: module.MathTowerDefenseEngine })));
+const ScienceCookingEngine = lazy(() => import('./engines/ScienceCookingEngine').then((module) => ({ default: module.ScienceCookingEngine })));
+const PvPArenaEngine = lazy(() => import('./engines/PvPArenaEngine').then((module) => ({ default: module.PvPArenaEngine })));
 
 function resolveInitialNav(): {
   screen: ActiveScreen;
@@ -154,6 +155,7 @@ const AppShell: React.FC = () => {
   }, [runIdentity, activeStage, applyWorldResult]);
 
   const handleReplayWorld = () => {
+    activeRun.current = null;
     soundEngine.playClick();
     setPendingResult(null);
     setRunSeed((n) => n + 1);
@@ -204,6 +206,7 @@ const AppShell: React.FC = () => {
     wrongQuestionIds,
     onAnswerResult: recordAnswer,
     onFinish: handleFinishWorld,
+    onRestart: handleReplayWorld,
     onExit: handleReturnStageSelect,
   };
 
@@ -221,6 +224,7 @@ const AppShell: React.FC = () => {
             setScreen(next);
           }}
           onOpenWorldMap={handleOpenWorldMap}
+          onStartAdventure={handleStartStage}
           onOpenMistakes={() => setMistakesOpen(true)}
         />
       )}
@@ -293,7 +297,11 @@ function AccountGame() {
   const { user, authLoading } = useAuth();
   if (authLoading) return <main className="min-h-screen bg-slate-950 text-white p-8" role="status">正在確認登入帳號…</main>;
   // A switch unmounts the entire old account session, including active engines.
-  return <GameStateProvider key={`${user.provider}:${user.uid}`}><AppShell /></GameStateProvider>;
+  return <GameStateProvider key={`${user.provider}:${user.uid}`}>
+    <Suspense fallback={<main className="h-full flex flex-col items-center justify-center gap-3 bg-slate-950 text-amber-100" role="status"><span className="text-2xl">✦</span><p>正在打開冒險傳送門…</p></main>}>
+      <AppShell />
+    </Suspense>
+  </GameStateProvider>;
 }
 
 export default function App() {

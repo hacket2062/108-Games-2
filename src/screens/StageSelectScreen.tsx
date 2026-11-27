@@ -44,7 +44,7 @@ const WORLD_THEMES: Record<
   chinese: {
     worldName: '墨靈幻境',
     subjectLabel: '國語文',
-    tagline: 'RO 2.5D 水墨草地探索 · ATB 部件拼字與破邪斬句',
+    tagline: '揮動墨劍，找出文字裡的祕密',
     accentText: 'text-amber-300',
     accentBorder: 'border-amber-400',
     bgGrad: 'from-slate-950 via-amber-950/35 to-slate-950',
@@ -53,7 +53,7 @@ const WORLD_THEMES: Record<
   english: {
     worldName: '星際機甲戰線',
     subjectLabel: '英語文',
-    tagline: '霓虹彈幕機甲射擊 · 聽音轟炸單字機與母艦拼字',
+    tagline: '駕駛戰機，解開星際單字訊號',
     accentText: 'text-cyan-300',
     accentBorder: 'border-cyan-400',
     bgGrad: 'from-slate-950 via-indigo-950/50 to-slate-950',
@@ -62,7 +62,7 @@ const WORLD_THEMES: Record<
   math: {
     worldName: '數境建築王國',
     subjectLabel: '數學',
-    tagline: '5×8 策略殭屍塔防 · 齒輪超頻與算式盾軌道雷射',
+    tagline: '動動腦，建造你的防禦陣線',
     accentText: 'text-sky-300',
     accentBorder: 'border-sky-400',
     bgGrad: 'from-slate-950 via-blue-950/45 to-slate-950',
@@ -71,7 +71,7 @@ const WORLD_THEMES: Record<
   science: {
     worldName: '元素料理大亂鬥',
     subjectLabel: '自然科學',
-    tagline: 'Overcooked 節奏廚房 · 選材控溫酸鹼變色出餐',
+    tagline: '選食材、控溫度，變身科學小廚神',
     accentText: 'text-emerald-300',
     accentBorder: 'border-emerald-400',
     bgGrad: 'from-slate-950 via-emerald-950/40 to-slate-950',

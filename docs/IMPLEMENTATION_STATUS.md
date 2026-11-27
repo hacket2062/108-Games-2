@@ -27,6 +27,23 @@ Working branch: `codex/security-hardening`.
 
 ## 驗證證據與限制
 
+### 2026-11-27 接續驗證與遊戲入口改版
+
+- 分支仍為 `codex/security-hardening`，原始 base `faf9aefc137f6ccfab5cfa7d3e341689d6c5eec2`，本輪開始的 checkpoint 為 `83ff37c`。以下為本機工作成果，未推送、未部署、未改正式資料。
+- 已使用可執行的 Node **24.22.3** 完成型別檢查、**25 tests passed / 0 failed** 與 Vite **8.4.0** 正式建置。4 項新增測試驗證下一關建議不變更存檔、章節解鎖、同年級近期科目及全通關重玩。
+- 修正 `saveIntegrity.ts` 的 4 個 TS7053 索引錯誤，使用字面值 tuple 保留合法 key 型別；沒有關閉型別檢查或加入 `any`。
+- `.node-version` 指定 Node 24，`engines.node` 指定 `>=24.12.0`（已安裝 Firestore 的最低需求）。這不等於已更新 Windows 系統預設 Node；驗證使用下方記錄的執行檔。
+- 採用 npm 與 `package-lock.json`，移除過期的 `bun.lock`，請不要交錯使用兩個套件解析器。
+- 使用者提供的首次 `npm audit --json` 報告為 **4 high / 0 critical**，全部沿 Firebase → Firestore → `@grpc/grpc-js@1.9.16` 傳遞。已依官方公告設定 override `@grpc/grpc-js: 1.13.6`；**安裝及修補後 audit 尚待使用者一般 PowerShell 完成，尚未驗證為零弱點**。原始報告保留於 `verification/dependency-audit-before.json`。
+- 四科入口加入原創 SVG 場景、真實通關進度條、可讀玩法說明；加入不越過解鎖規則的下一站快速出發。大廳保留原帳號、雲端／本機狀態、備份、年級學期、練習模式、精靈與各功能入口。
+- 修正大廳存檔狀態列被背景 Canvas 覆蓋的問題；練習場及帳號文案不再承諾尚未開放的即時真人對戰。
+- 四科暫停選單「重新挑戰」改為建立同關新場次，原本誤接離開地圖；舊 run 立即失效並卸載，退出按鈕改標「返回章節地圖」。
+- 五個遊戲引擎改為按需載入。主入口 JS 從約 **1,340.35 kB / gzip 411.97 kB** 降為 **1,194.05 kB / gzip 373.13 kB**。仍有 500 kB chunk 警告，不能把這個結果當成手機 FPS 或啟動秒數的實測。
+- Chrome headless 對 **1440×1000、390×844、320×740、844×390** 的正式建置通過：四科地圖、四科引擎啟動、快速出發、暫停／繼續／重新挑戰／返回、兩個本機學生的年級隔離、無水平溢出、無未捕捉 JS 錯誤。截圖已實際查看並修正桌機重疊與角色清晰度。
+- 瀏覽器驗證使用全新 isolated context，阻擋所有非 localhost 請求，**不是 Google 登入、雲端同步或 Emulator 權限驗證**。連點發獎、存檔衝突雙客戶端及完整作答流程仍待補測。
+- Gemini CLI／文字審核工具目前沒有可用管道；本輪沒有呼叫 Gemini，也不宣稱取得 Gemini 審核結論。
+- 完整驗證指令、證據與下一步見 [本輪驗證紀錄](verification/2026-11-27-local-validation.md)。本節更新取代下面早期 checkpoint 的安裝／型別／建置未執行狀態，其餘未驗證風險仍成立。
+
 - Node 24 原生 test runner + `scripts/register-typescript.mjs`，直接執行原始純 TypeScript 模組，**21 tests passed / 0 failed**（含一項 legacy rules 文字 smoke test）。
 - 涵蓋 20 把武器／80 顆寶石完整往返、裝備 UID、損壞資料拒絕、每日資料往返、錯題去重、同步 store、超容量停止寫入、scheduler 取消／暫停、六部位效果、子池耗盡，以及四年級 × 四科 × 三章的寶箱設定。
 - `git diff --check` 通過。

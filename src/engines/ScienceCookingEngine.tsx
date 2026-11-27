@@ -48,6 +48,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   wrongQuestionIds,
   onAnswerResult,
   onFinish,
+  onRestart,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1037,7 +1038,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
             : '自然科學・元素料理大亂鬥'
         }
         onResume={() => setPaused(false)}
-        onRestart={onExit}
+        onRestart={onRestart}
         onExit={onExit}
       />
     </div>

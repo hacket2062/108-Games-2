@@ -140,7 +140,7 @@ export const WorldPauseModal: React.FC<WorldPauseModalProps> = ({
             onClick={onExit}
             className="w-full min-h-[48px] rounded-xl bg-slate-800/70 hover:bg-rose-900/60 text-slate-200 hover:text-white font-bold text-base border border-slate-700 flex items-center justify-center gap-2 transition-transform active:scale-95"
           >
-            <Home className="w-5 h-5" /> 返回智光學園廣場
+            <Home className="w-5 h-5" /> 返回章節地圖
           </button>
         </div>
       </div>

@@ -73,6 +73,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
   wrongQuestionIds,
   onAnswerResult,
   onFinish,
+  onRestart,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1600,7 +1601,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
             : '國語文・墨靈幻境'
         }
         onResume={() => setPaused(false)}
-        onRestart={onExit}
+        onRestart={onRestart}
         onExit={onExit}
       />
     </div>

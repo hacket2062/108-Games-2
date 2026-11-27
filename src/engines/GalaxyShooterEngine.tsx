@@ -96,6 +96,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   wrongQuestionIds,
   onAnswerResult,
   onFinish,
+  onRestart,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1285,7 +1286,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
             : '英語文・星際機甲戰線 Word Galaxy'
         }
         onResume={() => setPaused(false)}
-        onRestart={onExit}
+        onRestart={onRestart}
         onExit={onExit}
       />
     </div>

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import type {
   ActiveScreen,
+  CampaignStageConfig,
   GradeLevel,
   GuardianId,
   SemesterId,
@@ -39,16 +40,16 @@ import { xpRequiredForLevel } from '../core/combatMath';
 import { soundEngine } from '../audio/soundEngine';
 import {
   drawGuardianSpirit,
-  drawRoundedRect,
-  FloatingTextPool,
-  ParticlePool,
 } from '../core/canvasEffects';
 import { getWorldTotalStars } from '../data/campaignMap';
+import { AdventureBrief } from '../components/AdventureBrief';
+import { WorldScene } from '../components/WorldScene';
 
 interface LobbyScreenProps {
   onNavigate: (screen: ActiveScreen) => void;
   onOpenWorldMap: (subject: SubjectId) => void;
   onOpenMistakes: () => void;
+  onStartAdventure: (stage: CampaignStageConfig) => void;
 }
 
 interface PlanetPortalConfig {
@@ -69,7 +70,7 @@ const PLANET_PORTALS: PlanetPortalConfig[] = [
     screen: 'world_chinese',
     worldTitle: '墨靈幻境',
     subjectLabel: '國語文',
-    genreTag: 'RO 2.5D 走圖＋ATB 拼字斬句',
+    genreTag: '揮動墨劍，找出文字裡的祕密',
     accentBorder: 'border-amber-400/90 hover:border-amber-200',
     planetGrad: 'from-amber-400 via-orange-500 to-rose-600',
     ringColor: 'border-amber-200/75',
@@ -80,7 +81,7 @@ const PLANET_PORTALS: PlanetPortalConfig[] = [
     screen: 'world_english',
     worldTitle: '星際機甲戰線',
     subjectLabel: '英語文',
-    genreTag: '賽博彈幕射擊＋母艦拼字',
+    genreTag: '駕駛戰機，解開星際單字訊號',
     accentBorder: 'border-cyan-400/90 hover:border-cyan-200',
     planetGrad: 'from-cyan-400 via-indigo-500 to-fuchsia-600',
     ringColor: 'border-cyan-200/75',
@@ -91,7 +92,7 @@ const PLANET_PORTALS: PlanetPortalConfig[] = [
     screen: 'world_math',
     worldTitle: '數境建築王國',
     subjectLabel: '數學',
-    genreTag: '5×8 殭屍塔防＋算式盾雷射',
+    genreTag: '動動腦，建造你的防禦陣線',
     accentBorder: 'border-sky-400/90 hover:border-sky-200',
     planetGrad: 'from-emerald-400 via-sky-500 to-blue-700',
     ringColor: 'border-sky-200/75',
@@ -102,7 +103,7 @@ const PLANET_PORTALS: PlanetPortalConfig[] = [
     screen: 'world_science',
     worldTitle: '元素料理大亂鬥',
     subjectLabel: '自然科學',
-    genreTag: 'Overcooked 控溫酸鹼廚房',
+    genreTag: '選食材、控溫度，變身科學小廚神',
     accentBorder: 'border-emerald-400/90 hover:border-emerald-200',
     planetGrad: 'from-orange-400 via-rose-500 to-teal-500',
     ringColor: 'border-emerald-200/75',
@@ -115,7 +116,8 @@ const GuardianMiniCanvas: React.FC<{
   guardianId: GuardianId;
   auraColor: string;
   bounceSignal: number;
-}> = ({ guardianId, auraColor, bounceSignal }) => {
+  displaySize?: number;
+}> = ({ guardianId, auraColor, bounceSignal, displaySize = 90 }) => {
   const miniRef = useRef<HTMLCanvasElement | null>(null);
   const guardianRef = useRef(guardianId);
   const auraRef = useRef(auraColor);
@@ -141,9 +143,10 @@ const GuardianMiniCanvas: React.FC<{
 
     const size = 90;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.floor(size * dpr);
-    canvas.height = Math.floor(size * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    canvas.width = Math.floor(displaySize * dpr);
+    canvas.height = Math.floor(displaySize * dpr);
+    const scale = displaySize / size * dpr;
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
     let rafId = 0;
     let alive = true;
@@ -184,7 +187,7 @@ const GuardianMiniCanvas: React.FC<{
       alive = false;
       cancelAnimationFrame(rafId);
     };
-  }, []);
+  }, [displaySize]);
 
   return (
     <canvas
@@ -198,6 +201,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   onNavigate,
   onOpenWorldMap,
   onOpenMistakes,
+  onStartAdventure,
 }) => {
   const {
     user,
@@ -233,20 +237,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   const [questToast, setQuestToast] = useState<string | null>(null);
   const [miniBounceSignal, setMiniBounceSignal] = useState(0);
 
-  const guardianIdRef = useRef<GuardianId>(save.selectedGuardian);
-  const auraColorRef = useRef(ASCENSION_PATHS[equippedWeapon.ascensionPath].auraPrimary);
-  const petBounceRef = useRef(0);
-  const particlesRef = useRef(new ParticlePool(160));
-  const floatsRef = useRef(new FloatingTextPool(24));
 
   useEffect(() => {
-    guardianIdRef.current = save.selectedGuardian;
     setSpeechBubble(GUARDIANS[save.selectedGuardian].petLines[0]);
   }, [save.selectedGuardian]);
-
-  useEffect(() => {
-    auraColorRef.current = ASCENSION_PATHS[equippedWeapon.ascensionPath].auraPrimary;
-  }, [equippedWeapon.ascensionPath]);
 
   // Auto-dismiss auth notification toast after 2.5s so it never blocks UI
   useEffect(() => {
@@ -355,12 +349,6 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       lastTs = now;
       time += dt;
 
-      if (petBounceRef.current > 0) {
-        petBounceRef.current = Math.max(0, petBounceRef.current - dt * 2.4);
-      }
-      particlesRef.current.update(dt);
-      floatsRef.current.update(dt);
-
       ctx.fillStyle = cachedSky ?? '#172E73';
       ctx.fillRect(0, 0, width, height);
       if (cachedRad) {
@@ -405,32 +393,6 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         ctx.fill();
       }
 
-      // Desktop-only full pedestal + Guardian Sprite (Mobile uses the compact horizontal Guardian Card!)
-      if (width >= 1024) {
-        const px = width * 0.21;
-        const py = height * 0.45;
-
-        ctx.save();
-        ctx.translate(px, py + 48);
-        ctx.fillStyle = '#334155';
-        ctx.strokeStyle = auraColorRef.current;
-        ctx.lineWidth = 3.5;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 92, 24, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#1E293B';
-        drawRoundedRect(ctx, -60, 15, 120, 20, 9);
-        ctx.fill();
-        ctx.restore();
-
-        drawGuardianSpirit(ctx, guardianIdRef.current, px, py, time, 1.85, petBounceRef.current);
-      }
-
-      particlesRef.current.render(ctx);
-      floatsRef.current.render(ctx);
-
       const workMs = performance.now() - frameStart;
       if (workMs > 10) {
         yieldTimer = window.setTimeout(() => {
@@ -453,22 +415,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   const triggerPetGuardian = () => {
     soundEngine.playPetChime();
     soundEngine.hapticPulse(16);
-    petBounceRef.current = 1.0;
     setMiniBounceSignal((n) => n + 1);
     petGuardian();
     const lines = guardian.petLines;
     setSpeechBubble(lines[Math.floor(Math.random() * lines.length)]);
 
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width >= 1024) {
-        const px = rect.width * 0.21;
-        const py = rect.height * 0.45;
-        particlesRef.current.burst(px, py - 24, 16, ['#FB7185', '#FDE047', '#34D399'], 50, 170, 6, 'petal');
-        floatsRef.current.spawn(px, py - 68, '羈絆 +1 ♥', 'perfect');
-      }
-    }
   };
 
   const hasSynthReady = useMemo(() => {
@@ -491,7 +442,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
   return (
     <div
-      className="relative w-full h-full overflow-hidden bg-slate-950 flex flex-col"
+      className="adventure-hub relative w-full h-full overflow-hidden bg-slate-950 flex flex-col"
       data-testid="lobby-hub"
     >
       {/* Full-bleed Live Starry & Rune Backdrop Canvas */}
@@ -643,7 +594,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         </div>
       </header>
 
-      <div className="shrink-0 flex items-center justify-between gap-2 bg-slate-900 px-3 py-1 text-xs text-slate-200">
+      <div className="relative z-20 shrink-0 flex items-center justify-between gap-2 bg-slate-900 px-3 py-1 text-xs text-slate-200">
         <span role="status" className="min-w-0">{saveNotice}</span>
         <button type="button" className="shrink-0 min-h-9 underline text-sky-300" onClick={exportSaveBackup}>匯出備份</button>
       </div>
@@ -668,7 +619,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
       {/* 2. SCROLLABLE MAIN STAGE (Smooth Vertical Scroll on Mobile, 2-Column Split on Desktop) */}
       <main className="relative z-10 flex-1 overflow-y-auto scroll-touch px-3 sm:px-6 pt-3 pb-24">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-3.5 lg:gap-6 items-start lg:items-center min-h-full">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-3.5 lg:gap-6 items-start min-h-full">
           {/* MOBILE COMPACT BRAND + HORIZONTAL GUARDIAN CARD (~110px tall, zero clipping!) */}
           <div className="lg:hidden flex flex-col gap-2.5">
             <div className="flex items-center justify-between px-0.5">
@@ -681,7 +632,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     智光守護者
                   </h1>
                   <div className="text-[10px] font-bold text-amber-300/90 mt-0.5">
-                    108 學園大冒險 · 四界獨立引擎
+                    108 學園大冒險 · 探索你的超能力
                   </div>
                 </div>
               </div>
@@ -733,11 +684,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           </div>
 
           {/* DESKTOP LEFT 5 COLS: Full Crest + Open Canvas Guardian Pedestal + Interaction Card */}
-          <div className="hidden lg:flex lg:col-span-5 flex-col items-start justify-between gap-3">
+          <div className="adventure-companion hidden lg:flex lg:col-span-4 flex-col items-start gap-5 lg:sticky lg:top-3">
             <div>
               <svg
                 viewBox="0 0 420 78"
-                className="w-[360px] h-auto"
+                className="w-full max-w-[360px] h-auto"
                 role="img"
                 aria-label="智光守護者：108 學園大冒險"
               >
@@ -781,13 +732,16 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                   fontWeight="800"
                   letterSpacing="2"
                 >
-                  108 學園大冒險 · 四界獨立引擎＋競技場
+                  108 學園大冒險 · 探索你的超能力
                 </text>
               </svg>
             </div>
 
-            {/* Open Pedestal Spacer for Desktop Canvas Guardian */}
-            <div className="h-52 pointer-events-none" />
+            <div className="adventure-companion-stage">
+              <span>你的冒險夥伴</span>
+              <GuardianMiniCanvas guardianId={save.selectedGuardian} auraColor={weaponPathDef.auraPrimary} bounceSignal={miniBounceSignal} displaySize={210} />
+              <p>準備好了嗎？一起出發！</p>
+            </div>
 
             <div className="w-full max-w-sm rounded-2xl bg-slate-900/92 backdrop-blur-sm border-2 border-amber-400/75 p-3.5 shadow-2xl">
               <div className="flex items-center justify-between gap-2">
@@ -822,7 +776,12 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           </div>
 
           {/* RIGHT 7 COLS (Full Width on Mobile): Grade/Semester/Mode + 4 Worlds + Online PvP */}
-          <div className="lg:col-span-7 flex flex-col gap-3">
+          <div className="lg:col-span-8 flex flex-col gap-3">
+            <AdventureBrief save={save} onStart={(stage) => {
+              soundEngine.playClick();
+              soundEngine.hapticPulse(12);
+              onStartAdventure(stage);
+            }} />
             {/* Compact Segmented Controls: Grade (3~6), Semester (上/下), Mode (計時/練習) */}
             <div className="rounded-2xl bg-slate-900/92 backdrop-blur-sm border border-slate-700/90 p-2 shadow-xl flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-2">
               <div className="grid grid-cols-4 sm:flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
@@ -901,7 +860,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             </div>
 
             {/* 4 Subject Worlds -> 3 Chapters x 10 Stages */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+            <div className="adventure-worlds-heading"><span>選一個世界，開始探索</span><span>4 個世界 · 4 種玩法</span></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {PLANET_PORTALS.map((planet) => {
                 const worldStats = getWorldTotalStars(planet.id, save.grade, save.stageProgress);
                 return (
@@ -909,42 +869,35 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     key={planet.id}
                     type="button"
                     onMouseEnter={() => setFocusedScreen(planet.screen)}
+                    onFocus={() => setFocusedScreen(planet.screen)}
                     onClick={() => {
                       soundEngine.playClick();
                       soundEngine.hapticPulse(12);
                       onOpenWorldMap(planet.id);
                     }}
                     data-start={planet.id === 'chinese' ? 'true' : undefined}
-                    className={`group min-h-[84px] rounded-2xl bg-slate-900/94 backdrop-blur-sm border-2 ${planet.accentBorder} p-3 sm:p-3.5 text-left shadow-xl transition-transform hover:-translate-y-0.5 active:scale-[0.98] flex items-center gap-3`}
+                    className={`world-postcard world-postcard-${planet.id} group text-left`}
                   >
-                    <div className="relative w-13 h-13 sm:w-14 sm:h-14 shrink-0 flex items-center justify-center">
-                      <div
-                        className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br ${planet.planetGrad} border-2 border-white/75 shadow-lg flex items-center justify-center text-lg sm:text-xl font-black text-white group-hover:scale-110 transition-transform`}
-                      >
-                        {planet.emblem}
-                      </div>
-                      <div
-                        className={`absolute inset-x-[-5px] top-1/2 -translate-y-1/2 h-3.5 rounded-full border-2 ${planet.ringColor} -rotate-12 pointer-events-none`}
-                      />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
+                    <WorldScene subject={planet.id} className="world-postcard-art" />
+                    <div className="world-postcard-copy">
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-[11px] font-bold text-slate-400">
                           {planet.subjectLabel} · {save.grade}年級
                         </span>
                         <span className="inline-flex items-center gap-0.5 text-[11px] font-black text-amber-300 font-mono-num">
                           <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                          {worldStats.earned}/90
+                          {worldStats.earned}/{worldStats.max}
                         </span>
                       </div>
                       <div className="text-base sm:text-lg font-black text-white mt-0.5 leading-tight">
                         {planet.worldTitle}
                       </div>
-                      <div className="text-[11px] text-slate-300 truncate mt-0.5">{planet.genreTag}</div>
+                      <div className="world-postcard-description">{planet.genreTag}</div>
+                      <div className="world-postcard-progress" aria-label={`已通過 ${worldStats.clearedStages} 關，共 30 關`}>
+                        <span style={{ width: `${worldStats.clearedStages / 30 * 100}%` }} />
+                      </div>
+                      <div className="world-postcard-footer"><span>{worldStats.clearedStages === 0 ? '全新旅程，等你出發' : `已探索 ${worldStats.clearedStages} / 30 關`}</span><span>探索世界 <ChevronRight size={14} /></span></div>
                     </div>
-
-                    <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-white group-hover:translate-x-0.5 transition-transform shrink-0" />
                   </button>
                 );
               })}
@@ -975,17 +928,17 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 <div className="min-w-0">
                   <div className="text-sm sm:text-base font-black text-white flex items-center gap-1.5">
                     <Swords className="w-4 h-4 text-amber-300 shrink-0" />
-                    <span className="truncate">線上對戰・雙人知識競技場</span>
+                    <span className="truncate">守護者練習場</span>
                   </div>
                   <div className="text-[11px] text-amber-100/90 truncate mt-0.5">
                     {save.parentSettings.pvpEnabled
-                      ? `${rankTier.name}（${save.pvp.rating}分）· 好友房號即時同框對轟`
-                      : '家長專區已暫時鎖定線上對戰模式'}
+                      ? '和 AI 切磋知識 · 練習不影響真人排名'
+                      : '家長專區已暫時鎖定競技場'}
                   </div>
                 </div>
               </div>
               <span className="min-h-[38px] px-3 sm:px-3.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs inline-flex items-center gap-1 shrink-0 shadow">
-                <Play className="w-3.5 h-3.5 fill-slate-950" /> 開戰
+                <Play className="w-3.5 h-3.5 fill-slate-950" /> 練習
               </span>
             </button>
           </div>
@@ -1105,7 +1058,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             {/* Google Account Section */}
             <div className="rounded-2xl bg-slate-950 border border-slate-700 p-3.5 space-y-2.5">
               <div className="text-xs font-black text-sky-300">
-                Google 帳號雲端存檔＋跨裝置線上對戰
+                Google 帳號雲端存檔 · 跨裝置接續學習
               </div>
               {user.provider === 'google' ? (
                 <div className="flex items-center justify-between gap-2">

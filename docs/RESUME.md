@@ -1,6 +1,21 @@
 # Resume checkpoint / 關機後續作
 
-Checkpoint date: 2026-11-27. User is shutting down and will resume later.
+Checkpoint date: 2026-11-27. Resumed for Node/dependency validation and a child-friendly adventure hub upgrade.
+
+## Latest checkpoint (read this first)
+
+- Branch/base remain below; current work started at local commit `83ff37c`. This batch has now been committed locally. A user-authorized push was attempted: Git could not connect to github.com:443, and the connected GitHub create-branch tool returned HTTP 403 `Resource not accessible by integration`. No upload or production deployment succeeded. From the user's normal authenticated PowerShell, run `git push -u origin codex/security-hardening`; do not force-push. Keep any eventual PR in draft while dependency installation/audit and P1 release checks remain open.
+- Read `docs/verification/2026-11-27-local-validation.md` and the latest section in `docs/IMPLEMENTATION_STATUS.md` for current evidence. Older notes below describe the shutdown state.
+- Node **24.22.3** works via the Codex-bundled executable below. `tsc --noEmit`, **25 tests / 0 failed**, and Vite **8.4.0** production build now pass. TypeScript index errors fixed with literal tuples; no `any` bypass.
+- `scripts/verify-local.ps1 -NodePath <node-executable>` checks the version and each exit code. Project requires **Node >=24.12.0** because of installed Firestore. The Windows system default Node has not been changed.
+- Adopt **npm + package-lock.json**. Removed the stale `bun.lock`; do not regenerate it or run concurrent installers.
+- User supplied `dependency-audit.json`: **4 high**, one transitive gRPC chain. Root override now pins **@grpc/grpc-js 1.13.6**, based on official advisories. **Still awaiting user-run `npm install` and replacement audit report** because the managed shell cannot access npm or reach registry.npmjs.org. Do not claim remediation complete while installed gRPC is still 1.9.16. Do not use audit fix --force (it suggested downgrading Firebase to 9.14.0).
+- New hub includes original vector world postcards, next unlocked stage quick-start, real progress bars and a readable companion area. Fixed save-status layer visibility and old multiplayer promises. Five engines load on demand; main JS fell from ~1,340.35 kB to ~1,194.05 kB (gzip ~411.97 → ~373.13 kB); chunk warning remains.
+- Four engines' pause-menu restart now starts a new run of the same stage instead of leaving. Old run is invalidated. Exit label now says return to chapter map.
+- Chrome **production-build** checks passed at **1440×1000 / 390×844 / 320×740 / 844×390**: four world maps and engines, quick start, pause/resume/restart/exit, local student grade isolation, no horizontal overflow or uncaught JS errors. Screenshots and JSON are in `.verification/` (ignored); runner in `scripts/verify-browser.mjs`. External requests were blocked: these do not validate Firebase or online flows.
+- Gemini review was not executed; no available Gemini CLI/text-review connector was found. User welcomes its review if a usable route becomes available, but do not claim one occurred.
+- Next required step: finish dependency installation in the user's normal PowerShell; inspect new lockfile and audit, then rerun local verification/browser checks if dependency changes warrant it. Preserve the initial audit in `docs/verification/dependency-audit-before.json`.
+- After this batch, continue cloud-conflict/rapid-serving/mistake reward browser tests and real Emulator authorization/dual-client tests. Existing P1 backend/rules and flagship roadmap remain open.
 
 ## Location and branch
 
