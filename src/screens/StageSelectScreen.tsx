@@ -22,6 +22,8 @@ import {
   isStageUnlocked,
 } from '../data/campaignMap';
 import { soundEngine } from '../audio/soundEngine';
+import { effectivePlayMode } from '../core/gameExperience';
+import { WorldInstructions } from '../components/WorldInstructions';
 
 interface StageSelectScreenProps {
   subject: SubjectId;
@@ -111,7 +113,7 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
   const selectedStage =
     activeChapter.stages[Math.max(0, Math.min(9, selectedStageNum - 1))] ?? activeChapter.stages[0];
 
-  const isPracticeFreeUnlock = save.playMode === 'practice';
+  const isPracticeFreeUnlock = effectivePlayMode(save) === 'practice';
   const selectedUnlocked =
     isPracticeFreeUnlock || isStageUnlocked(selectedStage, save.stageProgress);
   const selectedRec = save.stageProgress?.[selectedStage.stageKey];
@@ -356,6 +358,11 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                 {selectedStage.subtitle}
               </p>
+              {isPracticeFreeUnlock && <p className="rounded-xl bg-cyan-950/60 border border-cyan-400/30 p-3 text-xs leading-relaxed text-cyan-100">自由練習：所有關卡都能試玩；不變更冒險通關、星星與 Boss 寶箱紀錄。</p>}
+              <details className="world-guide-details">
+                <summary>第一次玩？看看操作小祕訣</summary>
+                <WorldInstructions subject={subject} />
+              </details>
 
               {/* Enemy / Boss Intel */}
               <div className="rounded-2xl bg-slate-950 border border-slate-800 p-3.5 space-y-2">

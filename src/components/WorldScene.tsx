@@ -12,7 +12,7 @@ export function WorldScene({ subject, className = '' }: { subject: SubjectId; cl
   };
   const colors = palettes[subject];
   return (
-    <svg viewBox="0 0 480 240" className={className} aria-hidden="true" focusable="false">
+    <svg viewBox="0 0 480 240" preserveAspectRatio="xMidYMid slice" className={className} aria-hidden="true" focusable="false">
       <defs>
         <linearGradient id={`${id}-sky`} x2="0" y2="1">
           <stop stopColor={colors[0]} /><stop offset="1" stopColor={colors[1]} />

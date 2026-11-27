@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+.adventure-intro { height: 100%; overflow-y: auto; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; background: radial-gradient(ellipse at top, #333058, #080d20 75%); color: #f7f4ee; }
+.adventure-intro-card { margin: auto; width: 100%; max-width: 650px; overflow: hidden; border-radius: 26px; border: 1px solid #d4c3f54d; background: #151d32; box-shadow: 0 24px 80px #0005; }
+.adventure-intro-art { display: block; width: 100%; height: 160px; }
+.adventure-intro-content { padding: 24px; }
+.adventure-intro h1 { margin: 12px 0; font-size: clamp(22px, 4vw, 30px); font-weight: 900; line-height: 1.4; }
+.adventure-intro-mission { color: #cbd5e1; font-size: 14px; line-height: 1.8; }
+.world-instructions { text-align: left; font-size: 13px; line-height: 1.75; }
+.world-instructions ol { display: grid; gap: 12px; margin: 20px 0; padding: 0; list-style: none; }
+.world-instructions li { display: flex; gap: 12px; align-items: flex-start; }
+.world-instructions li > span { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 9px; background: #f8d58324; color: #f8d583; flex-shrink: 0; font-weight: 900; }
+.world-instructions li p { color: #f1f5f9; padding-top: 3px; }
+.world-instructions-controls { color: #cbd5e1; padding: 12px; border: 1px solid #ffffff18; border-radius: 12px; background: #080d2033; }
+.world-instructions-tip { margin-top: 12px; color: #b5e4d1; }
+.world-guide-details { border: 1px solid #ffffff26; border-radius: 14px; padding: 12px; background: #080d2044; }
+.world-guide-details summary { cursor: pointer; color: #f8d583; font-size: 13px; font-weight: 700; min-height: 24px; }
+.world-guide-details summary:focus-visible, .adventure-intro button:focus-visible { outline: 3px solid #a5f3fc; outline-offset: 4px; }
+.adventure-intro-note { font-size: 12px; line-height: 1.8; color: #abb9d4; margin-top: 16px; }
+.adventure-intro-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; margin-top: 22px; }
+.adventure-intro-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 10px 14px; border-radius: 12px; font-size: 14px; font-weight: 800; }
+.adventure-intro-actions button:first-child { background: #26324a; color: #dbe6f4; }
+.learning-next-step { border: 1px solid #a7d8bf40; border-radius: 16px; background: #0d302b66; padding: 14px; margin-top: 16px; font-size: 13px; line-height: 1.8; color: #d8e8e1; }
+.learning-next-step strong { color: #b6efd2; }
+.learning-next-step p:last-child { color: #a4b6be; font-size: 11px; margin-top: 6px; }
+.learning-review-button { display: flex; gap: 8px; justify-content: center; align-items: center; min-height: 48px; padding: 10px; border: 1px solid #9fc9e057; border-radius: 12px; background: #153748; color: #d4effc; font-size: 13px; font-weight: 800; }
+@media (max-width: 420px) { .adventure-intro { padding: 12px; } .adventure-intro-art { height: 125px; } .adventure-intro-content { padding: 18px; } .adventure-intro-actions { flex-direction: column-reverse; } }
+
 /* Adventure hub: original illustrated postcards, with readable real-text UI. */
 .adventure-hub { background: #090e22; }
 .adventure-hub main { background: radial-gradient(ellipse at 85% 0%, #6255bb18, transparent 65%); }

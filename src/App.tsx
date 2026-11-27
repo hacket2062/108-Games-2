@@ -2,7 +2,9 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useStat
 import type { ActiveScreen, CampaignStageConfig, SubjectId, WorldRunResult } from './types/game';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { GameStateProvider, useGameState } from './core/GameStateContext';
-import { getStageConfig, isStageUnlocked } from './data/campaignMap';
+import { getStageConfig } from './data/campaignMap';
+import { canEnterStage, effectivePlayMode } from './core/gameExperience';
+import { AdventureIntro } from './components/AdventureIntro';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { StageSelectScreen } from './screens/StageSelectScreen';
 import { ForgeScreen } from './screens/ForgeScreen';
@@ -75,6 +77,7 @@ const AppShell: React.FC = () => {
     recordAnswer,
     resolveWrongRecord,
     applyWorldResult,
+    setPlayMode,
   } = useGameState();
 
   const initial = resolveInitialNav();
@@ -87,6 +90,9 @@ const AppShell: React.FC = () => {
   const [pendingResult, setPendingResult] = useState<WorldRunResult | null>(null);
   const [leveledUpBanner, setLeveledUpBanner] = useState(false);
   const [mistakesOpen, setMistakesOpen] = useState(false);
+  const [showIntro, setShowIntro] = useState(initial.screen.startsWith('world_'));
+  const seenGuides = useRef(new Set<SubjectId>());
+  const playMode = effectivePlayMode(save);
   const runIdentity = useMemo(() => crypto.randomUUID(), [runSeed, activeStage.stageKey]);
   const activeRun = useRef<string | null>(runIdentity);
   const settledRun = useRef<string | null>(null);
@@ -98,8 +104,11 @@ const AppShell: React.FC = () => {
 
   useEffect(() => {
     if (screen === 'pvp_arena' && !save.parentSettings.pvpEnabled) setScreen('lobby');
-    if (screen.startsWith('world_') && !isStageUnlocked(activeStage, save.stageProgress)) setScreen('stage_select');
-  }, [screen, activeStage, save.stageProgress, save.parentSettings.pvpEnabled]);
+    if (screen.startsWith('world_') && !canEnterStage(activeStage, save)) {
+      setShowIntro(false);
+      setScreen('stage_select');
+    }
+  }, [screen, activeStage, save.stageProgress, save.parentSettings.pvpEnabled, playMode]);
 
   // Keep activeStage synchronized with grade changes when on menus
   useEffect(() => {
@@ -118,10 +127,10 @@ const AppShell: React.FC = () => {
       screen === 'world_science';
     document.body.dataset.state = pendingResult
       ? 'gameover'
-      : isPlayingWorld
+      : isPlayingWorld && !showIntro
         ? 'playing'
         : 'menu';
-  }, [screen, pendingResult]);
+  }, [screen, pendingResult, showIntro]);
 
   const handleOpenWorldMap = (subject: SubjectId) => {
     setSelectedSubject(subject);
@@ -130,10 +139,12 @@ const AppShell: React.FC = () => {
   };
 
   const handleStartStage = (stage: CampaignStageConfig) => {
-    if (!isStageUnlocked(stage, save.stageProgress)) return;
+    if (!canEnterStage(stage, save)) return;
+    activeRun.current = null;
     setSelectedSubject(stage.subject);
     setActiveStage(stage);
     setPendingResult(null);
+    setShowIntro(!seenGuides.current.has(stage.subject));
     setRunSeed((n) => n + 1);
     setScreen(subjectToScreen(stage.subject));
   };
@@ -144,6 +155,7 @@ const AppShell: React.FC = () => {
     settledRun.current = runIdentity;
     const enriched: WorldRunResult = {
       ...result,
+      playMode,
       stageKey: result.stageKey ?? activeStage.stageKey,
       stageLabel:
         result.stageLabel ??
@@ -152,7 +164,7 @@ const AppShell: React.FC = () => {
     const { leveledUp, chestDropped } = applyWorldResult(enriched);
     setLeveledUpBanner(leveledUp);
     setPendingResult(chestDropped ? { ...enriched, chestRewardText: chestDropped } : enriched);
-  }, [runIdentity, activeStage, applyWorldResult]);
+  }, [runIdentity, activeStage, applyWorldResult, playMode]);
 
   const handleReplayWorld = () => {
     activeRun.current = null;
@@ -178,6 +190,7 @@ const AppShell: React.FC = () => {
   };
 
   const handleReturnStageSelect = () => {
+    setShowIntro(false);
     activeRun.current = null;
     soundEngine.playClick();
     setPendingResult(null);
@@ -191,14 +204,13 @@ const AppShell: React.FC = () => {
     setScreen('lobby');
   };
 
-  const effectivePlayMode = save.parentSettings.forcePracticeMode ? 'practice' : save.playMode;
   const wrongQuestionIds = save.wrongRecords.map((w) => w.questionId);
   const masteredQuestionIds = save.masteredQuestionIds ?? [];
 
   const commonWorldProps = {
     grade: save.grade,
     semester: save.semester,
-    playMode: effectivePlayMode,
+    playMode,
     guardianId: save.selectedGuardian,
     playerStats: combatStats,
     stageConfig: activeStage,
@@ -235,16 +247,22 @@ const AppShell: React.FC = () => {
           onExit={handleReturnLobby}
         />
       )}
-      {screen === 'world_chinese' && (
+      {screen.startsWith('world_') && showIntro && <AdventureIntro stage={activeStage} playMode={playMode}
+        onBack={handleReturnStageSelect} onReady={() => {
+          soundEngine.playClick();
+          seenGuides.current.add(activeStage.subject);
+          setShowIntro(false);
+        }} />}
+      {screen === 'world_chinese' && !showIntro && (
         <InkRpgEngine key={`ch-${activeStage.stageKey}-${runSeed}`} {...commonWorldProps} />
       )}
-      {screen === 'world_english' && (
+      {screen === 'world_english' && !showIntro && (
         <GalaxyShooterEngine key={`en-${activeStage.stageKey}-${runSeed}`} {...commonWorldProps} />
       )}
-      {screen === 'world_math' && (
+      {screen === 'world_math' && !showIntro && (
         <MathTowerDefenseEngine key={`ma-${activeStage.stageKey}-${runSeed}`} {...commonWorldProps} />
       )}
-      {screen === 'world_science' && (
+      {screen === 'world_science' && !showIntro && (
         <ScienceCookingEngine key={`sc-${activeStage.stageKey}-${runSeed}`} {...commonWorldProps} />
       )}
       {screen === 'pvp_arena' && save.parentSettings.pvpEnabled && <PvPArenaEngine onExit={handleReturnLobby} />}
@@ -259,6 +277,9 @@ const AppShell: React.FC = () => {
         onRetry={handleReplayWorld}
         onNextStage={hasNextStage ? handleNextStage : undefined}
         onReturnLobby={handleReturnStageSelect}
+        wrongRecordCount={save.wrongRecords.length}
+        onReviewMistakes={() => { handleReturnStageSelect(); setMistakesOpen(true); }}
+        onTryPractice={() => { setPlayMode('practice'); handleReplayWorld(); }}
       />
 
       <MistakeNotebookModal

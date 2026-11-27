@@ -1031,6 +1031,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
         accentBg="bg-gradient-to-r from-orange-600 via-rose-600 to-teal-600"
       />
       <WorldPauseModal
+        subject="science"
         open={paused}
         worldName={
           stageConfig

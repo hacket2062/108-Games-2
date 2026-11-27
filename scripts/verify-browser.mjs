@@ -35,9 +35,16 @@ try {
       await page.getByTestId('lobby-hub').waitFor();
     }
     await page.getByRole('button', { name: '出發冒險' }).click();
+    await page.getByRole('dialog', { name: '墨劍小隊，出發！' }).waitFor();
+    assert.equal(await page.getByTestId('ink-rpg-engine').count(), 0, 'Reading the guide must not start combat');
+    assert.equal(await page.evaluate(() => document.body.dataset.state), 'menu');
+    await page.screenshot({ path: `${output}/intro-${viewport.width}.png` });
+    await page.getByRole('button', { name: '我準備好了，出發！' }).click();
     await page.getByTestId('ink-rpg-engine').waitFor();
     await page.getByRole('button', { name: '暫停遊戲' }).click();
     await page.getByRole('dialog', { name: '暫停選單' }).waitFor();
+    await page.getByText('忘記怎麼玩？查看操作', { exact: true }).click();
+    assert.equal(await page.getByRole('dialog').locator('.world-instructions').isVisible(), true);
     await page.screenshot({ path: `${output}/paused-${viewport.width}.png` });
     await page.getByRole('button', { name: '繼續冒險' }).click();
     await page.getByRole('dialog', { name: '暫停選單' }).waitFor({ state: 'detached' });
@@ -56,6 +63,9 @@ try {
       await page.locator(`.world-postcard-${subject}`).click();
       await page.getByTestId('stage-select-screen').waitFor();
       await page.locator('[data-start="true"]').click();
+      await page.locator('.adventure-intro').waitFor();
+      assert.equal(await page.getByTestId(testId).count(), 0);
+      await page.getByRole('button', { name: '我準備好了，出發！' }).click();
       await page.getByTestId(testId).waitFor();
       await page.getByRole('button', { name: '暫停遊戲' }).click();
       await page.getByRole('dialog', { name: '暫停選單' }).waitFor();
@@ -68,6 +78,21 @@ try {
       await page.getByTestId('stage-select-screen').waitFor();
       await page.getByRole('button', { name: '返回廣場' }).click();
     }
+    // Practice can enter an otherwise locked boss; adventure must still reject it.
+    await page.getByRole('button', { name: '練習', exact: true }).first().click();
+    await page.locator('.world-postcard-science').click();
+    await page.getByTestId('stage-select-screen').waitFor();
+    await page.getByRole('button', { name: /第三章/ }).click();
+    await page.locator('[data-start="true"]').click();
+    await page.getByTestId('science-cooking-engine').waitFor();
+    await page.getByRole('button', { name: '暫停遊戲' }).click();
+    await page.getByRole('button', { name: '返回章節地圖' }).click();
+    await page.getByRole('button', { name: '返回廣場' }).click();
+    await page.getByRole('button', { name: '計時', exact: true }).click();
+    await page.locator('.world-postcard-science').click();
+    await page.getByRole('button', { name: /第三章/ }).click();
+    assert.equal(await page.locator('[data-start="true"]').isDisabled(), true);
+    await page.getByRole('button', { name: '返回廣場' }).click();
     // Changing grade in one local student must not leak to another student.
     await page.getByRole('button', { name: '6年級', exact: true }).click();
     await page.getByRole('button', { name: '開啟帳號與切換選單' }).click();
@@ -79,7 +104,7 @@ try {
     await page.getByTestId('lobby-hub').waitFor();
     assert.match(await page.locator('.world-postcard-chinese').innerText(), /6年級/);
     assert.deepEqual(errors, [], 'Uncaught browser errors');
-    results.push({ viewport, worldMaps: 4, enginesLaunched: 4, quickStart: true, pauseResumeRestartExit: true, localAccountIsolation: true, horizontalOverflow: false, uncaughtErrors: errors });
+    results.push({ viewport, worldMaps: 4, enginesLaunched: 4, preflightWithoutCombat: true, pauseHelp: true, practiceLockedBoss: true, adventureLocksPreserved: true, quickStart: true, pauseResumeRestartExit: true, localAccountIsolation: true, horizontalOverflow: false, uncaughtErrors: errors });
     await context.close();
   }
   await writeFile(`${output}/browser-results.json`, JSON.stringify(results, null, 2));

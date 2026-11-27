@@ -40,6 +40,7 @@ import { createInitialDailyQuests, todayKey } from './playerSave';
 import { resolveWrongRecordOnce } from './saveIntegrity';
 import { usePlayerSave } from './usePlayerSave';
 import { getStageConfig } from '../data/campaignMap';
+import { recordsCampaignProgress } from './gameExperience';
 export { createInitialPlayerSave } from './playerSave';
 
 function extractRevengeOptions(q: AnyQuestion): string[] {
@@ -291,7 +292,8 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
 
         const nextQuests = prev.dailyQuests.map((q) =>
-          q.id === 'q_clear_1' && result.victory ? { ...q, current: q.target } : q
+          q.id === 'q_clear_1' && result.victory && recordsCampaignProgress(result) && result.stageKey?.endsWith('_s10')
+            ? { ...q, current: q.target } : q
         );
 
         // Update 10-stage campaign progress & Stage 10 3-star Boss chest reward
@@ -302,7 +304,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         let bonusCrystals = 0;
         const nextWeapons = [...prev.weapons];
 
-        if (result.stageKey) {
+        if (result.stageKey && recordsCampaignProgress(result)) {
           const prevRec = nextStageProgress[result.stageKey];
           const bestStars = Math.max(prevRec?.stars ?? 0, result.victory ? result.stars : 0) as
             | 0
@@ -352,9 +354,9 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           score: result.score,
           durationSeconds: result.clearSeconds,
           victory: result.victory,
-          note: result.stageLabel
+          note: `${result.playMode === 'practice' ? '【練習】' : ''}${result.stageLabel
             ? `${result.stageLabel}｜${result.progressSummary}`
-            : result.progressSummary,
+            : result.progressSummary}`,
         };
 
         // Drop a random Lv.1 knowledge gem on victory!

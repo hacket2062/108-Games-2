@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowRight, Compass, Sparkles } from 'lucide-react';
 import type { CampaignStageConfig, PlayerSaveData } from '../types/game';
 import { getNextAdventure } from '../core/adventureGuide';
+import { effectivePlayMode } from '../core/gameExperience';
 import { WorldScene } from './WorldScene';
 
 export function AdventureBrief({ save, onStart }: {
@@ -19,7 +20,7 @@ export function AdventureBrief({ save, onStart }: {
         <button type="button" className="adventure-launch" onClick={() => onStart(stage)}>
           <Compass size={19} /> {replay ? '再挑戰一次' : '出發冒險'} <ArrowRight size={18} />
         </button>
-        <div className="adventure-destination">{stage.chapterTitle} · 第 {stage.stageNumber} 關<br />{stage.title} · {save.playMode === 'practice' ? '練習模式' : '冒險模式'}</div>
+        <div className="adventure-destination">{stage.chapterTitle} · 第 {stage.stageNumber} 關<br />{stage.title} · {effectivePlayMode(save) === 'practice' ? '練習模式' : '冒險模式'}</div>
       </div>
     </section>
   );

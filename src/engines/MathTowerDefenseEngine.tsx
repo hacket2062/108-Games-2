@@ -1229,6 +1229,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         accentBg="bg-gradient-to-r from-blue-700 via-indigo-800 to-amber-600"
       />
       <WorldPauseModal
+        subject="math"
         open={paused}
         worldName={
           stageConfig

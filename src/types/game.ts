@@ -322,6 +322,7 @@ export interface PlayerSaveData {
 }
 
 export interface WorldRunResult {
+  playMode?: PlayMode;
   subject: SubjectId;
   stageKey?: string;
   stageLabel?: string;

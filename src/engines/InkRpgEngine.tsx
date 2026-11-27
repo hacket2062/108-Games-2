@@ -1594,6 +1594,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         accentBg="bg-gradient-to-r from-amber-700 via-red-700 to-slate-900"
       />
       <WorldPauseModal
+        subject="chinese"
         open={paused}
         worldName={
           stageConfig

@@ -1279,6 +1279,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         accentBg="bg-gradient-to-r from-cyan-600 via-indigo-700 to-pink-600"
       />
       <WorldPauseModal
+        subject="english"
         open={paused}
         worldName={
           stageConfig
