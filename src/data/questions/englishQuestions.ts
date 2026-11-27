@@ -1,4 +1,4 @@
-import { EnglishQuestion, GradeLevel, SemesterId } from '../../types/game';
+import type { EnglishQuestion, GradeLevel, SemesterId } from '../../types/game';
 
 type DroneSpec = [string, GradeLevel, SemesterId, 'listen' | 'fill', string, string, string, string[], number, string, string, string];
 type SpellSpec = [string, GradeLevel, SemesterId, string, string, string[], string, string];

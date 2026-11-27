@@ -1,6 +1,8 @@
+import { useLazyRef } from '../core/useLazyRef';
+import { useSessionScheduler } from '../core/useSessionScheduler';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Pause, Sparkles, Cog, Zap, Volume2, Crosshair } from 'lucide-react';
-import {
+import type {
   EngineCommonProps,
   MathQuestion,
   WorldRunResult,
@@ -104,11 +106,12 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   wrongQuestionIds,
   onAnswerResult,
   onFinish,
+  onRestart,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const guardian = GUARDIANS[guardianId];
-  const qMgrRef = useRef(
+  const qMgrRef = useLazyRef(() =>
     new QuestionManager<MathQuestion>(getMathQuestions(grade, semester), {
       masteredQuestionIds,
       wrongQuestionIds,
@@ -123,6 +126,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   }, [bossWarning]);
 
   const [paused, setPaused] = useState(false);
+  const { schedule, cancelAll } = useSessionScheduler(paused);
   const [selectedTower, setSelectedTower] = useState<MathTowerKind>('raccoon');
   const [radialPicker, setRadialPicker] = useState<{
     lane: number;
@@ -236,6 +240,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     (victory: boolean) => {
       if (finishedRef.current) return;
       finishedRef.current = true;
+      cancelAll();
       document.body.dataset.state = 'gameover';
       if (victory) soundEngine.playVictoryFanfare();
       else soundEngine.playDefeatSting();
@@ -306,7 +311,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     const td = tdRef.current;
 
     attemptsRef.current += 1;
-    onAnswerResult(question, isCorrect);
+    onAnswerResult(question, isCorrect, Math.max(0, Date.now() - startedAt));
 
     if (isCorrect) {
       correctRef.current += 1;
@@ -320,6 +325,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       const tier = getSpeedGrade(elapsed, 13, playMode, guardianId);
       const calc = calculateCombatDamage({
         baseAttack: playerStats.baseAttack,
+        critChance: playerStats.critChance,
         skillMultiplier: 2.5,
         isCorrect: true,
         speedGrade: tier,
@@ -332,7 +338,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       if (tier === 'PERFECT') soundEngine.playPerfectBell();
       else soundEngine.playCorrectChord(nextCombo);
 
-      ultRef.current = Math.min(100, ultRef.current + getUltimateChargeGain(tier, nextCombo, guardianId));
+      ultRef.current = Math.min(100, ultRef.current + getUltimateChargeGain(tier, nextCombo, guardianId, playerStats.ultChargeBonus));
       setUltCharge(ultRef.current);
 
       if (purpose === 'harvest') {
@@ -416,7 +422,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     setUltCharge(0);
     soundEngine.playUltimateRoar();
     setCutIn(true);
-    setTimeout(() => {
+    schedule(() => {
       setCutIn(false);
       const td = tdRef.current;
       triggerGameFeel(td.feel, { hitstop: 0.08, shake: 0.9, flash: 0.35, flashColor: '#FDE047' });
@@ -1223,6 +1229,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         accentBg="bg-gradient-to-r from-blue-700 via-indigo-800 to-amber-600"
       />
       <WorldPauseModal
+        subject="math"
         open={paused}
         worldName={
           stageConfig
@@ -1230,7 +1237,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
             : '數學・數境建築王國'
         }
         onResume={() => setPaused(false)}
-        onRestart={onExit}
+        onRestart={onRestart}
         onExit={onExit}
       />
     </div>

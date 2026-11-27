@@ -1,7 +1,7 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAnalytics, isSupported, Analytics } from 'firebase/analytics';
+import type { Analytics } from 'firebase/analytics';
 import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer, Firestore } from 'firebase/firestore';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
 // Firebase Web App Configuration (Project: games-2-c3050)
 export const firebaseConfig = {
@@ -53,18 +53,9 @@ try {
     dbInstance = getFirestore(app);
     firebaseAvailable = true;
 
-    if (typeof window !== 'undefined') {
-      const initializedApp = app;
-      isSupported()
-        .then((supported) => {
-          if (supported) {
-            analyticsInstance = getAnalytics(initializedApp);
-          }
-        })
-        .catch(() => {
-          // Ignore analytics initialization errors in restricted browser environments
-        });
-    }
+    // Optional analytics remains off until a separate, explicit consent flow
+    // is implemented. Authentication and saves do not require Analytics.
+
   }
 } catch (err) {
   console.warn('Firebase initialization skipped, using local mode:', err);
@@ -85,37 +76,14 @@ export function handleFirestoreError(
   path: string | null
 ): never {
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: authInstance?.currentUser?.uid ?? null,
-      email: authInstance?.currentUser?.email ?? null,
-      emailVerified: authInstance?.currentUser?.emailVerified ?? null,
-      isAnonymous: authInstance?.currentUser?.isAnonymous ?? null,
-      tenantId: authInstance?.currentUser?.tenantId ?? null,
-      providerInfo:
-        authInstance?.currentUser?.providerData?.map((provider) => ({
-          providerId: provider.providerId,
-          email: provider.email,
-        })) || [],
-    },
+    error: typeof (error as { code?: unknown } | null)?.code === 'string'
+      ? String((error as { code: string }).code) : 'firestore-operation-failed',
+    authInfo: {},
     operationType,
-    path,
+    // Do not put student UIDs or e-mail into logs, even on denied requests.
+    path: path ? path.split('/').map((part, index) => index % 2 === 1 ? '[id]' : part).join('/') : null,
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
 
-async function testConnection() {
-  if (!dbInstance) return;
-  try {
-    await getDocFromServer(doc(dbInstance, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
-  }
-}
-
-if (typeof window !== 'undefined') {
-  testConnection();
-}

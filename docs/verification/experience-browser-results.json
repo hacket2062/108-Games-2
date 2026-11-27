@@ -1,0 +1,70 @@
+[
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "worldMaps": 4,
+    "enginesLaunched": 4,
+    "preflightWithoutCombat": true,
+    "pauseHelp": true,
+    "practiceLockedBoss": true,
+    "adventureLocksPreserved": true,
+    "quickStart": true,
+    "pauseResumeRestartExit": true,
+    "localAccountIsolation": true,
+    "horizontalOverflow": false,
+    "uncaughtErrors": []
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "worldMaps": 4,
+    "enginesLaunched": 4,
+    "preflightWithoutCombat": true,
+    "pauseHelp": true,
+    "practiceLockedBoss": true,
+    "adventureLocksPreserved": true,
+    "quickStart": true,
+    "pauseResumeRestartExit": true,
+    "localAccountIsolation": true,
+    "horizontalOverflow": false,
+    "uncaughtErrors": []
+  },
+  {
+    "viewport": {
+      "width": 320,
+      "height": 740
+    },
+    "worldMaps": 4,
+    "enginesLaunched": 4,
+    "preflightWithoutCombat": true,
+    "pauseHelp": true,
+    "practiceLockedBoss": true,
+    "adventureLocksPreserved": true,
+    "quickStart": true,
+    "pauseResumeRestartExit": true,
+    "localAccountIsolation": true,
+    "horizontalOverflow": false,
+    "uncaughtErrors": []
+  },
+  {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "worldMaps": 4,
+    "enginesLaunched": 4,
+    "preflightWithoutCombat": true,
+    "pauseHelp": true,
+    "practiceLockedBoss": true,
+    "adventureLocksPreserved": true,
+    "quickStart": true,
+    "pauseResumeRestartExit": true,
+    "localAccountIsolation": true,
+    "horizontalOverflow": false,
+    "uncaughtErrors": []
+  }
+]

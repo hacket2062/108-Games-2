@@ -1,6 +1,8 @@
+import { useLazyRef } from '../core/useLazyRef';
+import { useSessionScheduler } from '../core/useSessionScheduler';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Volume2, Pause, Sparkles, Rocket, Crosshair } from 'lucide-react';
-import {
+import type {
   EnglishDronePayload,
   EnglishQuestion,
   EnglishSpellPayload,
@@ -94,12 +96,13 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   wrongQuestionIds,
   onAnswerResult,
   onFinish,
+  onRestart,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const guardian = GUARDIANS[guardianId];
 
-  const droneMgrRef = useRef(
+  const droneMgrRef = useLazyRef(() =>
     new QuestionManager<EnglishQuestion>(
       [
         ...getEnglishQuestions(grade, semester, 'listen'),
@@ -112,7 +115,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       }
     )
   );
-  const spellMgrRef = useRef(
+  const spellMgrRef = useLazyRef(() =>
     new QuestionManager<EnglishQuestion>(getEnglishQuestions(grade, semester, 'spell'), {
       masteredQuestionIds,
       wrongQuestionIds,
@@ -127,6 +130,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   }, [bossWarning]);
 
   const [paused, setPaused] = useState(false);
+  const { schedule, cancelAll } = useSessionScheduler(paused);
   const [shipVariant, setShipVariant] = useState<'blaster' | 'falcon'>('blaster');
   const [hp, setHp] = useState(playerStats.maxHp);
   const [score, setScore] = useState(0);
@@ -237,6 +241,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
     (victory: boolean) => {
       if (finishedRef.current) return;
       finishedRef.current = true;
+      cancelAll();
       document.body.dataset.state = 'gameover';
       if (victory) soundEngine.playVictoryFanfare();
       else soundEngine.playDefeatSting();
@@ -367,8 +372,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
 
   // Boot wave 1 on mount
   useEffect(() => {
-    const t = setTimeout(() => spawnDroneWave(0), 200);
-    return () => clearTimeout(t);
+    schedule(() => spawnDroneWave(0), 200);
+    return () => cancelAll();
   }, [spawnDroneWave]);
 
   const triggerNovaBurst = () => {
@@ -377,7 +382,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
     setUltCharge(0);
     soundEngine.playUltimateRoar();
     setCutIn(true);
-    setTimeout(() => {
+    schedule(() => {
       setCutIn(false);
       const s = simRef.current;
       s.novaBeamTimer = 1.1;
@@ -398,7 +403,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           setScore(scoreRef.current);
           s.floats.spawn(rightDrone.x, rightDrone.y, 'NOVA 擊破!', 'perfect');
           s.drones = [];
-          setTimeout(() => spawnDroneWave(s.waveIndex + 1), 650);
+          schedule(() => spawnDroneWave(s.waveIndex + 1), 650);
         }
       } else if (s.spellQuestion) {
         s.bossHp -= 1;
@@ -406,8 +411,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         scoreRef.current += 450;
         setScore(scoreRef.current);
         s.floats.spawn(s.bossX, 150, 'NOVA 重創母艦!', 'perfect');
-        if (s.bossHp <= 0) setTimeout(() => concludeRun(true), 650);
-        else setTimeout(() => spawnBossSpellingRound(), 750);
+        if (s.bossHp <= 0) schedule(() => concludeRun(true), 650);
+        else schedule(() => spawnBossSpellingRound(), 750);
       }
     }, 1150);
   };
@@ -491,7 +496,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       if (!q) return;
       attemptsRef.current += 1;
       correctRef.current += 1;
-      onAnswerResult(q, true);
+      onAnswerResult(q, true, Math.max(0, Date.now() - s.waveStartTime));
       tagsRef.current.add(q.knowledgeTag);
 
       const nextCombo = comboRef.current + 1;
@@ -503,6 +508,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       const gradeTier = getSpeedGrade(elapsed, 13, playMode, guardianId);
       const calc = calculateCombatDamage({
         baseAttack: playerStats.baseAttack,
+        critChance: playerStats.critChance,
         skillMultiplier: 2.2,
         isCorrect: true,
         speedGrade: gradeTier,
@@ -514,7 +520,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
 
       scoreRef.current += calc.damage * 4 + (gradeTier === 'PERFECT' ? 150 : 75);
       setScore(scoreRef.current);
-      ultRef.current = Math.min(100, ultRef.current + getUltimateChargeGain(gradeTier, nextCombo, guardianId));
+      ultRef.current = Math.min(100, ultRef.current + getUltimateChargeGain(gradeTier, nextCombo, guardianId, playerStats.ultChargeBonus));
       setUltCharge(ultRef.current);
 
       soundEngine.playExplosion();
@@ -549,7 +555,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
 
       s.drones = [];
       s.enemyBullets = [];
-      setTimeout(() => {
+      schedule(() => {
         if (!finishedRef.current) spawnDroneWave(s.waveIndex + 1);
       }, 720);
     };
@@ -559,7 +565,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       const q = s.currentQuestion;
       if (!q) return;
       attemptsRef.current += 1;
-      onAnswerResult(q, false);
+      onAnswerResult(q, false, Math.max(0, Date.now() - s.waveStartTime));
       comboRef.current = 0;
       setCombo(0);
       soundEngine.playWrongBuzz();
@@ -624,9 +630,9 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           s.letterOrbs = [];
 
           if (s.bossHp <= 0) {
-            setTimeout(() => concludeRun(true), 850);
+            schedule(() => concludeRun(true), 850);
           } else {
-            setTimeout(() => {
+            schedule(() => {
               if (!finishedRef.current) spawnBossSpellingRound();
             }, 950);
           }
@@ -1273,6 +1279,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         accentBg="bg-gradient-to-r from-cyan-600 via-indigo-700 to-pink-600"
       />
       <WorldPauseModal
+        subject="english"
         open={paused}
         worldName={
           stageConfig
@@ -1280,7 +1287,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
             : '英語文・星際機甲戰線 Word Galaxy'
         }
         onResume={() => setPaused(false)}
-        onRestart={onExit}
+        onRestart={onRestart}
         onExit={onExit}
       />
     </div>

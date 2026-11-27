@@ -9,7 +9,7 @@ import {
   Swords,
   KeyRound,
 } from 'lucide-react';
-import { SubjectId } from '../types/game';
+import type { SubjectId } from '../types/game';
 import { useGameState } from '../core/GameStateContext';
 import { useAuth } from '../auth/AuthContext';
 import { getSubjectAccuracyPercent } from '../core/combatMath';
@@ -33,24 +33,22 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ onExit }) => {
   const { save, updateParentSettings, buildLearningCsv } = useGameState();
 
   const [unlocked, setUnlocked] = useState(false);
-  const [mathInput, setMathInput] = useState('');
   const [pinInput, setPinInput] = useState('');
   const [lockError, setLockError] = useState('');
   const [newPin, setNewPin] = useState(save.parentSettings.pinCode);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
-  // Arithmetic challenge (47 + 28 = 75) OR 4-digit Parent PIN (default 1234)
+  // Local convenience lock; this is not a separate cloud parent identity.
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
-    const mathOk = mathInput.trim() === '75';
     const pinOk = pinInput.trim() === save.parentSettings.pinCode;
-    if (mathOk || pinOk) {
+    if (pinOk) {
       soundEngine.playCorrectChord(2);
       setUnlocked(true);
       setLockError('');
     } else {
       soundEngine.playWrongBuzz();
-      setLockError('請輸入正確算術答案（47 + 28）或 4 位數家長 PIN 碼！');
+      setLockError('請輸入正確的 4 位數家長 PIN 碼。');
     }
   };
 
@@ -170,28 +168,16 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ onExit }) => {
           >
             <div className="text-center">
               <Lock className="w-11 h-11 text-sky-300 mx-auto" />
-              <h2 className="text-xl font-black text-white mt-2">家長雙重安全鎖</h2>
+              <h2 className="text-xl font-black text-white mt-2">家長本機 PIN 鎖</h2>
               <p className="text-xs text-slate-400 mt-1">
-                請擇一完成「算術驗證」或輸入「4 位數家長 PIN 碼（預設 1234）」
+                請輸入家長 PIN（初始 1234）。這是同裝置便利鎖，不能替代獨立家長帳號驗證。
               </p>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-amber-300 mb-1">
-                  方式一・算術驗證：47 + 28 = ?
-                </label>
-                <input
-                  type="number"
-                  value={mathInput}
-                  onChange={(e) => setMathInput(e.target.value)}
-                  placeholder="輸入計算結果"
-                  className="w-full min-h-[48px] rounded-xl bg-slate-950 border-2 border-slate-700 px-4 text-white font-mono-num text-base font-black"
-                />
-              </div>
-              <div>
                 <label className="block text-xs font-bold text-sky-300 mb-1">
-                  方式二・家長 4 位數 PIN 碼
+                  家長 4 位數 PIN 碼
                 </label>
                 <input
                   type="password"

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
-import { AppUserAccount } from '../types/game';
+import type { AppUserAccount } from '../types/game';
 import { auth, googleProvider, isFirebaseReady } from '../core/firebase';
 
 const LOCAL_ACCOUNTS_KEY = 'zhiguang_108_local_accounts_v2';
@@ -107,13 +107,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setAuthNotice(null);
       await signInWithPopup(auth, googleProvider);
-      setAuthNotice('Google 帳號登入成功！雲端存檔與即時線上對戰已啟用。');
+      setAuthNotice('Google 帳號登入成功，正在確認雲端存檔。真人對戰需待安全升級完成。');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('popup-closed-by-user')) {
         setAuthNotice('已取消 Google 登入視窗，您可繼續使用本機帳號遊玩。');
       } else {
-        setAuthNotice('瀏覽器阻擋彈窗或網路暫時中斷，已自動切換為本機帳號無縫遊玩。');
+        setAuthNotice('Google 登入未完成。請檢查彈出視窗與連線；目前學習檔案仍保留。');
       }
     }
   }, []);
@@ -124,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await signOut(auth);
         setAuthNotice('已登出 Google 帳號，切換回本機學習檔案。');
       } catch {
-        setAuthNotice('已切換回本機帳號。');
+        setAuthNotice('登出未成功，目前帳號未變更。請檢查連線後再試。');
       }
     }
   }, [firebaseUser]);

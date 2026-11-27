@@ -1,0 +1,8 @@
+{
+  "noAttemptsNot100Percent": true,
+  "actualAccuracy": true,
+  "reviewAction": true,
+  "practiceAction": true,
+  "practiceCampaignAndChestPreserved": true,
+  "uncaughtErrors": []
+}

@@ -1,4 +1,4 @@
-import { ChineseQuestion, GradeLevel, SemesterId } from '../../types/game';
+import type { ChineseQuestion, GradeLevel, SemesterId } from '../../types/game';
 
 type SlashSpec = [string, GradeLevel, SemesterId, string, string[], number, string, string, string];
 type RadicalSpec = [string, GradeLevel, SemesterId, string, string, string, string[], string, string, string, string];

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Star, Coins, Sparkles, RotateCcw, Home, Award, Gift, ArrowRight } from 'lucide-react';
-import { WorldRunResult } from '../types/game';
+import { Star, Coins, Sparkles, RotateCcw, Home, Award, Gift, ArrowRight, BookOpen } from 'lucide-react';
+import { getLearningFeedback } from '../core/gameExperience';
+import type { WorldRunResult } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
 
 interface BattleEndModalProps {
@@ -9,6 +10,9 @@ interface BattleEndModalProps {
   onRetry: () => void;
   onNextStage?: () => void;
   onReturnLobby: () => void;
+  onReviewMistakes?: () => void;
+  onTryPractice?: () => void;
+  wrongRecordCount?: number;
 }
 
 const SUBJECT_NAMES: Record<WorldRunResult['subject'], string> = {
@@ -24,6 +28,9 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
   onRetry,
   onNextStage,
   onReturnLobby,
+  onReviewMistakes,
+  onTryPractice,
+  wrongRecordCount = 0,
 }) => {
   const [litStars, setLitStars] = useState(0);
   const [chestOpened, setChestOpened] = useState(false);
@@ -64,10 +71,7 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
   }, [result]);
 
   if (!result) return null;
-  const accuracy =
-    result.totalAttempts > 0
-      ? Math.round((result.correctCount / result.totalAttempts) * 100)
-      : 100;
+  const { accuracy, message } = getLearningFeedback(result);
 
   return (
     <div
@@ -97,9 +101,10 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
               result.victory ? 'text-amber-300' : 'text-rose-400'
             }`}
           >
-            {result.victory ? '關卡大勝利！' : '差一點就通關了！'}
+            {result.victory ? '關卡大勝利！' : '帶著新線索，再試一次！'}
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 mt-1">{result.progressSummary}</p>
+          {result.playMode === 'practice' && <p className="text-xs text-cyan-200 mt-2">自由練習完成 · 冒險關卡與寶箱紀錄保持原樣</p>}
 
           {/* Animated Treasure Chest Reveal */}
           {result.victory && (
@@ -162,7 +167,7 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
           <div className="text-center border-x border-slate-800">
             <div className="text-[11px] text-slate-400">答題正確率</div>
             <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono-num">
-              {accuracy}%
+              {accuracy === null ? '尚未作答' : `${accuracy}%`}
             </div>
           </div>
           <div className="text-center">
@@ -203,12 +208,15 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
 
         {result.knowledgeTags.length > 0 && (
           <div className="mt-3 text-center text-xs text-slate-300">
-            <span className="text-slate-400">解鎖知識卡：</span>
+            <span className="text-slate-400">本次接觸的知識：</span>
             {result.knowledgeTags.slice(0, 4).join(' · ')}
           </div>
         )}
 
+        <div className="learning-next-step" role="status"><strong>守護者的小提醒</strong><p>{message}</p><p>本次作答 {result.totalAttempts} 次 · 答對 {result.correctCount} 次</p></div>
         <div className="mt-5 flex flex-col gap-2.5">
+          {onReviewMistakes && wrongRecordCount > 0 && <button type="button" className="learning-review-button" onClick={onReviewMistakes}><BookOpen size={17} /> 打開我的錯題本（{wrongRecordCount} 題）</button>}
+          {!result.victory && result.playMode !== 'practice' && onTryPractice && <button type="button" className="learning-review-button" onClick={onTryPractice}>先用練習模式熟悉這一關</button>}
           {onNextStage && (
             <button
               type="button"

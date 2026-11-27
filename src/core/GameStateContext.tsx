@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import {
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import type {
   AnyQuestion,
   AscensionPath,
   BattleItemId,
@@ -23,7 +22,6 @@ import {
   WrongRecord,
 } from '../types/game';
 import { useAuth } from '../auth/AuthContext';
-import { db, handleFirestoreError, isFirebaseReady, OperationType } from './firebase';
 import { applyXpGain, computeSaveCombatStats } from './combatMath';
 import {
   ASCENSION_PATHS,
@@ -38,175 +36,12 @@ import {
 import { GUARDIAN_SHOP_COSTS } from '../data/spiritsAndTitles';
 import { soundEngine } from '../audio/soundEngine';
 
-const SAVE_PREFIX = 'zhiguang_108_save_v2_';
-
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function createInitialDailyQuests(): DailyQuestProgress[] {
-  return [
-    {
-      id: 'q_answer_5',
-      title: '答對 5 道 108 課綱題目',
-      target: 5,
-      current: 0,
-      rewardCoins: 120,
-      rewardCrystals: 3,
-      claimed: false,
-    },
-    {
-      id: 'q_clear_1',
-      title: '通關任一科目世界 Boss',
-      target: 1,
-      current: 0,
-      rewardCoins: 160,
-      rewardCrystals: 4,
-      claimed: false,
-    },
-    {
-      id: 'q_pvp_1',
-      title: '完成 1 場線上知識競技對戰',
-      target: 1,
-      current: 0,
-      rewardCoins: 180,
-      rewardCrystals: 5,
-      claimed: false,
-    },
-  ];
-}
-
-export function createInitialPlayerSave(): PlayerSaveData {
-  const starterWeapon = createStarterWeapon();
-  return {
-    level: 1,
-    xp: 0,
-    coins: 520,
-    crystals: 20,
-    bestStreak: 0,
-    selectedGuardian: 'qilin',
-    unlockedGuardians: ['qilin', 'stardragon', 'griffin', 'deer'],
-    guardianBonds: {
-      qilin: 2,
-      stardragon: 1,
-      griffin: 1,
-      deer: 1,
-    },
-    equipment: {
-      weapon: 1,
-      helm: 1,
-      armor: 1,
-      gloves: 1,
-      boots: 1,
-      amulet: 1,
-    },
-    weapons: [
-      starterWeapon,
-      {
-        uid: 'wp-starter-02',
-        templateId: 'wp_star_lance',
-        name: '星輝脈衝長槍',
-        baseAttack: 32,
-        enhanceLevel: 5,
-        ascensionPath: 'base',
-        rarity: 'epic',
-        socketedGems: [null, null, null],
-      },
-    ],
-    equippedWeaponUid: 'wp-starter-02',
-    gemBag: [
-      { uid: 'g-seed-1', element: 'ink_ruby', level: 1 },
-      { uid: 'g-seed-2', element: 'ink_ruby', level: 1 },
-      { uid: 'g-seed-3', element: 'ink_ruby', level: 1 },
-      { uid: 'g-seed-4', element: 'star_sapphire', level: 1 },
-      { uid: 'g-seed-5', element: 'gear_topaz', level: 1 },
-      { uid: 'g-seed-6', element: 'leaf_emerald', level: 1 },
-    ],
-    items: {
-      wisdom_potion: 2,
-      combo_charm: 2,
-      shield_scroll: 2,
-      time_hourglass: 2,
-      forge_guard: 2,
-    },
-    selectedTitle: 'title_novice',
-    unlockedTitles: ['title_novice'],
-    grade: 4,
-    semester: 'upper',
-    playMode: 'adventure',
-    muted: false,
-    subjectStats: {
-      chinese: { answered: 0, correct: 0, bestScore: 0, starsEarned: 0, clears: 0 },
-      english: { answered: 0, correct: 0, bestScore: 0, starsEarned: 0, clears: 0 },
-      math: { answered: 0, correct: 0, bestScore: 0, starsEarned: 0, clears: 0 },
-      science: { answered: 0, correct: 0, bestScore: 0, starsEarned: 0, clears: 0 },
-    },
-    wrongRecords: [],
-    unlockedCards: [],
-    trajectory: [],
-    dailyQuests: createInitialDailyQuests(),
-    dailyPlaySeconds: 0,
-    lastPlayDate: todayKey(),
-    pvp: {
-      rating: 1000,
-      wins: 0,
-      losses: 0,
-      winStreak: 0,
-      bestWinStreak: 0,
-      honorTokens: 60,
-    },
-    parentSettings: {
-      pinCode: '1234',
-      dailyLimitMinutes: 45,
-      pvpEnabled: true,
-      forcePracticeMode: false,
-    },
-    stageProgress: {},
-    masteredQuestionIds: [],
-    knowledgeMastery: {},
-    rapidGuessCount: 0,
-  };
-}
-
-function hydrateSave(raw: Partial<PlayerSaveData> | null | undefined): PlayerSaveData {
-  const base = createInitialPlayerSave();
-  if (!raw) return base;
-  const merged: PlayerSaveData = {
-    ...base,
-    ...raw,
-    guardianBonds: { ...base.guardianBonds, ...(raw.guardianBonds || {}) },
-    equipment: { ...base.equipment, ...(raw.equipment || {}) },
-    items: { ...base.items, ...(raw.items || {}) },
-    subjectStats: {
-      chinese: { ...base.subjectStats.chinese, ...(raw.subjectStats?.chinese || {}) },
-      english: { ...base.subjectStats.english, ...(raw.subjectStats?.english || {}) },
-      math: { ...base.subjectStats.math, ...(raw.subjectStats?.math || {}) },
-      science: { ...base.subjectStats.science, ...(raw.subjectStats?.science || {}) },
-    },
-    pvp: { ...base.pvp, ...(raw.pvp || {}) },
-    parentSettings: { ...base.parentSettings, ...(raw.parentSettings || {}) },
-    weapons: Array.isArray(raw.weapons) && raw.weapons.length > 0 ? raw.weapons : base.weapons,
-    gemBag: Array.isArray(raw.gemBag) ? raw.gemBag : base.gemBag,
-    wrongRecords: Array.isArray(raw.wrongRecords) ? raw.wrongRecords : [],
-    trajectory: Array.isArray(raw.trajectory) ? raw.trajectory : [],
-    dailyQuests:
-      Array.isArray(raw.dailyQuests) && raw.dailyQuests.length > 0
-        ? raw.dailyQuests
-        : base.dailyQuests,
-    stageProgress: raw.stageProgress && typeof raw.stageProgress === 'object' ? raw.stageProgress : {},
-    masteredQuestionIds: Array.isArray(raw.masteredQuestionIds) ? raw.masteredQuestionIds : [],
-    knowledgeMastery:
-      raw.knowledgeMastery && typeof raw.knowledgeMastery === 'object' ? raw.knowledgeMastery : {},
-    rapidGuessCount: typeof raw.rapidGuessCount === 'number' ? raw.rapidGuessCount : 0,
-  };
-  if (merged.lastPlayDate !== todayKey()) {
-    merged.lastPlayDate = todayKey();
-    merged.dailyPlaySeconds = 0;
-    merged.dailyQuests = createInitialDailyQuests();
-  }
-  return merged;
-}
+import { createInitialDailyQuests, todayKey } from './playerSave';
+import { resolveWrongRecordOnce } from './saveIntegrity';
+import { usePlayerSave } from './usePlayerSave';
+import { getStageConfig } from '../data/campaignMap';
+import { recordsCampaignProgress } from './gameExperience';
+export { createInitialPlayerSave } from './playerSave';
 
 function extractRevengeOptions(q: AnyQuestion): string[] {
   if (q.subject === 'chinese') {
@@ -238,6 +73,9 @@ export interface ActionFeedback {
 interface GameStateContextValue {
   save: PlayerSaveData;
   combatStats: EffectiveCombatStats;
+  saveNotice: string;
+  cloudSyncEnabled: boolean;
+  exportSaveBackup: () => void;
   equippedWeapon: WeaponInstance;
   isRestReminderVisible: boolean;
   dismissRestReminder: () => void;
@@ -278,151 +116,36 @@ const GameStateContext = createContext<GameStateContextValue | null>(null);
 
 export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [save, setSave] = useState<PlayerSaveData>(() => {
-    try {
-      const raw = localStorage.getItem(SAVE_PREFIX + user.uid);
-      return hydrateSave(raw ? (JSON.parse(raw) as Partial<PlayerSaveData>) : null);
-    } catch {
-      return createInitialPlayerSave();
-    }
-  });
+  const { save, store, ready, notice, choice, accept, exportBackup, cloudEnabled } = usePlayerSave(user);
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
+  // Execute domain transitions once, synchronously; React only subscribes.
+  const setSave = useCallback((transition: (previous: PlayerSaveData) => PlayerSaveData) => {
+    if (readyRef.current) store.update(transition);
+  }, [store]);
   const [restDismissed, setRestDismissed] = useState(false);
-
-  // Reload per-account save whenever user switches account (Google or local)
+  useEffect(() => { soundEngine.setMuted(save.muted); }, [save.muted]);
+  useEffect(() => { setRestDismissed(false); }, [save.lastPlayDate]);
   useEffect(() => {
-    let cancelled = false;
-    const loadAccountSave = async () => {
-      let localLoaded = createInitialPlayerSave();
-      try {
-        const raw = localStorage.getItem(SAVE_PREFIX + user.uid);
-        if (raw) localLoaded = hydrateSave(JSON.parse(raw) as Partial<PlayerSaveData>);
-      } catch {
-        // fallback to default
-      }
-      if (!cancelled) {
-        setSave(localLoaded);
-        soundEngine.setMuted(localLoaded.muted);
-      }
-
-      // If authenticated via verified Google account, sync from Firestore /users/{uid}
-      if (user.provider === 'google' && user.emailVerified && isFirebaseReady() && db) {
-        const path = `users/${user.uid}`;
-        try {
-          const snap = await getDoc(doc(db, 'users', user.uid));
-          if (!cancelled && snap.exists()) {
-            const data = snap.data();
-            if (data && data.saveData && typeof data.saveData === 'object') {
-              const cloudSave = hydrateSave(data.saveData as Partial<PlayerSaveData>);
-              setSave(cloudSave);
-              soundEngine.setMuted(cloudSave.muted);
-              try {
-                localStorage.setItem(SAVE_PREFIX + user.uid, JSON.stringify(cloudSave));
-              } catch {
-                // ignore
-              }
-            }
-          }
-        } catch (err) {
-          // Do not crash offline preview, log structured error via helper
-          try {
-            handleFirestoreError(err, OperationType.GET, path);
-          } catch {
-            // gracefully keep local save
-          }
-        }
-      }
-    };
-    loadAccountSave();
-    return () => {
-      cancelled = true;
-    };
-  }, [user.uid, user.provider, user.emailVerified]);
-
-  // Persist save to localStorage + debounced Firestore cloud sync for Google users
-  useEffect(() => {
-    try {
-      localStorage.setItem(SAVE_PREFIX + user.uid, JSON.stringify(save));
-    } catch {
-      // ignore
-    }
-    soundEngine.setMuted(save.muted);
-
-    if (user.provider !== 'google' || !user.emailVerified || !isFirebaseReady() || !db) return;
-    const firestoreDb = db;
-    const timer = window.setTimeout(async () => {
-      const path = `users/${user.uid}`;
-      try {
-        const ref = doc(firestoreDb, 'users', user.uid);
-        const existingSnap = await getDoc(ref);
-        const compactSaveData = {
-          level: save.level,
-          xp: save.xp,
-          coins: save.coins,
-          crystals: save.crystals,
-          bestStreak: save.bestStreak,
-          selectedGuardian: save.selectedGuardian,
-          guardianBonds: save.guardianBonds,
-          equipment: save.equipment,
-          weapons: save.weapons.slice(0, 12),
-          equippedWeaponUid: save.equippedWeaponUid,
-          gemBag: save.gemBag.slice(0, 40),
-          items: save.items,
-          selectedTitle: save.selectedTitle,
-          unlockedTitles: save.unlockedTitles.slice(0, 12),
-          grade: save.grade,
-          semester: save.semester,
-          playMode: save.playMode,
-          muted: save.muted,
-          subjectStats: save.subjectStats,
-          wrongRecords: save.wrongRecords.slice(0, 30),
-          trajectory: save.trajectory.slice(0, 25),
-          pvp: save.pvp,
-          parentSettings: save.parentSettings,
-          stageProgress: save.stageProgress ?? {},
-          masteredQuestionIds: (save.masteredQuestionIds ?? []).slice(-180),
-          knowledgeMastery: save.knowledgeMastery ?? {},
-          rapidGuessCount: save.rapidGuessCount ?? 0,
+    let previousActive = false;
+    let pendingSeconds = 0;
+    const timer = window.setInterval(() => {
+      if (!readyRef.current) return;
+      const active = document.visibilityState === 'visible' && document.body.dataset.state === 'playing';
+      if (active && previousActive) pendingSeconds++;
+      const elapsed = pendingSeconds >= 10 || !active ? pendingSeconds : 0;
+      if (elapsed > 0) pendingSeconds = 0;
+      store.update((previous) => {
+        const day = todayKey();
+        if (previous.lastPlayDate !== day) return {
+          ...previous, lastPlayDate: day, dailyPlaySeconds: 0, dailyQuests: createInitialDailyQuests(),
         };
-        const payload = {
-          uid: user.uid,
-          displayName: user.displayName.slice(0, 60) || '智光守護者',
-          level: Math.min(200, Math.max(1, save.level)),
-          xp: Math.max(0, save.xp),
-          coins: Math.max(0, save.coins),
-          crystals: Math.max(0, save.crystals),
-          honorTokens: Math.max(0, save.pvp.honorTokens),
-          pvpRating: Math.min(9999, Math.max(0, save.pvp.rating)),
-          pvpWins: Math.max(0, save.pvp.wins),
-          pvpLosses: Math.max(0, save.pvp.losses),
-          grade: save.grade,
-          semester: save.semester,
-          selectedGuardian: save.selectedGuardian,
-          saveData: compactSaveData,
-          createdAt: existingSnap.exists() ? existingSnap.data().createdAt : serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        };
-        await setDoc(ref, payload);
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.WRITE, path);
-        } catch {
-          // non-blocking sync fallback
-        }
-      }
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [save, user.displayName, user.emailVerified, user.provider, user.uid]);
-
-  // Anti-addiction healthy play timer (increments every 10s)
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setSave((prev) => ({
-        ...prev,
-        dailyPlaySeconds: prev.dailyPlaySeconds + 10,
-      }));
-    }, 10000);
-    return () => clearInterval(id);
-  }, []);
+        return elapsed > 0 ? { ...previous, dailyPlaySeconds: previous.dailyPlaySeconds + elapsed } : previous;
+      });
+      previousActive = active;
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [store]);
 
   const equippedWeapon = useMemo(
     () => save.weapons.find((w) => w.uid === save.equippedWeaponUid) ?? save.weapons[0] ?? createStarterWeapon(),
@@ -534,11 +257,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
 
   const resolveWrongRecord = useCallback((questionId: string) => {
-    setSave((prev) => ({
-      ...prev,
-      wrongRecords: prev.wrongRecords.filter((w) => w.questionId !== questionId),
-      coins: prev.coins + 25,
-    }));
+    setSave((prev) => resolveWrongRecordOnce(prev, questionId));
   }, []);
 
   const applyWorldResult = useCallback(
@@ -573,7 +292,8 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
 
         const nextQuests = prev.dailyQuests.map((q) =>
-          q.id === 'q_clear_1' && result.victory ? { ...q, current: q.target } : q
+          q.id === 'q_clear_1' && result.victory && recordsCampaignProgress(result) && result.stageKey?.endsWith('_s10')
+            ? { ...q, current: q.target } : q
         );
 
         // Update 10-stage campaign progress & Stage 10 3-star Boss chest reward
@@ -584,7 +304,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         let bonusCrystals = 0;
         const nextWeapons = [...prev.weapons];
 
-        if (result.stageKey) {
+        if (result.stageKey && recordsCampaignProgress(result)) {
           const prevRec = nextStageProgress[result.stageKey];
           const bestStars = Math.max(prevRec?.stars ?? 0, result.victory ? result.stars : 0) as
             | 0
@@ -596,12 +316,14 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             isBossStage && result.victory && result.stars >= 3 && !prevRec?.chestClaimed;
 
           if (shouldDropChest) {
-            bonusCoins += 260;
-            bonusCrystals += 8;
-            const tpl = WEAPON_CATALOG[WEAPON_CATALOG.length - 1];
+            const parts = /^(chinese|english|math|science)_g([3-6])_c([1-3])_s10$/.exec(result.stageKey);
+            const reward = parts ? getStageConfig(parts[1] as SubjectId, Number(parts[2]) as GradeLevel, Number(parts[3]) as 1 | 2 | 3, 10).starChestReward : undefined;
+            const tpl = WEAPON_CATALOG.find((weapon) => weapon.templateId === reward?.weaponTemplateId);
+            bonusCoins = reward?.coins ?? 0;
+            bonusCrystals = reward?.crystals ?? 0;
             if (tpl) {
               nextWeapons.push({
-                uid: `wp-boss-${Date.now().toString(36)}`,
+                uid: `wp-boss-${crypto.randomUUID()}`,
                 templateId: tpl.templateId,
                 name: `${tpl.name}・星辰`,
                 baseAttack: tpl.baseAttack + 4,
@@ -611,7 +333,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 socketedGems: [null, null, null],
               });
             }
-            chestDropped = '三星大魔王寶箱：+260 金幣、+8 晶石與限定傳說神兵！';
+            chestDropped = `三星大魔王寶箱：+${bonusCoins} 金幣、+${bonusCrystals} 晶石${tpl ? `與${tpl.name}` : ''}！`;
           }
 
           nextStageProgress[result.stageKey] = {
@@ -632,9 +354,9 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           score: result.score,
           durationSeconds: result.clearSeconds,
           victory: result.victory,
-          note: result.stageLabel
+          note: `${result.playMode === 'practice' ? '【練習】' : ''}${result.stageLabel
             ? `${result.stageLabel}｜${result.progressSummary}`
-            : result.progressSummary,
+            : result.progressSummary}`,
         };
 
         // Drop a random Lv.1 knowledge gem on victory!
@@ -675,18 +397,20 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
 
   const applyPvPResult = useCallback((result: PvPRunResult): { leveledUp: boolean } => {
+    // A client result must never certify a real online match.
+    if (result.isOnlineRealPlayer) return { leveledUp: false };
     let didLevel = false;
     setSave((prev) => {
       const xpOutcome = applyXpGain(prev.level, prev.xp, result.xpEarned);
       didLevel = xpOutcome.leveledUp;
       const nextWinStreak = result.victory ? prev.pvp.winStreak + 1 : 0;
-      const nextRating = Math.max(600, prev.pvp.rating + result.ratingDelta);
+      const nextRating = prev.pvp.rating;
       const nextTitles = new Set(prev.unlockedTitles);
-      if (result.victory) nextTitles.add('title_arena_winner');
+      // AI practice does not grant competitive titles.
       if (nextRating >= 1500) nextTitles.add('title_mythic_grandmaster');
 
       const nextQuests = prev.dailyQuests.map((q) =>
-        q.id === 'q_pvp_1' ? { ...q, current: q.target } : q
+        q
       );
 
       const newEntry = {
@@ -699,7 +423,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         score: result.myScore,
         durationSeconds: result.durationSeconds,
         victory: result.victory,
-        note: `競技場對戰 ${result.opponentName}（${result.victory ? '勝利' : '惜敗'}，積分 ${result.ratingDelta >= 0 ? '+' : ''}${result.ratingDelta}）`,
+        note: `AI 知識練習 ${result.opponentName}（${result.victory ? '完成' : '再接再厲'}；不計真人排位）`,
       };
 
       return {
@@ -711,14 +435,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         unlockedTitles: Array.from(nextTitles),
         trajectory: [newEntry, ...prev.trajectory].slice(0, 50),
         dailyQuests: nextQuests,
-        pvp: {
-          rating: nextRating,
-          wins: prev.pvp.wins + (result.victory ? 1 : 0),
-          losses: prev.pvp.losses + (result.victory ? 0 : 1),
-          winStreak: nextWinStreak,
-          bestWinStreak: Math.max(prev.pvp.bestWinStreak, nextWinStreak),
-          honorTokens: prev.pvp.honorTokens + result.honorEarned,
-        },
+        pvp: prev.pvp,
       };
     });
     return { leveledUp: didLevel };
@@ -751,6 +468,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const enhanceWeapon = useCallback((weaponUid: string, useGuardScroll: boolean): ActionFeedback => {
+    const save = store.getSnapshot();
     const target = save.weapons.find((w) => w.uid === weaponUid);
     if (!target) return { ok: false, message: '找不到該神兵。' };
     if (target.enhanceLevel >= 15) return { ok: false, message: '此神兵已達最高強化 +15！' };
@@ -798,6 +516,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [save.coins, save.crystals, save.items.forge_guard, save.weapons]);
 
   const ascendWeapon = useCallback((weaponUid: string, path: AscensionPath): ActionFeedback => {
+    const save = store.getSnapshot();
     if (path === 'base') return { ok: false, message: '請選擇英雄、神話或地獄路線。' };
     const target = save.weapons.find((w) => w.uid === weaponUid);
     if (!target) return { ok: false, message: '找不到該神兵。' };
@@ -828,6 +547,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [save.coins, save.crystals, save.weapons]);
 
   const fuseWeapons = useCallback((uidA: string, uidB: string): ActionFeedback => {
+    const save = store.getSnapshot();
     if (uidA === uidB) return { ok: false, message: '請選擇兩把不同的神兵進行融合。' };
     const wA = save.weapons.find((w) => w.uid === uidA);
     const wB = save.weapons.find((w) => w.uid === uidB);
@@ -848,7 +568,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const inheritedEnhance = Math.min(15, Math.max(wA.enhanceLevel, wB.enhanceLevel) + 1);
     const inheritedPath = wA.ascensionPath !== 'base' ? wA.ascensionPath : wB.ascensionPath;
     const fusedWeapon: WeaponInstance = {
-      uid: `wp-fused-${Date.now().toString(36)}`,
+      uid: `wp-fused-${crypto.randomUUID()}`,
       templateId: recipe.resultTemplateId,
       name: recipe.resultName,
       baseAttack: recipe.resultBaseAttack,
@@ -877,10 +597,11 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // ==================== SOCKETING & GEM SYNTHESIS ====================
   const socketGem = useCallback((weaponUid: string, slotIndex: number, gemUid: string): ActionFeedback => {
+    const save = store.getSnapshot();
     const weapon = save.weapons.find((w) => w.uid === weaponUid);
     const gem = save.gemBag.find((g) => g.uid === gemUid);
     if (!weapon || !gem) return { ok: false, message: '找不到指定武器或寶石。' };
-    if (slotIndex < 0 || slotIndex > 2) return { ok: false, message: '無效的寶石槽位。' };
+    if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex > 2) return { ok: false, message: '無效的寶石槽位。' };
 
     const previousGem = weapon.socketedGems[slotIndex];
     soundEngine.playGemSynth();
@@ -904,6 +625,8 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [save.gemBag, save.weapons]);
 
   const unsocketGem = useCallback((weaponUid: string, slotIndex: number): ActionFeedback => {
+    const save = store.getSnapshot();
+    if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex > 2) return { ok: false, message: '無效的寶石槽位。' };
     const weapon = save.weapons.find((w) => w.uid === weaponUid);
     if (!weapon) return { ok: false, message: '找不到武器。' };
     const existingGem = weapon.socketedGems[slotIndex];
@@ -927,13 +650,15 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [save.weapons]);
 
   const synthesizeGems = useCallback((element: GemElementId, level: 1 | 2 | 3 | 4): ActionFeedback => {
+    const save = store.getSnapshot();
+    if (!GEM_ELEMENTS[element] || ![1, 2, 3, 4].includes(level)) return { ok: false, message: '無效的合成配方。' };
     const matching = save.gemBag.filter((g) => g.element === element && g.level === level);
     if (matching.length < 3) {
       return { ok: false, message: `需要 3 顆相同的 Lv.${level} ${GEM_ELEMENTS[element].name} 才能合成升階！` };
     }
     const consumeUids = new Set(matching.slice(0, 3).map((g) => g.uid));
     const upgraded: GemInstance = {
-      uid: `gem-syn-${Date.now().toString(36)}`,
+      uid: `gem-syn-${crypto.randomUUID()}`,
       element,
       level: (level + 1) as 2 | 3 | 4 | 5,
     };
@@ -950,9 +675,12 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // ==================== MAGIC SHOP ====================
   const buyWeapon = useCallback((templateId: string, useHonor: boolean, discountFactor = 1): ActionFeedback => {
+    const save = store.getSnapshot();
+    if (![0.7, 1].includes(discountFactor)) return { ok: false, message: '無效的商品價格。' };
     const tpl = WEAPON_CATALOG.find((w) => w.templateId === templateId);
     if (!tpl) return { ok: false, message: '找不到該商品。' };
     if (useHonor) {
+      if (tpl.priceHonor === undefined) return { ok: false, message: '此商品無法使用榮譽幣購買。' };
       const honorCost = tpl.priceHonor ?? 9999;
       if (save.pvp.honorTokens < honorCost) {
         return { ok: false, message: `競技榮譽幣不足（需要 ${honorCost}）。` };
@@ -965,7 +693,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     const newWeapon: WeaponInstance = {
-      uid: `wp-shop-${Date.now().toString(36)}`,
+      uid: `wp-shop-${crypto.randomUUID()}`,
       templateId: tpl.templateId,
       name: tpl.name,
       baseAttack: tpl.baseAttack,
@@ -988,6 +716,8 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [save.coins, save.pvp.honorTokens]);
 
   const buyGem = useCallback((element: GemElementId, discountFactor = 1): ActionFeedback => {
+    const save = store.getSnapshot();
+    if (!GEM_ELEMENTS[element] || ![0.7, 1].includes(discountFactor)) return { ok: false, message: '無效的商品或價格。' };
     const def = GEM_ELEMENTS[element];
     const price = Math.round(def.shopPriceCoins * discountFactor);
     if (save.coins < price) return { ok: false, message: `金幣不足（需要 ${price}）。` };
@@ -1006,8 +736,11 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [save.coins]);
 
   const buyBattleItem = useCallback((itemId: BattleItemId, useHonor: boolean, discountFactor = 1): ActionFeedback => {
+    const save = store.getSnapshot();
+    if (!BATTLE_ITEMS[itemId] || ![0.7, 1].includes(discountFactor)) return { ok: false, message: '無效的商品或價格。' };
     const def = BATTLE_ITEMS[itemId];
     if (useHonor) {
+      if (def.priceHonor === undefined) return { ok: false, message: '此商品無法使用榮譽幣購買。' };
       const honorCost = def.priceHonor ?? 999;
       if (save.pvp.honorTokens < honorCost) {
         return { ok: false, message: `競技榮譽幣不足（需要 ${honorCost}）。` };
@@ -1029,6 +762,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [save.coins, save.pvp.honorTokens]);
 
   const consumeBattleItem = useCallback((itemId: BattleItemId): boolean => {
+    const save = store.getSnapshot();
     if ((save.items[itemId] ?? 0) <= 0) return false;
     setSave((prev) => ({
       ...prev,
@@ -1038,6 +772,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [save.items]);
 
   const unlockOrBondGuardian = useCallback((guardianId: GuardianId): ActionFeedback => {
+    const save = store.getSnapshot();
     const cost = GUARDIAN_SHOP_COSTS[guardianId];
     const bondCost = 90;
     if (save.coins < bondCost) {
@@ -1062,6 +797,8 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // ==================== PARENT CONTROLS & CSV ====================
   const updateParentSettings = useCallback((patch: Partial<ParentSettings>) => {
+    if (patch.pinCode !== undefined && !/^\d{4}$/.test(patch.pinCode)) return;
+    if (patch.dailyLimitMinutes !== undefined && (!Number.isInteger(patch.dailyLimitMinutes) || patch.dailyLimitMinutes < 15 || patch.dailyLimitMinutes > 120)) return;
     setSave((prev) => {
       const nextParent = { ...prev.parentSettings, ...patch };
       return {
@@ -1097,6 +834,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const upgradeEquipmentSlot = useCallback(
     (slot: EquipmentSlotId): ActionFeedback => {
+      const save = store.getSnapshot();
       const currLv = save.equipment[slot] ?? 1;
       if (currLv >= 15) return { ok: false, message: '該部位裝備已達滿級 +15！' };
       const coinCost = 70 + currLv * 45;
@@ -1125,11 +863,27 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     [save.coins, save.equipment]
   );
 
+  if (!ready) return (
+    <main className="min-h-screen bg-slate-950 text-white p-6 flex flex-col items-center justify-center gap-4">
+      <h1 className="text-xl font-bold">學習存檔保護</h1>
+      <p role="status" className="max-w-xl">{notice}</p>
+      {choice && <div className="flex flex-wrap gap-3">
+        {choice.cloud && <button className="min-h-12 rounded-xl bg-sky-700 px-4" onClick={() => accept(choice.cloud!, true, choice.cloudFingerprint)}>使用雲端進度（先備份本機）</button>}
+        <button className="min-h-12 rounded-xl bg-emerald-700 px-4" onClick={() => accept(choice.local, false, null)}>使用本機進度（暫停雲端同步）</button>
+      </div>}
+      <button className="min-h-12 underline" onClick={exportBackup}>匯出存檔備份</button>
+      <button className="min-h-12 underline" onClick={() => window.location.reload()}>重新載入</button>
+    </main>
+  );
+
   return (
     <GameStateContext.Provider
       value={{
         save,
         combatStats,
+        saveNotice: notice,
+        cloudSyncEnabled: cloudEnabled,
+        exportSaveBackup: exportBackup,
         equippedWeapon,
         isRestReminderVisible,
         dismissRestReminder: () => setRestDismissed(true),

@@ -10,7 +10,7 @@ import {
   Swords,
   Zap,
 } from 'lucide-react';
-import { AscensionPath, EquipmentSlotId, WeaponInstance } from '../types/game';
+import type { AscensionPath, EquipmentSlotId, WeaponInstance } from '../types/game';
 import { useGameState } from '../core/GameStateContext';
 import {
   ASCENSION_PATHS,
@@ -33,10 +33,10 @@ const GEAR_SLOTS: {
 }[] = [
   { slot: 'weapon', name: '主武器槽', statLabel: '全科攻擊 +2/級', accent: '#F59E0B' },
   { slot: 'helm', name: '智慧頭冠', statLabel: '最大 HP +12/級', accent: '#38BDF8' },
-  { slot: 'armor', name: '學園戰甲', statLabel: '護甲與耐力 +14/級', accent: '#10B981' },
-  { slot: 'gloves', name: '速寫護手', statLabel: '暴擊與攻速 +1.2%/級', accent: '#F43F5E' },
-  { slot: 'boots', name: '疾風戰靴', statLabel: '移動與連擊時間 +4%/級', accent: '#A855F7' },
-  { slot: 'amulet', name: '星光護符', statLabel: '經驗／必殺充能 +5%/級', accent: '#FACC15' },
+  { slot: 'armor', name: '學園戰甲', statLabel: '最大 HP +16/級', accent: '#10B981' },
+  { slot: 'gloves', name: '速寫護手', statLabel: '暴擊率 +1.2%/級（上限65%）', accent: '#F43F5E' },
+  { slot: 'boots', name: '疾風戰靴', statLabel: '移動速度 +6%/級', accent: '#A855F7' },
+  { slot: 'amulet', name: '星光護符', statLabel: '每次必殺充能 +5點/級', accent: '#FACC15' },
 ];
 
 function getWeaponRarity(w: WeaponInstance): { label: 'R' | 'SR' | 'SSR' | 'UR'; color: string } {

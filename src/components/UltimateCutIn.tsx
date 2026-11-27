@@ -1,5 +1,7 @@
 import React from 'react';
 import { Play, RotateCcw, Home, Lightbulb, X } from 'lucide-react';
+import type { SubjectId } from '../types/game';
+import { WorldInstructions } from './WorldInstructions';
 
 export interface UltimateCutInProps {
   visible: boolean;
@@ -95,6 +97,7 @@ export const ExplanationBanner: React.FC<ExplanationBannerProps> = ({
 };
 
 export interface WorldPauseModalProps {
+  subject: SubjectId;
   open: boolean;
   worldName: string;
   onResume: () => void;
@@ -103,6 +106,7 @@ export interface WorldPauseModalProps {
 }
 
 export const WorldPauseModal: React.FC<WorldPauseModalProps> = ({
+  subject,
   open,
   worldName,
   onResume,
@@ -115,11 +119,12 @@ export const WorldPauseModal: React.FC<WorldPauseModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="暫停選單"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 pointer-events-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 pointer-events-auto overflow-y-auto"
     >
-      <div className="w-full max-w-sm rounded-3xl bg-slate-900 border-2 border-amber-400/70 p-6 shadow-2xl text-center">
+      <div className="w-full max-w-sm my-auto rounded-3xl bg-slate-900 border-2 border-amber-400/70 p-6 shadow-2xl text-center">
         <h2 className="text-2xl font-black text-white font-display">遊戲暫停</h2>
         <p className="text-sm text-slate-300 mt-1">{worldName}</p>
+        <details className="world-guide-details text-left mt-4"><summary>忘記怎麼玩？查看操作</summary><WorldInstructions subject={subject} /></details>
         <div className="mt-6 flex flex-col gap-3">
           <button
             type="button"
@@ -140,7 +145,7 @@ export const WorldPauseModal: React.FC<WorldPauseModalProps> = ({
             onClick={onExit}
             className="w-full min-h-[48px] rounded-xl bg-slate-800/70 hover:bg-rose-900/60 text-slate-200 hover:text-white font-bold text-base border border-slate-700 flex items-center justify-center gap-2 transition-transform active:scale-95"
           >
-            <Home className="w-5 h-5" /> 返回智光學園廣場
+            <Home className="w-5 h-5" /> 返回章節地圖
           </button>
         </div>
       </div>

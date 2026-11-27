@@ -1,4 +1,4 @@
-import { GradeLevel, PhType, ScienceIngredient, ScienceQuestion, SemesterId, TempZone } from '../../types/game';
+import type { GradeLevel, PhType, ScienceIngredient, ScienceQuestion, SemesterId, TempZone } from '../../types/game';
 
 interface DishSpec {
   id: string;

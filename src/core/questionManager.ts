@@ -1,4 +1,4 @@
-import { AnyQuestion } from '../types/game';
+import type { AnyQuestion } from '../types/game';
 import { shuffleArray } from '../data/questionBank';
 
 /**
@@ -103,15 +103,22 @@ export class QuestionManager<T extends AnyQuestion> {
 
     let idx = findIndexInQueue();
     if (idx === -1) {
-      // Recycle only if fresh pool exhausted
+      if (predicate && !this.allPool.some(predicate)) {
+        throw new Error('題庫沒有符合指定題型的題目');
+      }
+      if (this.queue.length > 0) {
+        // A requested sub-pool is exhausted. Never throw away fresh questions
+        // or return a question with an incompatible payload to the engine.
+        throw new Error('指定題型本輪已用完，其他題目尚未用完');
+      }
+      // Recycle only after the entire fresh pool is exhausted.
       this.usedInRun.clear();
       this.rebuildQueue(true);
       idx = findIndexInQueue();
     }
 
     if (idx === -1) {
-      // Predicate matched nothing in pool; fall back to first available non-repeating question
-      idx = 0;
+      throw new Error('無法取得符合指定題型的題目');
     }
 
     const [picked] = this.queue.splice(idx, 1);

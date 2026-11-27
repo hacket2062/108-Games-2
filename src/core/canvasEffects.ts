@@ -1,4 +1,4 @@
-import { AscensionPath, GuardianId } from '../types/game';
+import type { AscensionPath, GuardianId } from '../types/game';
 import { ASCENSION_PATHS } from '../data/itemsAndGems';
 import { drawGuardianSpirit, drawRoundedRect } from '../canvas/proceduralArt';
 

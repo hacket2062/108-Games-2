@@ -1,4 +1,4 @@
-import { GuardianId } from '../types/game';
+import type { GuardianId } from '../types/game';
 
 export interface GuardianConfig {
   id: GuardianId;

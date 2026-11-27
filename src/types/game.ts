@@ -322,6 +322,7 @@ export interface PlayerSaveData {
 }
 
 export interface WorldRunResult {
+  playMode?: PlayMode;
   subject: SubjectId;
   stageKey?: string;
   stageLabel?: string;
@@ -382,6 +383,7 @@ export interface EngineCommonProps {
   wrongQuestionIds?: string[];
   onAnswerResult: (question: AnyQuestion, isCorrect: boolean, responseMs?: number) => void;
   onFinish: (result: WorldRunResult) => void;
+  onRestart: () => void;
   onExit: () => void;
 }
 

@@ -7,7 +7,7 @@ import path from 'node:path';
  * Static & Structural Verification of Firestore Security Rules against the Dirty Dozen specification.
  * Verifies every critical Eight Pillars security gate exists in firestore.rules.
  */
-test('firestore.rules enforces all Eight Pillars and Dirty Dozen guards', () => {
+test('firestore.rules structural smoke test only (does not verify authorization)', () => {
   const rulesPath = path.resolve(process.cwd(), 'firestore.rules');
   const rules = fs.readFileSync(rulesPath, 'utf8');
 

@@ -1,4 +1,4 @@
-import { GuardianId } from '../types/game';
+import type { GuardianId } from '../types/game';
 import { GUARDIANS, GUARDIAN_LIST, GuardianConfig } from './guardians';
 
 export { GUARDIANS, GUARDIAN_LIST };
