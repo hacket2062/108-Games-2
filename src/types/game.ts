@@ -4,6 +4,45 @@ export type SemesterId = 'upper' | 'lower';
 export type PlayMode = 'adventure' | 'practice';
 export type GuardianId = 'qilin' | 'stardragon' | 'griffin' | 'deer';
 export type SpeedGrade = 'PERFECT' | 'GREAT' | 'GOOD';
+export type PlayerCount = 1 | 2 | 3 | 4;
+export type QuestionDifficultyTier = 1 | 2 | 3;
+
+export type HeroTierId = 1 | 2 | 3 | 4;
+export type HeroClassBranch = 'none' | 'blade' | 'arcane' | 'guardian';
+export type HeroClassId =
+  | 'novice'
+  | 'star_swordsman'
+  | 'peerless_warlord'
+  | 'element_mage'
+  | 'astral_archmage'
+  | 'holy_sentinel'
+  | 'beast_sovereign';
+
+export interface HeroProgression {
+  tier: HeroTierId;
+  classBranch: HeroClassBranch;
+  classId: HeroClassId;
+  badges: number;
+  secondaryGuardian: GuardianId;
+}
+
+export type EliteAffixId =
+  | 'swift_assault'
+  | 'regen_field'
+  | 'mirror_clone'
+  | 'mind_pressure'
+  | 'flame_backlash'
+  | 'iron_grammar'
+  | 'void_shield'
+  | 'chaos_warp';
+
+export type RoguelikeRelicId =
+  | 'chain_lightning'
+  | 'absolute_zero'
+  | 'double_cast'
+  | 'wisdom_drain'
+  | 'blade_flurry'
+  | 'golden_aegis';
 
 // ==================== QUESTIONS ====================
 export interface BaseQuestion {
@@ -17,6 +56,7 @@ export interface BaseQuestion {
   explanation: string;
   hint: string;
   knowledgeTag: string;
+  difficulty?: QuestionDifficultyTier;
 }
 
 export interface ChineseSlashPayload {
@@ -319,6 +359,10 @@ export interface PlayerSaveData {
   masteredQuestionIds?: string[];
   knowledgeMastery?: Record<string, { subject: SubjectId; tag: string; answered: number; correct: number }>;
   rapidGuessCount?: number;
+  playerCount?: PlayerCount;
+  heroProgression?: HeroProgression;
+  towerBestFloor?: number;
+  discoveredBestiary?: string[];
 }
 
 export interface WorldRunResult {
@@ -369,6 +413,12 @@ export interface EffectiveCombatStats {
   weaponPath: AscensionPath;
   weaponEnhanceLevel: number;
   weaponName: string;
+  heroTier: HeroTierId;
+  heroClassId: HeroClassId;
+  heroClassBranch: HeroClassBranch;
+  thinkTimeBonusSec: number;
+  bestiaryBonusPct: number;
+  secondaryGuardian: GuardianId;
 }
 
 export interface EngineCommonProps {
@@ -377,10 +427,12 @@ export interface EngineCommonProps {
   playMode: PlayMode;
   guardianId: GuardianId;
   playerStats: EffectiveCombatStats;
+  playerCount?: PlayerCount;
   stageConfig?: CampaignStageConfig;
   masteredQuestionIds?: string[];
   wrongQuestionIds?: string[];
   onAnswerResult: (question: AnyQuestion, isCorrect: boolean, responseMs?: number) => void;
+  onDiscoverMonster?: (monsterId: string) => void;
   onFinish: (result: WorldRunResult) => void;
   onExit: () => void;
 }
@@ -403,6 +455,8 @@ export type ActiveScreen =
   | 'world_english'
   | 'world_math'
   | 'world_science'
+  | 'trial_tower'
+  | 'bestiary'
   | 'pvp_arena'
   | 'forge'
   | 'socketing'

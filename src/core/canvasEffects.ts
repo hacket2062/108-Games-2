@@ -1,6 +1,6 @@
 import { AscensionPath, GuardianId } from '../types/game';
 import { ASCENSION_PATHS } from '../data/itemsAndGems';
-import { drawGuardianSpirit, drawRoundedRect } from '../canvas/proceduralArt';
+import { drawAnimeEye, drawGuardianSpirit, drawRoundedRect } from '../canvas/proceduralArt';
 
 export * from '../canvas/proceduralArt';
 
@@ -151,17 +151,32 @@ export function drawPvPDuelist(
   ctx.fill();
   ctx.stroke();
 
-  // Eyes
-  ctx.fillStyle = '#0F172A';
+  // Glossy Anime Eyes & Blush
+  ctx.fillStyle = 'rgba(251, 113, 133, 0.34)';
   ctx.beginPath();
-  ctx.arc(5, -13, 3, 0, Math.PI * 2);
-  ctx.arc(13, -13, 2.7, 0, Math.PI * 2);
+  ctx.ellipse(2, -8, 3, 1.6, 0, 0, Math.PI * 2);
+  ctx.ellipse(15, -8, 2.5, 1.6, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(6, -14.2, 1.1, 0, Math.PI * 2);
-  ctx.arc(13.8, -14.2, 1, 0, Math.PI * 2);
-  ctx.fill();
+  drawAnimeEye(
+    ctx,
+    4.5,
+    -13.5,
+    4.3,
+    5.0,
+    opts.facing > 0 ? '#38BDF8' : '#FB7185',
+    opts.facing > 0 ? '#1D4ED8' : '#9F1239',
+    0.8
+  );
+  drawAnimeEye(
+    ctx,
+    13.2,
+    -13.5,
+    3.9,
+    4.8,
+    opts.facing > 0 ? '#38BDF8' : '#FB7185',
+    opts.facing > 0 ? '#1D4ED8' : '#9F1239',
+    0.8
+  );
 
   // Glowing Ascended Weapon Blade held heroically forward!
   ctx.save();

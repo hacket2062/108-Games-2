@@ -3,6 +3,8 @@ import {
   EffectiveCombatStats,
   EquipmentLevels,
   GuardianId,
+  HeroClassId,
+  HeroProgression,
   PlayMode,
   PlayerSaveData,
   SpeedGrade,
@@ -10,6 +12,12 @@ import {
   WeaponInstance,
 } from '../types/game';
 import { ASCENSION_PATHS, GEM_ELEMENTS } from '../data/itemsAndGems';
+import {
+  createInitialHeroProgression,
+  getBestiaryBonusPercent,
+  HERO_CLASSES,
+  HERO_TIERS,
+} from '../data/heroProgression';
 
 export interface DamageCalculationInput {
   baseAttack: number;
@@ -202,8 +210,15 @@ export function computePlayerCombatStats(
   equipment: EquipmentLevels,
   guardianId: GuardianId,
   bondLevel: number,
-  equippedWeapon?: WeaponInstance | null
+  equippedWeapon?: WeaponInstance | null,
+  heroProgression?: HeroProgression | null,
+  discoveredBestiary: string[] = []
 ): EffectiveCombatStats {
+  const prog = heroProgression ?? createInitialHeroProgression();
+  const tierDef = HERO_TIERS[prog.tier] ?? HERO_TIERS[1];
+  const classDef = HERO_CLASSES[prog.classId] ?? HERO_CLASSES.novice;
+  const bestiaryBonusPct = getBestiaryBonusPercent(discoveredBestiary);
+
   const weaponPower = equippedWeapon
     ? computeWeaponPower(equippedWeapon)
     : {
@@ -214,22 +229,35 @@ export function computePlayerCombatStats(
         shieldMitigation: 0,
       };
 
-  const baseAttack = Math.round(18 + (level - 1) * 4 + weaponPower.attack + bondLevel * 1.5);
-  const rawMaxHp = 100 + (level - 1) * 10 + equipment.armor * 16 + weaponPower.hp + bondLevel * 4;
+  const tierAtkMult = 1 + (tierDef.attackBonusPct + bestiaryBonusPct) / 100;
+  const tierHpMult = 1 + (tierDef.hpBonusPct + bestiaryBonusPct) / 100;
+
+  const rawAtk = 18 + (level - 1) * 4 + weaponPower.attack + bondLevel * 1.5 + classDef.attackBonus;
+  const baseAttack = Math.round(rawAtk * tierAtkMult);
+
+  const rawMaxHp =
+    (100 + (level - 1) * 10 + equipment.armor * 16 + weaponPower.hp + bondLevel * 4 + classDef.hpBonus) *
+    tierHpMult;
   const maxHp = Math.round(guardianId === 'deer' ? rawMaxHp * 1.2 : rawMaxHp);
-  const speedBonus = Number((equipment.boots * 0.06).toFixed(2));
+  const speedBonus = Number((equipment.boots * 0.06 + (prog.tier >= 4 ? 0.12 : 0)).toFixed(2));
 
   return {
     baseAttack,
     maxHp,
     speedBonus,
     bondLevel,
-    critChance: weaponPower.critChance,
-    shieldMitigation: weaponPower.shieldMitigation,
-    ultChargeBonus: weaponPower.ultBonus,
+    critChance: Number(Math.min(0.85, weaponPower.critChance + classDef.critBonus).toFixed(3)),
+    shieldMitigation: weaponPower.shieldMitigation + (prog.classBranch === 'guardian' ? 0.12 : 0),
+    ultChargeBonus: weaponPower.ultBonus + (prog.tier >= 3 ? 6 : 0),
     weaponPath: equippedWeapon?.ascensionPath ?? 'base',
     weaponEnhanceLevel: equippedWeapon?.enhanceLevel ?? 0,
     weaponName: equippedWeapon?.name ?? '學園墨光短刃',
+    heroTier: prog.tier,
+    heroClassId: prog.classId,
+    heroClassBranch: prog.classBranch,
+    thinkTimeBonusSec: classDef.thinkTimeBonusSec + (prog.tier >= 4 ? 1.5 : 0),
+    bestiaryBonusPct,
+    secondaryGuardian: prog.secondaryGuardian ?? 'stardragon',
   };
 }
 
@@ -241,8 +269,44 @@ export function computeSaveCombatStats(save: PlayerSaveData): EffectiveCombatSta
     save.equipment,
     save.selectedGuardian,
     save.guardianBonds[save.selectedGuardian] ?? 1,
-    equipped
+    equipped,
+    save.heroProgression,
+    save.discoveredBestiary ?? []
   );
+}
+
+/**
+ * Class-specific combat damage multiplier:
+ * - Blade branch scales up to 3.0x on high combo & Awakened Berserk state
+ * - Arcane branch grants +25% elemental resonance
+ * - Guardian branch grants +15% righteous counter + shield reflection
+ */
+export function computeClassDamageBonus(
+  classId: HeroClassId,
+  combo: number,
+  isAwakened = false
+): number {
+  const c = Math.max(0, combo);
+  if (classId === 'peerless_warlord') {
+    const comboScale = Math.min(3.0, 1.15 + c * 0.18);
+    return Number((isAwakened ? Math.min(3.0, comboScale * 1.35) : comboScale).toFixed(2));
+  }
+  if (classId === 'star_swordsman') {
+    return Number(Math.min(2.6, 1.08 + c * 0.14).toFixed(2));
+  }
+  if (classId === 'astral_archmage') {
+    return Number((1.25 + Math.min(0.45, c * 0.06)).toFixed(2));
+  }
+  if (classId === 'element_mage') {
+    return Number((1.15 + Math.min(0.3, c * 0.05)).toFixed(2));
+  }
+  if (classId === 'beast_sovereign') {
+    return Number((1.22 + (isAwakened ? 0.5 : 0)).toFixed(2));
+  }
+  if (classId === 'holy_sentinel') {
+    return 1.12;
+  }
+  return 1.0;
 }
 
 export function calculateStarRating(
@@ -286,3 +350,46 @@ export function getSubjectAccuracyPercent(stats: SubjectStats): number {
   if (stats.answered <= 0) return 0;
   return Math.round((stats.correct / stats.answered) * 100);
 }
+
+/**
+ * Hardcore Math TD Armor Rule:
+ * Un-overclocked base towers deal ONLY 10% scratch damage while Math Armor > 0,
+ * guaranteeing that idling without answering math questions cannot defeat armored waves.
+ * Solving math questions triggers Overclock Armor-Piercing mode (100% full damage + armor shatter).
+ */
+export function computeMathTowerDamage(
+  baseDamage: number,
+  armorRemaining: number,
+  overclocked: boolean
+): { hpDamage: number; armorDamage: number; pierced: boolean } {
+  const safeBase = Math.max(1, Math.round(baseDamage));
+  if (armorRemaining <= 0) {
+    return { hpDamage: safeBase, armorDamage: 0, pierced: true };
+  }
+  if (overclocked) {
+    return {
+      hpDamage: safeBase,
+      armorDamage: Math.round(safeBase * 1.45),
+      pierced: true,
+    };
+  }
+  const scratch = Math.max(1, Math.round(safeBase * 0.1));
+  return { hpDamage: scratch, armorDamage: scratch, pierced: false };
+}
+
+/**
+ * Zombie Fusion Evolution pairing rule:
+ * Two distinct non-boss, non-fusion zombies close on the same or adjacent lane fuse into a giant Mutant Boss!
+ */
+export function canFuseZombies(
+  a: { kind: string; lane: number; x: number },
+  b: { kind: string; lane: number; x: number }
+): boolean {
+  if (a.kind === 'boss' || b.kind === 'boss' || a.kind === 'fusion' || b.kind === 'fusion') {
+    return false;
+  }
+  if (a.kind === b.kind) return false;
+  if (a.x > 0.92 || b.x > 0.92 || a.x < 0.12 || b.x < 0.12) return false;
+  return Math.abs(a.lane - b.lane) <= 1 && Math.abs(a.x - b.x) < 0.085;
+}
+

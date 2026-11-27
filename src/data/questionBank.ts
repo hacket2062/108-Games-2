@@ -25,26 +25,50 @@ import {
   EPIC_MATH_QUESTIONS,
   EPIC_SCIENCE_QUESTIONS,
 } from './questions/epicExpansion';
+import {
+  buildExpandedChineseQuestions,
+  buildExpandedEnglishQuestions,
+  buildExpandedScienceQuestions,
+  generateProceduralMathQuestions,
+} from './proceduralQuestions';
+
+const EXPANDED_CHINESE = buildExpandedChineseQuestions();
+const EXPANDED_ENGLISH = buildExpandedEnglishQuestions();
+const EXPANDED_SCIENCE = buildExpandedScienceQuestions();
+const SEEDED_PROCEDURAL_MATH: MathQuestion[] = [
+  ...generateProceduralMathQuestions(3, 'upper', 2, 16),
+  ...generateProceduralMathQuestions(3, 'lower', 6, 16),
+  ...generateProceduralMathQuestions(4, 'upper', 3, 18),
+  ...generateProceduralMathQuestions(4, 'lower', 7, 18),
+  ...generateProceduralMathQuestions(5, 'upper', 4, 18),
+  ...generateProceduralMathQuestions(5, 'lower', 8, 18),
+  ...generateProceduralMathQuestions(6, 'upper', 5, 18),
+  ...generateProceduralMathQuestions(6, 'lower', 9, 18),
+];
 
 export const CHINESE_QUESTIONS: ChineseQuestion[] = [
   ...BASE_CHINESE,
   ...BONUS_CHINESE_QUESTIONS,
   ...EPIC_CHINESE_QUESTIONS,
+  ...EXPANDED_CHINESE,
 ];
 export const ENGLISH_QUESTIONS: EnglishQuestion[] = [
   ...BASE_ENGLISH,
   ...BONUS_ENGLISH_QUESTIONS,
   ...EPIC_ENGLISH_QUESTIONS,
+  ...EXPANDED_ENGLISH,
 ];
 export const MATH_QUESTIONS: MathQuestion[] = [
   ...BASE_MATH,
   ...BONUS_MATH_QUESTIONS,
   ...EPIC_MATH_QUESTIONS,
+  ...SEEDED_PROCEDURAL_MATH,
 ];
 export const SCIENCE_QUESTIONS: ScienceQuestion[] = [
   ...BASE_SCIENCE,
   ...BONUS_SCIENCE_QUESTIONS,
   ...EPIC_SCIENCE_QUESTIONS,
+  ...EXPANDED_SCIENCE,
 ];
 
 export const ALL_QUESTIONS: AnyQuestion[] = [
@@ -99,11 +123,16 @@ export function getEnglishQuestions(
   return [...shuffleArray(exactSemester), ...shuffleArray(othersInGrade)];
 }
 
-export function getMathQuestions(grade: GradeLevel, semester: SemesterId): MathQuestion[] {
+export function getMathQuestions(
+  grade: GradeLevel,
+  semester: SemesterId,
+  stageNumber = 5
+): MathQuestion[] {
+  const freshDynamic = generateProceduralMathQuestions(grade, semester, stageNumber, 18);
   const byGrade = MATH_QUESTIONS.filter((q) => q.grade === grade);
   const exactSemester = byGrade.filter((q) => q.semester === semester);
   const othersInGrade = byGrade.filter((q) => q.semester !== semester);
-  return [...shuffleArray(exactSemester), ...shuffleArray(othersInGrade)];
+  return [...shuffleArray(freshDynamic), ...shuffleArray(exactSemester), ...shuffleArray(othersInGrade)];
 }
 
 export function getScienceQuestions(grade: GradeLevel, semester: SemesterId): ScienceQuestion[] {

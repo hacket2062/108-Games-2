@@ -11,8 +11,11 @@ import {
   GemInstance,
   GradeLevel,
   GuardianId,
+  HeroClassId,
+  HeroTierId,
   ParentSettings,
   PlayMode,
+  PlayerCount,
   PlayerSaveData,
   PvPRunResult,
   SemesterId,
@@ -36,6 +39,12 @@ import {
   WEAPON_CATALOG,
 } from '../data/itemsAndGems';
 import { GUARDIAN_SHOP_COSTS } from '../data/spiritsAndTitles';
+import {
+  canAdvanceHeroTier,
+  canSelectHeroClass,
+  createInitialHeroProgression,
+  HERO_CLASSES,
+} from '../data/heroProgression';
 import { soundEngine } from '../audio/soundEngine';
 
 const SAVE_PREFIX = 'zhiguang_108_save_v2_';
@@ -166,6 +175,10 @@ export function createInitialPlayerSave(): PlayerSaveData {
     masteredQuestionIds: [],
     knowledgeMastery: {},
     rapidGuessCount: 0,
+    playerCount: 1,
+    heroProgression: createInitialHeroProgression(),
+    towerBestFloor: 0,
+    discoveredBestiary: ['bst_chi_moth', 'bst_eng_drone', 'bst_math_zero', 'bst_sci_glutton'],
   };
 }
 
@@ -199,6 +212,19 @@ function hydrateSave(raw: Partial<PlayerSaveData> | null | undefined): PlayerSav
     knowledgeMastery:
       raw.knowledgeMastery && typeof raw.knowledgeMastery === 'object' ? raw.knowledgeMastery : {},
     rapidGuessCount: typeof raw.rapidGuessCount === 'number' ? raw.rapidGuessCount : 0,
+    playerCount:
+      raw.playerCount === 1 || raw.playerCount === 2 || raw.playerCount === 3 || raw.playerCount === 4
+        ? raw.playerCount
+        : 1,
+    heroProgression: {
+      ...createInitialHeroProgression(),
+      ...(raw.heroProgression || {}),
+    },
+    towerBestFloor: typeof raw.towerBestFloor === 'number' ? raw.towerBestFloor : 0,
+    discoveredBestiary:
+      Array.isArray(raw.discoveredBestiary) && raw.discoveredBestiary.length > 0
+        ? Array.from(new Set(raw.discoveredBestiary))
+        : base.discoveredBestiary,
   };
   if (merged.lastPlayDate !== todayKey()) {
     merged.lastPlayDate = todayKey();
@@ -269,6 +295,21 @@ interface GameStateContextValue {
   buyBattleItem: (itemId: BattleItemId, useHonor: boolean, discountFactor?: number) => ActionFeedback;
   consumeBattleItem: (itemId: BattleItemId) => boolean;
   unlockOrBondGuardian: (guardianId: GuardianId) => ActionFeedback;
+  // Hero Progression, Co-op, Tower & Bestiary
+  setPlayerCount: (count: PlayerCount) => void;
+  advanceHeroTier: () => ActionFeedback;
+  selectHeroClass: (classId: HeroClassId) => ActionFeedback;
+  setSecondaryGuardian: (guardianId: GuardianId) => void;
+  recordDiscoveredMonster: (monsterId: string) => void;
+  applyTowerResult: (params: {
+    floorReached: number;
+    correctCount: number;
+    totalAttempts: number;
+    coinsEarned: number;
+    xpEarned: number;
+    badgesEarned: number;
+    crystalsEarned: number;
+  }) => { leveledUp: boolean; isNewRecord: boolean };
   // Parent
   updateParentSettings: (patch: Partial<ParentSettings>) => void;
   buildLearningCsv: () => string;
@@ -382,6 +423,10 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           masteredQuestionIds: (save.masteredQuestionIds ?? []).slice(-180),
           knowledgeMastery: save.knowledgeMastery ?? {},
           rapidGuessCount: save.rapidGuessCount ?? 0,
+          playerCount: save.playerCount ?? 1,
+          heroProgression: save.heroProgression ?? createInitialHeroProgression(),
+          towerBestFloor: save.towerBestFloor ?? 0,
+          discoveredBestiary: (save.discoveredBestiary ?? []).slice(0, 32),
         };
         const payload = {
           uid: user.uid,
@@ -652,9 +697,18 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             }
           : null;
 
+        const earnedBadges = result.victory
+          ? result.stageKey?.endsWith('_s10')
+            ? 4
+            : 2
+          : result.correctCount >= 3
+            ? 1
+            : 0;
+        const prevProg = prev.heroProgression ?? createInitialHeroProgression();
+
         return {
           ...prev,
-          level: xpOutcome.level,
+          level: Math.min(60, xpOutcome.level),
           xp: xpOutcome.xp,
           coins: prev.coins + result.coinsEarned + bonusCoins,
           crystals: prev.crystals + result.crystalsEarned + bonusCrystals,
@@ -667,6 +721,10 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           gemBag: droppedGem ? [droppedGem, ...prev.gemBag] : prev.gemBag,
           weapons: nextWeapons,
           stageProgress: nextStageProgress,
+          heroProgression: {
+            ...prevProg,
+            badges: prevProg.badges + earnedBadges,
+          },
         };
       });
       return { leveledUp: didLevel, chestDropped };
@@ -1125,6 +1183,128 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     [save.coins, save.equipment]
   );
 
+  const setPlayerCount = useCallback((playerCount: PlayerCount) => {
+    setSave((prev) => ({ ...prev, playerCount }));
+  }, []);
+
+  const advanceHeroTier = useCallback((): ActionFeedback => {
+    const prog = save.heroProgression ?? createInitialHeroProgression();
+    const check = canAdvanceHeroTier(save.level, save.coins, prog);
+    if (!check.ok || !check.nextTier) {
+      return { ok: false, message: check.reason ?? '尚未達成突破條件。' };
+    }
+    const nextTier = check.nextTier;
+    soundEngine.playUltimateRoar();
+    setSave((prev) => {
+      const currProg = prev.heroProgression ?? createInitialHeroProgression();
+      return {
+        ...prev,
+        coins: Math.max(0, prev.coins - nextTier.coinCost),
+        heroProgression: {
+          ...currProg,
+          tier: nextTier.tier as HeroTierId,
+          badges: Math.max(0, currProg.badges - nextTier.badgeCost),
+        },
+      };
+    });
+    return {
+      ok: true,
+      message: `突破成功！晉升【${nextTier.name}】，全屬性大幅提升！`,
+    };
+  }, [save.coins, save.heroProgression, save.level]);
+
+  const selectHeroClass = useCallback(
+    (classId: HeroClassId): ActionFeedback => {
+      const prog = save.heroProgression ?? createInitialHeroProgression();
+      const check = canSelectHeroClass(classId, prog);
+      if (!check.ok) {
+        return { ok: false, message: check.reason ?? '尚未解鎖此職業。' };
+      }
+      const def = HERO_CLASSES[classId];
+      soundEngine.playPerfectBell();
+      setSave((prev) => ({
+        ...prev,
+        heroProgression: {
+          ...(prev.heroProgression ?? createInitialHeroProgression()),
+          classId: def.id,
+          classBranch: def.branch,
+        },
+      }));
+      return { ok: true, message: `成功轉職【${def.name}】！被動「${def.passiveTitle}」立即生效！` };
+    },
+    [save.heroProgression]
+  );
+
+  const setSecondaryGuardian = useCallback((guardianId: GuardianId) => {
+    setSave((prev) => ({
+      ...prev,
+      heroProgression: {
+        ...(prev.heroProgression ?? createInitialHeroProgression()),
+        secondaryGuardian: guardianId,
+      },
+    }));
+  }, []);
+
+  const recordDiscoveredMonster = useCallback((monsterId: string) => {
+    setSave((prev) => {
+      const existing = prev.discoveredBestiary ?? [];
+      if (existing.includes(monsterId)) return prev;
+      return {
+        ...prev,
+        discoveredBestiary: [...existing, monsterId],
+      };
+    });
+  }, []);
+
+  const applyTowerResult = useCallback(
+    (params: {
+      floorReached: number;
+      correctCount: number;
+      totalAttempts: number;
+      coinsEarned: number;
+      xpEarned: number;
+      badgesEarned: number;
+      crystalsEarned: number;
+    }): { leveledUp: boolean; isNewRecord: boolean } => {
+      let leveledUp = false;
+      let isNewRecord = false;
+      setSave((prev) => {
+        const xpOutcome = applyXpGain(prev.level, prev.xp, params.xpEarned);
+        leveledUp = xpOutcome.leveledUp;
+        const prevBest = prev.towerBestFloor ?? 0;
+        isNewRecord = params.floorReached > prevBest;
+        const prevProg = prev.heroProgression ?? createInitialHeroProgression();
+        const newEntry = {
+          id: `tr-tower-${Date.now()}`,
+          timestamp: Date.now(),
+          subject: 'pvp' as const,
+          grade: prev.grade,
+          correctCount: params.correctCount,
+          totalAttempts: params.totalAttempts,
+          score: params.floorReached * 150 + params.correctCount * 40,
+          durationSeconds: 60,
+          victory: params.floorReached >= 5,
+          note: `無盡試煉之塔：突破第 ${params.floorReached} 層（徽章 +${params.badgesEarned}）`,
+        };
+        return {
+          ...prev,
+          level: Math.min(60, xpOutcome.level),
+          xp: xpOutcome.xp,
+          coins: prev.coins + params.coinsEarned,
+          crystals: prev.crystals + params.crystalsEarned,
+          towerBestFloor: Math.max(prevBest, params.floorReached),
+          heroProgression: {
+            ...prevProg,
+            badges: prevProg.badges + params.badgesEarned,
+          },
+          trajectory: [newEntry, ...prev.trajectory].slice(0, 50),
+        };
+      });
+      return { leveledUp, isNewRecord };
+    },
+    []
+  );
+
   return (
     <GameStateContext.Provider
       value={{
@@ -1158,6 +1338,12 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         buyBattleItem,
         consumeBattleItem,
         unlockOrBondGuardian,
+        setPlayerCount,
+        advanceHeroTier,
+        selectHeroClass,
+        setSecondaryGuardian,
+        recordDiscoveredMonster,
+        applyTowerResult,
         updateParentSettings,
         buildLearningCsv,
       }}

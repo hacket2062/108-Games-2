@@ -9,6 +9,8 @@ import { ForgeScreen } from './screens/ForgeScreen';
 import { SocketingScreen } from './screens/SocketingScreen';
 import { ShopScreen } from './screens/ShopScreen';
 import { ParentDashboard } from './screens/ParentDashboard';
+import { TrialTowerScreen } from './screens/TrialTowerScreen';
+import { BestiaryScreen } from './screens/BestiaryScreen';
 import { InkRpgEngine } from './engines/InkRpgEngine';
 import { GalaxyShooterEngine } from './engines/GalaxyShooterEngine';
 import { MathTowerDefenseEngine } from './engines/MathTowerDefenseEngine';
@@ -41,6 +43,8 @@ function resolveInitialNav(): {
   if (screenParam === 'socketing') return { screen: 'socketing', worldSubject, stageNum, chapterNum };
   if (screenParam === 'shop') return { screen: 'shop', worldSubject, stageNum, chapterNum };
   if (screenParam === 'parent') return { screen: 'parent_dashboard', worldSubject, stageNum, chapterNum };
+  if (screenParam === 'trial_tower') return { screen: 'trial_tower', worldSubject, stageNum, chapterNum };
+  if (screenParam === 'bestiary') return { screen: 'bestiary', worldSubject, stageNum, chapterNum };
 
   if (params.get('autostart') === '1') {
     if (wParam === 'pvp') return { screen: 'pvp_arena', worldSubject, stageNum, chapterNum };
@@ -74,6 +78,7 @@ const AppShell: React.FC = () => {
     recordAnswer,
     resolveWrongRecord,
     applyWorldResult,
+    recordDiscoveredMonster,
   } = useGameState();
 
   const initial = resolveInitialNav();
@@ -180,10 +185,12 @@ const AppShell: React.FC = () => {
     playMode: effectivePlayMode,
     guardianId: save.selectedGuardian,
     playerStats: combatStats,
+    playerCount: save.playerCount ?? 1,
     stageConfig: activeStage,
     masteredQuestionIds,
     wrongQuestionIds,
     onAnswerResult: recordAnswer,
+    onDiscoverMonster: recordDiscoveredMonster,
     onFinish: handleFinishWorld,
     onExit: handleReturnStageSelect,
   };
@@ -221,6 +228,8 @@ const AppShell: React.FC = () => {
         <ScienceCookingEngine key={`sc-${activeStage.stageKey}-${runSeed}`} {...commonWorldProps} />
       )}
       {screen === 'pvp_arena' && <PvPArenaEngine onExit={handleReturnLobby} />}
+      {screen === 'trial_tower' && <TrialTowerScreen onExit={handleReturnLobby} />}
+      {screen === 'bestiary' && <BestiaryScreen onExit={handleReturnLobby} />}
       {screen === 'forge' && <ForgeScreen onExit={handleReturnLobby} />}
       {screen === 'socketing' && <SocketingScreen onExit={handleReturnLobby} />}
       {screen === 'shop' && <ShopScreen onExit={handleReturnLobby} />}

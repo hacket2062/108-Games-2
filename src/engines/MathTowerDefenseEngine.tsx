@@ -11,17 +11,22 @@ import { GUARDIANS } from '../data/guardians';
 import {
   calculateCombatDamage,
   calculateStarRating,
+  canFuseZombies,
+  computeClassDamageBonus,
+  computeMathTowerDamage,
   getSpeedGrade,
   getUltimateChargeGain,
 } from '../core/combatMath';
 import { soundEngine } from '../audio/soundEngine';
 import {
   createGameFeel,
+  drawHeroClassAura,
   drawMathTower,
   drawMathZombie,
   drawRoundedRect,
   FloatingTextPool,
   MathTowerKind,
+  MathZombieKind,
   ParticlePool,
   triggerGameFeel,
   updateGameFeel,
@@ -31,6 +36,9 @@ import {
   UltimateCutIn,
   WorldPauseModal,
 } from '../components/UltimateCutIn';
+import { RoguelikeCardModal } from '../components/RoguelikeCardModal';
+import { RoguelikeRelicDef, rollRoguelikeChoices } from '../data/heroProgression';
+import { gamepadManager } from '../core/gamepadManager';
 
 const LANES = 5;
 const COLS = 8;
@@ -66,11 +74,17 @@ interface PlacedTower {
 
 interface ZombieEntity {
   id: string;
-  kind: 'zero' | 'bucket' | 'hopper' | 'boss';
+  kind: MathZombieKind;
   lane: number;
   x: number; // 0..1 normalized across grid width (1.02 = right spawn, 0 = castle gate)
   hp: number;
   maxHp: number;
+  armor: number;
+  maxArmor: number;
+  hasBucket: boolean;
+  hasVaulted: boolean;
+  jumpTimer: number;
+  mageHealCd: number;
   speed: number;
   chillTimer: number;
   hitFlash: number;
@@ -78,11 +92,29 @@ interface ZombieEntity {
   biteCd: number;
 }
 
+interface FlyingBucket {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rot: number;
+  life: number;
+}
+
+interface FusionLightning {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  life: number;
+}
+
 interface MathProjectile {
   lane: number;
   x: number;
   speed: number;
   damage: number;
+  overclocked: boolean;
   kind: 'digit' | 'frost' | 'prime';
   color: string;
 }
@@ -99,26 +131,35 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   playMode,
   guardianId,
   playerStats,
+  playerCount = 1,
   stageConfig,
   masteredQuestionIds,
   wrongQuestionIds,
   onAnswerResult,
+  onDiscoverMonster,
   onFinish,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const guardian = GUARDIANS[guardianId];
   const qMgrRef = useRef(
-    new QuestionManager<MathQuestion>(getMathQuestions(grade, semester), {
-      masteredQuestionIds,
-      wrongQuestionIds,
-      focusTags: stageConfig?.focusTags,
-    })
+    new QuestionManager<MathQuestion>(
+      getMathQuestions(grade, semester, stageConfig?.stageNumber),
+      {
+        masteredQuestionIds,
+        wrongQuestionIds,
+        focusTags: stageConfig?.focusTags,
+        bagKey: `math_td_g${grade}_s${semester}`,
+      }
+    )
   );
+  const [relicModalOpen, setRelicModalOpen] = useState(false);
+  const [relicChoices, setRelicChoices] = useState<RoguelikeRelicDef[]>([]);
+  const relicBonusRef = useRef(1);
   const [bossWarning, setBossWarning] = useState(stageConfig?.tier === 'boss');
   useEffect(() => {
     if (!bossWarning) return;
-    const t = window.setTimeout(() => setBossWarning(false), 2600);
+    const t = window.setTimeout(() => setBossWarning(false), 1800);
     return () => clearTimeout(t);
   }, [bossWarning]);
 
@@ -140,6 +181,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   const [freezeSecs, setFreezeSecs] = useState(0);
   const [cutIn, setCutIn] = useState(false);
   const [shieldedCount, setShieldedCount] = useState(0);
+  const [itemCharges, setItemCharges] = useState({ freeze: 1, smite: 1, gear: 1, repair: 1 });
   const [banner, setBanner] = useState<{
     title: string;
     answer: string;
@@ -210,9 +252,11 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     zombies: [] as ZombieEntity[],
     projectiles: [] as MathProjectile[],
     lasers: [] as SkyLaserBeam[],
+    flyingBuckets: [] as FlyingBucket[],
+    fusionArcs: [] as FusionLightning[],
     waveIndex: 0,
-    zombiesToSpawn: 5,
-    spawnTimer: 1.5,
+    zombiesToSpawn: 6,
+    spawnTimer: 1.4,
     bossSpawned: false,
     particles: new ParticlePool(340),
     floats: new FloatingTextPool(48),
@@ -367,11 +411,15 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           triggerGameFeel(td.feel, { hitstop: 0.06, shake: 0.65, flash: 0.25, flashColor: '#FDE047' });
           td.particles.burst(zx, zy, 30, ['#FDE047', '#F59E0B', '#38BDF8'], 90, 300, 7, 'spark');
 
-          const laserDmg = target.kind === 'boss' ? Math.max(140, calc.damage * 2) : target.maxHp + 50;
+          const laserDmg =
+            target.kind === 'boss' || target.kind === 'fusion'
+              ? Math.max(160, calc.damage * 2.2)
+              : target.maxHp + 60;
+          target.armor = 0;
           target.hp -= laserDmg;
           target.formulaQuestion = null;
           target.hitFlash = 1;
-          td.floats.spawn(zx, zy - 26, `-${laserDmg}`, 'perfect', '黃金比例雷射！');
+          td.floats.spawn(zx, zy - 26, `-${laserDmg}`, 'perfect', '黃金比例破甲雷射！');
 
           // AOE splash to nearby zombies
           for (const other of td.zombies) {
@@ -463,6 +511,57 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     }
   };
 
+  // 4 Real-Time Tactical Item Triggers (Free starter charges + optional gear purchase)
+  const useTacticalItem = (item: 'freeze' | 'smite' | 'gear' | 'repair') => {
+    const td = tdRef.current;
+    const gearCosts = { freeze: 60, smite: 80, gear: 999, repair: 90 };
+    const freeLeft = itemCharges[item];
+    if (freeLeft <= 0) {
+      if (item === 'gear' || gearsRef.current < gearCosts[item]) {
+        soundEngine.playWrongBuzz();
+        td.floats.spawn(td.width * 0.5, td.height * 0.5, '道具次數或齒輪不足！', 'miss');
+        return;
+      }
+      gearsRef.current -= gearCosts[item];
+      setGears(gearsRef.current);
+    } else {
+      setItemCharges((prev) => ({ ...prev, [item]: prev[item] - 1 }));
+    }
+
+    soundEngine.hapticPulse(18);
+    if (item === 'freeze') {
+      freezeRef.current = Math.max(freezeRef.current, 5);
+      setFreezeSecs(Math.ceil(freezeRef.current));
+      soundEngine.playPerfectBell();
+      td.floats.spawn(td.width * 0.5, td.height * 0.35, '❄️ 絕對零度冰封 5s', 'perfect');
+    } else if (item === 'smite') {
+      const strongest = [...td.zombies].sort((a, b) => b.hp + b.armor - (a.hp + a.armor))[0];
+      if (strongest) {
+        const zx = td.gridLeft + strongest.x * (td.cellW * COLS);
+        const zy = td.gridTop + (strongest.lane + 0.5) * td.cellH;
+        td.lasers.push({ x: zx, y: zy, life: 0.6 });
+        strongest.armor = 0;
+        strongest.hp -= strongest.kind === 'boss' || strongest.kind === 'fusion' ? 240 : 999;
+        strongest.hitFlash = 1;
+        soundEngine.playExplosion();
+        triggerGameFeel(td.feel, { hitstop: 0.06, shake: 0.7, flash: 0.28, flashColor: '#38BDF8' });
+        td.particles.burst(zx, zy, 28, ['#38BDF8', '#FDE047', '#FFFFFF'], 90, 290, 7, 'spark');
+        td.floats.spawn(zx, zy - 26, '⚡ 質數天雷貫穿！', 'perfect');
+      }
+    } else if (item === 'gear') {
+      gearsRef.current += 150;
+      setGears(gearsRef.current);
+      soundEngine.playGearBuild();
+      td.floats.spawn(td.width * 0.5, td.height * 0.38, '⚙️ +150 齒輪湧泉', 'perfect');
+    } else {
+      const heal = Math.round(playerStats.maxHp * 0.5);
+      castleHpRef.current = Math.min(playerStats.maxHp, castleHpRef.current + heal);
+      setCastleHp(castleHpRef.current);
+      soundEngine.playPerfectBell();
+      td.floats.spawn(td.gridLeft + 30, td.height * 0.45, `🛡️ 城門 +${heal}`, 'heal');
+    }
+  };
+
   // Main 60FPS Tower Defense Canvas Loop
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -480,12 +579,12 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       td.width = rect.width;
       td.height = rect.height;
       const isNarrow = rect.width < 640;
-      td.gridLeft = isNarrow ? 44 : Math.max(96, rect.width * 0.1);
-      td.gridTop = isNarrow ? 156 : 98;
-      const availW = rect.width - td.gridLeft - (isNarrow ? 8 : 36);
-      const availH = rect.height - td.gridTop - (isNarrow ? 94 : 104);
-      td.cellW = Math.max(38, availW / COLS);
-      td.cellH = Math.max(48, availH / LANES);
+      td.gridLeft = isNarrow ? 34 : Math.max(66, rect.width * 0.08);
+      td.gridTop = 14;
+      const availW = Math.max(200, rect.width - td.gridLeft - (isNarrow ? 8 : 20));
+      const availH = Math.max(150, rect.height - td.gridTop - 14);
+      td.cellW = availW / COLS;
+      td.cellH = availH / LANES;
     };
     resize();
     const ro = new ResizeObserver(resize);
@@ -510,20 +609,50 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     const spawnZombie = (waveIdx: number, isBoss = false) => {
       const td = tdRef.current;
       const lane = isBoss ? 2 : Math.floor(Math.random() * LANES);
-      const kinds: Array<'zero' | 'bucket' | 'hopper'> = ['zero', 'bucket', 'hopper'];
-      const kind = isBoss ? 'boss' : kinds[Math.min(kinds.length - 1, Math.floor(Math.random() * (waveIdx + 2)))];
-      const hasFormulaShield = isBoss || kind === 'bucket' || Math.random() < 0.42;
-      const baseHp = isBoss ? 520 : kind === 'bucket' ? 175 : kind === 'hopper' ? 115 : 100;
-      const baseSpeed = isBoss ? 0.022 : kind === 'hopper' ? 0.045 : 0.031;
+      const kinds: Array<'zero' | 'bucket' | 'hopper' | 'sprinter' | 'mage'> = [
+        'zero',
+        'bucket',
+        'hopper',
+        'sprinter',
+        'mage',
+      ];
+      const poolMax = Math.min(kinds.length, 3 + waveIdx);
+      const kind: MathZombieKind = isBoss ? 'boss' : kinds[Math.floor(Math.random() * poolMax)];
+      const hasFormulaShield = isBoss || kind === 'bucket' || kind === 'mage' || Math.random() < 0.48;
+      const baseHp =
+        isBoss ? 580 : kind === 'bucket' ? 195 : kind === 'mage' ? 150 : kind === 'hopper' ? 135 : kind === 'sprinter' ? 110 : 120;
+      const baseArmor =
+        isBoss ? 260 : kind === 'bucket' ? 170 : kind === 'mage' ? 120 : 95;
+      const baseSpeed =
+        isBoss ? 0.024 : kind === 'sprinter' ? 0.068 : kind === 'hopper' ? 0.048 : 0.036;
 
+      onDiscoverMonster?.(
+        isBoss
+          ? 'bst_fusion_behemoth'
+          : kind === 'bucket'
+            ? 'bst_bucket_zombie'
+            : kind === 'mage'
+              ? 'bst_algebra_mage'
+              : kind === 'hopper'
+                ? 'bst_fraction_hopper'
+                : kind === 'sprinter'
+                  ? 'bst_decimal_sprinter'
+                  : 'bst_zero_zombie'
+      );
       td.zombies.push({
         id: `z-${Date.now()}-${Math.random()}`,
         kind,
         lane,
         x: 1.03,
-        hp: baseHp,
-        maxHp: baseHp,
-        speed: playMode === 'practice' ? baseSpeed * 0.65 : baseSpeed,
+        hp: Math.round(baseHp * (stageConfig?.enemyHpScale ?? 1)),
+        maxHp: Math.round(baseHp * (stageConfig?.enemyHpScale ?? 1)),
+        armor: Math.round(baseArmor * (stageConfig?.enemyHpScale ?? 1)),
+        maxArmor: Math.round(baseArmor * (stageConfig?.enemyHpScale ?? 1)),
+        hasBucket: kind === 'bucket',
+        hasVaulted: false,
+        jumpTimer: 0,
+        mageHealCd: 3.5,
+        speed: playMode === 'practice' ? baseSpeed * 0.72 : baseSpeed,
         chillTimer: 0,
         hitFlash: 0,
         formulaQuestion: hasFormulaShield ? pullMathQ() : null,
@@ -564,6 +693,10 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
             gearsRef.current += 60;
             setGears(gearsRef.current);
             td.floats.spawn(td.width * 0.5, td.height * 0.35, `第 ${td.waveIndex + 1} 波來襲！`, 'perfect', '+60 齒輪補給');
+            if (td.waveIndex === 2) {
+              setRelicChoices(rollRoguelikeChoices(td.waveIndex + 3));
+              setRelicModalOpen(true);
+            }
           } else {
             concludeRun(true);
           }
@@ -593,15 +726,17 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
               const laneHasZombie = td.zombies.some((z) => z.lane === t.lane && z.x > t.col / COLS);
               if (laneHasZombie) {
                 t.recoil = 1;
+                const isOc = t.overclockTimer > 0;
                 if (t.kind === 'raccoon') {
                   t.cooldown = 0.85;
                   td.projectiles.push({
                     lane: t.lane,
                     x: (t.col + 0.65) / COLS,
                     speed: 0.62,
-                    damage: Math.round(playerStats.baseAttack * 0.72),
+                    damage: Math.round(playerStats.baseAttack * 0.78),
+                    overclocked: isOc,
                     kind: 'digit',
-                    color: '#38BDF8',
+                    color: isOc ? '#FDE047' : '#38BDF8',
                   });
                   soundEngine.playLaser();
                 } else if (t.kind === 'owl') {
@@ -610,7 +745,8 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
                     lane: t.lane,
                     x: (t.col + 0.65) / COLS,
                     speed: 0.48,
-                    damage: Math.round(playerStats.baseAttack * 0.65),
+                    damage: Math.round(playerStats.baseAttack * 0.68),
+                    overclocked: isOc,
                     kind: 'frost',
                     color: '#67E8F9',
                   });
@@ -620,9 +756,10 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
                     lane: t.lane,
                     x: (t.col + 0.65) / COLS,
                     speed: 0.42,
-                    damage: Math.round(playerStats.baseAttack * 1.65),
+                    damage: Math.round(playerStats.baseAttack * 1.7),
+                    overclocked: isOc,
                     kind: 'prime',
-                    color: '#FB7185',
+                    color: isOc ? '#FDE047' : '#FB7185',
                   });
                 }
               }
@@ -630,7 +767,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           }
         }
 
-        // Update Projectiles
+        // Update Projectiles with Hardcore Math Armor (10% scratch dmg unless Overclocked!)
         for (let i = td.projectiles.length - 1; i >= 0; i--) {
           const p = td.projectiles[i];
           p.x += p.speed * dt;
@@ -640,19 +777,43 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           }
           const hitZ = td.zombies.find((z) => z.lane === p.lane && Math.abs(z.x - p.x) < 0.055);
           if (hitZ) {
-            const mult = hitZ.formulaQuestion ? 0.5 : 1.0;
-            const dmg = Math.max(4, Math.round(p.damage * mult));
-            hitZ.hp -= dmg;
+            const shieldFactor = hitZ.formulaQuestion && !p.overclocked ? 0.5 : 1.0;
+            const dmgCalc = computeMathTowerDamage(
+              Math.round(p.damage * shieldFactor),
+              hitZ.armor,
+              p.overclocked
+            );
+            const prevArmor = hitZ.armor;
+            hitZ.armor = Math.max(0, hitZ.armor - dmgCalc.armorDamage);
+            hitZ.hp -= dmgCalc.hpDamage;
             hitZ.hitFlash = 0.65;
             if (p.kind === 'frost') hitZ.chillTimer = 3.5;
+
             const px = td.gridLeft + hitZ.x * (td.cellW * COLS);
             const py = td.gridTop + (hitZ.lane + 0.5) * td.cellH;
+
+            // Bucket Helmet Fly-Off Physics when Iron Bucket Zombie's armor breaks!
+            if (hitZ.kind === 'bucket' && hitZ.hasBucket && prevArmor > 0 && hitZ.armor <= 0) {
+              hitZ.hasBucket = false;
+              td.flyingBuckets.push({
+                x: px,
+                y: py - 24,
+                vx: 85 + Math.random() * 55,
+                vy: -220,
+                rot: 0,
+                life: 1.15,
+              });
+              td.floats.spawn(px, py - 32, '鐵桶破甲！', 'perfect');
+            }
+
             if (p.kind === 'prime') {
               soundEngine.playExplosion();
               td.particles.burst(px, py, 16, ['#FB7185', '#FACC15'], 60, 180, 6);
               for (const other of td.zombies) {
                 if (other.id !== hitZ.id && Math.abs(other.lane - hitZ.lane) <= 1 && Math.abs(other.x - hitZ.x) < 0.14) {
-                  other.hp -= Math.round(dmg * 0.6);
+                  const splash = computeMathTowerDamage(Math.round(p.damage * 0.6), other.armor, p.overclocked);
+                  other.armor = Math.max(0, other.armor - splash.armorDamage);
+                  other.hp -= splash.hpDamage;
                 }
               }
             } else {
@@ -662,19 +823,52 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           }
         }
 
-        // Update Zombies
+        // Zombie Fusion Evolution Check: 2 different nearby zombies merge into a giant Mutant Boss!
+        if (td.zombies.length >= 2 && freezeRef.current <= 0) {
+          outer: for (let a = 0; a < td.zombies.length; a++) {
+            for (let b = a + 1; b < td.zombies.length; b++) {
+              const za = td.zombies[a];
+              const zb = td.zombies[b];
+              if (canFuseZombies(za, zb)) {
+                const ax = td.gridLeft + za.x * (td.cellW * COLS);
+                const ay = td.gridTop + (za.lane + 0.5) * td.cellH;
+                const bx = td.gridLeft + zb.x * (td.cellW * COLS);
+                const by = td.gridTop + (zb.lane + 0.5) * td.cellH;
+                td.fusionArcs.push({ x1: ax, y1: ay, x2: bx, y2: by, life: 0.75 });
+                td.particles.burst((ax + bx) / 2, (ay + by) / 2, 26, ['#C084FC', '#E879F9', '#FDE047'], 70, 260, 7, 'spark');
+                td.floats.spawn((ax + bx) / 2, (ay + by) / 2 - 34, '⚡ 殭屍融合進化！', 'crit', '變異融合巨獸');
+                soundEngine.playUltimateRoar();
+
+                const combinedHp = Math.round((za.hp + zb.hp) * 1.45);
+                const combinedArmor = Math.round((za.armor + zb.armor) * 1.2 + 90);
+                za.kind = 'fusion';
+                za.hp = combinedHp;
+                za.maxHp = combinedHp;
+                za.armor = combinedArmor;
+                za.maxArmor = combinedArmor;
+                za.speed = Math.max(za.speed, zb.speed) * 0.92;
+                za.formulaQuestion = pullMathQ();
+                td.zombies.splice(b, 1);
+                break outer;
+              }
+            }
+          }
+        }
+
+        // Update Zombies (including Hopper tower-vault & Mage armor-shield healing!)
         const frozen = freezeRef.current > 0;
         for (let i = td.zombies.length - 1; i >= 0; i--) {
           const z = td.zombies[i];
           if (z.hitFlash > 0) z.hitFlash = Math.max(0, z.hitFlash - dt * 5);
           if (z.chillTimer > 0) z.chillTimer = Math.max(0, z.chillTimer - dt);
+          if (z.jumpTimer > 0) z.jumpTimer = Math.max(0, z.jumpTimer - dt * 1.6);
 
           if (z.hp <= 0) {
             const zx = td.gridLeft + z.x * (td.cellW * COLS);
             const zy = td.gridTop + (z.lane + 0.5) * td.cellH;
             td.particles.burst(zx, zy, 18, ['#84CC16', '#FACC15', '#FFFFFF'], 60, 220, 6);
-            scoreRef.current += z.kind === 'boss' ? 600 : 120;
-            gearsRef.current += z.kind === 'boss' ? 100 : 25;
+            scoreRef.current += z.kind === 'boss' || z.kind === 'fusion' ? 620 : 120;
+            gearsRef.current += z.kind === 'boss' || z.kind === 'fusion' ? 110 : 28;
             setScore(scoreRef.current);
             setGears(gearsRef.current);
             td.zombies.splice(i, 1);
@@ -682,15 +876,39 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           }
 
           if (!frozen) {
+            // Mage Zombie periodically repairs nearby zombies' Math Armor!
+            if (z.kind === 'mage') {
+              z.mageHealCd -= dt;
+              if (z.mageHealCd <= 0) {
+                z.mageHealCd = 4.2;
+                const mx = td.gridLeft + z.x * (td.cellW * COLS);
+                const my = td.gridTop + (z.lane + 0.5) * td.cellH;
+                td.particles.burst(mx, my, 12, ['#38BDF8', '#A855F7'], 40, 120, 4);
+                for (const ally of td.zombies) {
+                  if (Math.abs(ally.lane - z.lane) <= 1 && Math.abs(ally.x - z.x) < 0.25) {
+                    ally.armor = Math.min(ally.maxArmor, ally.armor + 35);
+                  }
+                }
+              }
+            }
+
             // Check blocking tower in same lane
             const blocking = td.towers.find(
               (t) => t.lane === z.lane && Math.abs(z.x - (t.col + 0.5) / COLS) < 0.055
             );
-            if (blocking) {
+            if (blocking && z.kind === 'hopper' && !z.hasVaulted) {
+              // Hopper vaults cleanly over the front-row blocking tower!
+              z.hasVaulted = true;
+              z.jumpTimer = 1.0;
+              z.x -= 0.13;
+              const zx = td.gridLeft + z.x * (td.cellW * COLS);
+              const zy = td.gridTop + (z.lane + 0.5) * td.cellH;
+              td.floats.spawn(zx, zy - 32, '躍過砲塔！', 'miss');
+            } else if (blocking) {
               z.biteCd -= dt;
               if (z.biteCd <= 0) {
-                z.biteCd = 1.0;
-                blocking.hp -= z.kind === 'boss' ? 35 : 18;
+                z.biteCd = 0.95;
+                blocking.hp -= z.kind === 'boss' || z.kind === 'fusion' ? 42 : 22;
                 if (blocking.hp <= 0) {
                   td.towers = td.towers.filter((t) => t.id !== blocking.id);
                 }
@@ -702,7 +920,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
 
             // Reached Mechanical Castle Gate!
             if (z.x <= 0.01) {
-              const gateDmg = z.kind === 'boss' ? 40 : 18;
+              const gateDmg = z.kind === 'boss' || z.kind === 'fusion' ? 45 : 22;
               castleHpRef.current = Math.max(0, castleHpRef.current - gateDmg);
               setCastleHp(castleHpRef.current);
               soundEngine.playWrongBuzz();
@@ -716,7 +934,22 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           }
         }
 
-        // Decay Sky Lasers
+        // Update Parabolic Flying Bucket Physics
+        for (let i = td.flyingBuckets.length - 1; i >= 0; i--) {
+          const fb = td.flyingBuckets[i];
+          fb.life -= dt;
+          fb.vy += 520 * dt;
+          fb.x += fb.vx * dt;
+          fb.y += fb.vy * dt;
+          fb.rot += dt * 9;
+          if (fb.life <= 0) td.flyingBuckets.splice(i, 1);
+        }
+
+        // Decay Fusion Lightning & Sky Lasers
+        for (let i = td.fusionArcs.length - 1; i >= 0; i--) {
+          td.fusionArcs[i].life -= dt;
+          if (td.fusionArcs[i].life <= 0) td.fusionArcs.splice(i, 1);
+        }
         for (let i = td.lasers.length - 1; i >= 0; i--) {
           td.lasers[i].life -= dt;
           if (td.lasers[i].life <= 0) td.lasers.splice(i, 1);
@@ -756,14 +989,22 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       ctx.lineWidth = 2.5;
       ctx.stroke();
 
-      // Rotating Castle Gate Gear emblem
+      // Hero Class Aura + Rotating Castle Gate Gear emblem
+      drawHeroClassAura(
+        ctx,
+        castlePad + castleW * 0.5,
+        td.gridTop + td.cellH * 2.5,
+        td.time,
+        playerStats.heroClassBranch,
+        playerStats.heroTier
+      );
       ctx.save();
       ctx.translate(castlePad + castleW * 0.5, td.gridTop + td.cellH * 2.5);
       ctx.rotate(td.time * 0.8);
       ctx.strokeStyle = '#FACC15';
       ctx.lineWidth = td.gridLeft < 60 ? 3.5 : 5;
       ctx.beginPath();
-      ctx.arc(0, 0, Math.min(24, castleW * 0.36), 0, Math.PI * 2);
+      ctx.arc(0, 0, Math.min(24, castleW * 0.36) * Math.min(1.2, relicBonusRef.current), 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
 
@@ -824,10 +1065,47 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         const zy = td.gridTop + (z.lane + 0.5) * td.cellH;
         drawMathZombie(ctx, z.kind, zx, zy, td.time, {
           hpRatio: z.hp / z.maxHp,
+          armorRatio: z.maxArmor > 0 ? z.armor / z.maxArmor : 0,
+          hasBucket: z.hasBucket,
+          jumpOffset: z.jumpTimer > 0 ? Math.sin(z.jumpTimer * Math.PI) * 34 : 0,
           chilled: z.chillTimer > 0,
           hitFlash: z.hitFlash,
           formulaShield: z.formulaQuestion ? z.formulaQuestion.payload.formulaShield : null,
         });
+      }
+
+      // Parabolic Flying Detached Iron Buckets!
+      for (const fb of td.flyingBuckets) {
+        ctx.save();
+        ctx.translate(fb.x, fb.y);
+        ctx.rotate(fb.rot);
+        ctx.globalAlpha = Math.min(1, fb.life * 2);
+        ctx.fillStyle = '#64748B';
+        ctx.strokeStyle = '#0F172A';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-12, 8);
+        ctx.lineTo(-9, -8);
+        ctx.lineTo(9, -8);
+        ctx.lineTo(12, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Purple Lightning Zombie Fusion Arcs!
+      for (const arc of td.fusionArcs) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, arc.life * 2);
+        ctx.strokeStyle = '#E879F9';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(arc.x1, arc.y1);
+        ctx.lineTo((arc.x1 + arc.x2) / 2, (arc.y1 + arc.y2) / 2 - 26);
+        ctx.lineTo(arc.x2, arc.y2);
+        ctx.stroke();
+        ctx.restore();
       }
 
       // Golden Ratio Sky Lasers
@@ -961,258 +1239,331 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     setRadialPicker({ lane, col, x: clampedX, y: clampedY });
   };
 
-  return (
-    <div className="relative w-full h-full overflow-hidden bg-slate-950" data-testid="math-td-engine">
-      <canvas
-        ref={canvasRef}
-        onClick={handleGridClick}
-        className="block w-full h-full cursor-pointer"
-        data-testid="math-td-canvas"
-      />
+  // Switch Gamepad A/B/X/Y buzz-in when Math Solver is open
+  useEffect(() => {
+    if (!solverState || paused) return;
+    const id = window.setInterval(() => {
+      const snap = gamepadManager.poll();
+      for (const p of snap.players) {
+        if (!p.connected) continue;
+        if (p.justPressed.confirm) handleSolveOption(0);
+        if (p.justPressed.cancel) handleSolveOption(1);
+        if (p.justPressed.skill1) handleSolveOption(2);
+        if (p.justPressed.skill2) handleSolveOption(3);
+        break;
+      }
+    }, 80);
+    return () => clearInterval(id);
+  }, [handleSolveOption, paused, solverState]);
 
-      {/* Top Unified Tower Defense HUD */}
-      <div className="fixed inset-x-0 top-0 z-20 pointer-events-none safe-top p-2 sm:p-3 flex flex-wrap items-start justify-between gap-2">
-        <div className="pointer-events-auto max-w-full rounded-2xl bg-slate-900/94 border-2 border-blue-400/80 px-2.5 sm:px-4 py-1.5 sm:py-2 shadow-xl flex items-center gap-2.5 sm:gap-4">
-          <div className="min-w-0">
-            <div className="text-[11px] font-bold text-sky-300 truncate max-w-[140px] sm:max-w-none">
-              {stageConfig
-                ? `數境建築・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關`
-                : `數境建築王國（${grade}年級）`}
+  const classMultPreview = computeClassDamageBonus(playerStats.heroClassId, combo, combo >= 3);
+
+  return (
+    <div
+      className="w-screen h-[100dvh] flex flex-col overflow-hidden bg-slate-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      data-testid="math-td-engine"
+    >
+      {/* Tier 1: Single-Row Compact HUD (h-12 shrink-0, zero overlap!) */}
+      <header className="h-12 shrink-0 px-2.5 bg-slate-900/95 border-b border-blue-500/35 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs font-black text-sky-300 truncate max-w-[115px] sm:max-w-none">
+            {stageConfig
+              ? `🏰 ${stageConfig.chapterIndex}-${stageConfig.stageNumber}關`
+              : `🏰 數境塔防(${grade}年)`}
+          </span>
+          <div className="flex items-center gap-1">
+            <div className="w-12 sm:w-20 h-2 rounded-full bg-slate-800 border border-slate-600 overflow-hidden">
+              <div
+                className="h-full bg-emerald-400 transition-transform origin-left"
+                style={{ transform: `scaleX(${Math.max(0, castleHp / playerStats.maxHp)})` }}
+              />
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[10px] font-black text-emerald-300">城門</span>
-              <div className="w-16 sm:w-28 h-2.5 rounded-full bg-slate-800 border border-slate-600 overflow-hidden">
-                <div
-                  className="h-full bg-emerald-400 transition-transform origin-left"
-                  style={{ transform: `scaleX(${Math.max(0, castleHp / playerStats.maxHp)})` }}
-                />
-              </div>
-              <span className="text-[11px] font-black text-white font-mono-num">{castleHp}</span>
-            </div>
-          </div>
-          <div className="hidden sm:block h-8 w-px bg-slate-700" />
-          <div className="flex items-center gap-1 text-amber-300 font-black font-mono-num text-sm sm:text-lg">
-            <Cog className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" style={{ animationDuration: '6s' }} /> {gears}
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-400">波次</div>
-            <div className="text-sm sm:text-base font-black text-white font-mono-num">
-              {wave}/{TOTAL_WAVES}
-            </div>
-          </div>
-          <div className="hidden sm:block text-center">
-            <div className="text-[9px] text-slate-400">連擊</div>
-            <div className="text-base font-black text-amber-300 font-mono-num">{combo}x</div>
+            <span className="text-[11px] font-black text-white font-mono-num">{castleHp}</span>
           </div>
         </div>
 
-        {/* Math Power Triggers: Harvest Gears + Snipe Shielded Zombie + Guardian + Pause */}
-        <div className="pointer-events-auto flex flex-wrap items-center gap-2">
-          {freezeSecs > 0 && (
-            <div className="rounded-xl bg-sky-600 text-white font-black text-xs px-3 py-2">
-              凍結 {freezeSecs}s
-            </div>
+        <div className="flex items-center gap-1.5 text-[11px] font-black shrink-0">
+          <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 font-mono-num flex items-center gap-1">
+            <Cog className="w-3 h-3" /> {gears}
+          </span>
+          <span className="px-2 py-0.5 rounded-lg bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 font-mono-num">
+            W{wave}/{TOTAL_WAVES}
+          </span>
+          {playerCount > 1 && (
+            <span className="hidden sm:inline px-1.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-200 text-[10px]">
+              {playerCount}P共鬥×{classMultPreview.toFixed(1)}
+            </span>
           )}
-          <button
-            type="button"
-            onClick={openHarvestSolver}
-            className="min-h-[44px] px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg transition-transform active:scale-95"
-          >
-            <Zap className="w-4 h-4" /> 算數採能機 (+齒輪/超頻)
-          </button>
-          <button
-            type="button"
-            onClick={openSnipeNearestShield}
-            className={`min-h-[44px] px-3.5 rounded-xl font-black text-xs border-2 flex items-center gap-1.5 shadow-lg transition-transform active:scale-95 ${
-              shieldedCount > 0
-                ? 'bg-rose-500 hover:bg-rose-400 border-amber-200 text-white'
-                : 'bg-slate-800 border-slate-700 text-slate-400'
-            }`}
-          >
-            <Crosshair className="w-4 h-4" /> 狙擊算式盾 ({shieldedCount})
-          </button>
-          <button
-            type="button"
-            disabled={guardianUsed}
-            onClick={handleGuardianSkill}
-            className={`min-h-[44px] px-3 rounded-xl font-black text-xs border-2 flex items-center gap-1.5 ${
-              guardianUsed
-                ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
-                : 'bg-sky-400 hover:bg-sky-300 border-sky-200 text-slate-950'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" /> {guardian.activeName}
-          </button>
           <button
             type="button"
             onClick={() => setPaused(true)}
             aria-label="暫停遊戲"
-            className="w-11 h-11 rounded-xl bg-slate-900/92 hover:bg-slate-800 border-2 border-slate-600 text-white flex items-center justify-center"
+            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/15 text-white flex items-center justify-center shrink-0"
           >
-            <Pause className="w-5 h-5" />
+            <Pause className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* Main Split: Portrait Top Canvas / Bottom Dock | Landscape 54% Left Canvas / 46% Right Dock */}
+      <div className="flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden">
+        {/* Tier 2: Pure Unobstructed 5x8 Lawn Canvas */}
+        <div className="relative h-[42dvh] shrink-0 landscape:h-full landscape:w-[54%] bg-slate-950 border-b landscape:border-b-0 landscape:border-r border-blue-500/25 overflow-hidden">
+          <canvas
+            ref={canvasRef}
+            onClick={handleGridClick}
+            className="block w-full h-full cursor-pointer"
+            data-testid="math-td-canvas"
+          />
+          {freezeSecs > 0 && (
+            <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-sky-600/90 text-white text-[11px] font-black">
+              ❄️ 全場冰封 {freezeSecs}s
+            </div>
+          )}
+
+          {/* Circular Radial Tower Build Wheel (Localized inside Canvas on empty tile tap) */}
+          {radialPicker && (
+            <div
+              data-testid="math-td-radial-wheel"
+              className="absolute z-30 pointer-events-auto"
+              style={{
+                left: Math.max(96, Math.min((canvasRef.current?.clientWidth ?? 360) - 96, radialPicker.x)),
+                top: Math.max(96, Math.min((canvasRef.current?.clientHeight ?? 260) - 96, radialPicker.y)),
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              <div className="relative w-44 h-44 rounded-full bg-slate-950/88 border-2 border-amber-400/80 shadow-2xl flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => setRadialPicker(null)}
+                  aria-label="取消建塔"
+                  className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-500 text-slate-200 font-black text-[11px]"
+                >
+                  取消
+                </button>
+                {TOWER_SHOP.map((t, idx) => {
+                  const positions = [
+                    'top-1 left-1/2 -translate-x-1/2',
+                    'right-1 top-1/2 -translate-y-1/2',
+                    'bottom-1 left-1/2 -translate-x-1/2',
+                    'left-1 top-1/2 -translate-y-1/2',
+                  ];
+                  const affordable = gears >= t.cost;
+                  return (
+                    <button
+                      key={t.kind}
+                      type="button"
+                      onClick={() => placeTowerAt(radialPicker.lane, radialPicker.col, t.kind)}
+                      className={`absolute ${positions[idx]} min-w-[68px] px-2 py-1 rounded-xl border text-center shadow-lg transition-transform active:scale-90 ${
+                        affordable
+                          ? `bg-slate-900 ${t.accent} text-white hover:bg-slate-800`
+                          : 'bg-slate-900/85 border-slate-700 text-slate-400'
+                      }`}
+                    >
+                      <div className="text-[10px] font-black whitespace-nowrap">{t.name.slice(0, 4)}</div>
+                      <div className="text-[10px] font-black text-amber-300 font-mono-num">⚙{t.cost}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Tier 3: Independent Controls + Inline Math Blueprint Solver (NEVER blocks the 5x8 lawn!) */}
+        <div className="flex-1 min-h-0 landscape:w-[46%] overflow-y-auto p-2.5 bg-slate-900/95 flex flex-col justify-between gap-2">
+          {/* Primary Math Power Triggers */}
+          <div className="grid grid-cols-3 gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={openHarvestSolver}
+              className="min-h-[42px] px-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] flex items-center justify-center gap-1 shadow transition-transform active:scale-95"
+            >
+              <Zap className="w-3.5 h-3.5 shrink-0" /> 採能超頻
+            </button>
+            <button
+              type="button"
+              onClick={openSnipeNearestShield}
+              className={`min-h-[42px] px-2 rounded-xl font-black text-[11px] border flex items-center justify-center gap-1 transition-transform active:scale-95 ${
+                shieldedCount > 0
+                  ? 'bg-rose-500 hover:bg-rose-400 border-amber-200 text-white'
+                  : 'bg-slate-800 border-slate-700 text-slate-400'
+              }`}
+            >
+              <Crosshair className="w-3.5 h-3.5 shrink-0" /> 破盾({shieldedCount})
+            </button>
+            <button
+              type="button"
+              disabled={guardianUsed}
+              onClick={handleGuardianSkill}
+              className={`min-h-[42px] px-2 rounded-xl font-black text-[11px] border flex items-center justify-center gap-1 truncate ${
+                guardianUsed
+                  ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
+                  : 'bg-sky-400 hover:bg-sky-300 border-sky-200 text-slate-950'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">{guardian.activeName}</span>
+            </button>
+          </div>
+
+          {/* Inline Math Solver OR Tower Blueprint + Tactical Items */}
+          {solverState ? (
+            <div className="rounded-2xl bg-slate-950/95 border-2 border-amber-400 p-3 space-y-2 flex-1 flex flex-col justify-center">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-black text-amber-300 truncate">
+                  {solverState.purpose === 'snipe'
+                    ? '🎯 黃金比例狙擊・破解算式盾！'
+                    : '⚡ 算數採能機・快解獲齒輪＋超頻！'}
+                </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => soundEngine.speakText(solverState.question.prompt, 'zh-TW')}
+                    aria-label="朗讀數學題目"
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSolverState(null)}
+                    className="px-2 py-1 rounded-lg bg-slate-800 text-[10px] font-bold text-slate-300"
+                  >
+                    返回建塔
+                  </button>
+                </div>
+              </div>
+              <div className="text-sm sm:text-base font-black text-white leading-snug">
+                {solverState.question.prompt}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {solverState.question.payload.options.map((opt, idx) => {
+                  const padKeys = ['A', 'B', 'X', 'Y'];
+                  return (
+                    <button
+                      key={`${solverState.question.id}-${opt}-${idx}`}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.hapticPulse(14);
+                        handleSolveOption(idx);
+                      }}
+                      className="min-h-[46px] px-2.5 rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 border border-sky-500/60 text-white font-black text-sm font-mono-num flex items-center gap-2 transition-all active:scale-95"
+                    >
+                      <span className="w-5 h-5 rounded bg-white/15 text-amber-300 text-[10px] flex items-center justify-center shrink-0">
+                        {padKeys[idx]}
+                      </span>
+                      <span className="truncate">{opt}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 flex-1 flex flex-col justify-center">
+              {/* 4 Tower Blueprints */}
+              <div className="grid grid-cols-2 gap-1.5">
+                {TOWER_SHOP.map((t) => {
+                  const active = selectedTower === t.kind;
+                  const affordable = gears >= t.cost;
+                  return (
+                    <button
+                      key={t.kind}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.playClick();
+                        setSelectedTower(t.kind);
+                      }}
+                      className={`min-h-[48px] rounded-xl px-2.5 py-1.5 border-2 text-left transition-transform active:scale-95 ${
+                        active
+                          ? `bg-slate-800 ${t.accent}`
+                          : 'bg-slate-950/80 border-slate-700 hover:border-slate-500'
+                      } ${!affordable ? 'opacity-60' : ''}`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs font-black text-white truncate">{t.name}</span>
+                        <span className="text-xs font-black text-amber-300 font-mono-num shrink-0">⚙{t.cost}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-300 truncate">{t.role}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 4 Compact Tactical Item Slots */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { id: 'freeze' as const, icon: '❄️', label: '冰封', cost: 60 },
+                  { id: 'smite' as const, icon: '⚡', label: '天雷', cost: 80 },
+                  { id: 'gear' as const, icon: '⚙️', label: '+150', cost: 0 },
+                  { id: 'repair' as const, icon: '🛡️', label: '修50%', cost: 90 },
+                ].map((it) => {
+                  const free = itemCharges[it.id];
+                  return (
+                    <button
+                      key={it.id}
+                      type="button"
+                      onClick={() => useTacticalItem(it.id)}
+                      className="min-h-[42px] px-1 rounded-xl bg-slate-950 hover:bg-indigo-900/70 border border-indigo-400/45 text-white text-center transition-transform active:scale-95 flex flex-col items-center justify-center"
+                    >
+                      <span className="text-[11px] font-black leading-none">
+                        {it.icon} {it.label}
+                      </span>
+                      <span className="text-[9px] font-mono-num text-amber-300 mt-0.5">
+                        {free > 0 ? `免費×${free}` : it.cost > 0 ? `⚙${it.cost}` : '已用'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Ultimate Bar */}
+          <button
+            type="button"
+            disabled={ultCharge < 100}
+            onClick={triggerGoldenRatioUltimate}
+            className={`w-full min-h-[44px] px-3 rounded-xl font-black text-xs sm:text-sm border flex items-center justify-center gap-1.5 shrink-0 transition-transform active:scale-95 ${
+              ultCharge >= 100
+                ? 'bg-amber-400 hover:bg-amber-300 border-white text-slate-950 animate-pulse'
+                : 'bg-slate-800 border-slate-700 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 shrink-0" /> 黃金比例轟炸 ({ultCharge}%)
           </button>
         </div>
       </div>
 
-      {/* Bottom Unified Tower Blueprint Dock (Never overlaps 5x8 grid tiles!) */}
-      <div className="fixed inset-x-0 bottom-2 z-20 pointer-events-none px-4 flex items-end justify-between gap-3">
-        <div className="pointer-events-auto rounded-2xl bg-slate-900/95 border-2 border-slate-700 p-2 shadow-2xl flex items-center gap-2 overflow-x-auto">
-          {TOWER_SHOP.map((t) => {
-            const active = selectedTower === t.kind;
-            const affordable = gears >= t.cost;
-            return (
-              <button
-                key={t.kind}
-                type="button"
-                onClick={() => {
-                  soundEngine.playClick();
-                  setSelectedTower(t.kind);
-                }}
-                className={`min-h-[60px] min-w-[136px] rounded-xl px-3 py-1.5 border-2 text-left transition-transform active:scale-95 ${
-                  active
-                    ? `bg-slate-800 ${t.accent} scale-[1.03]`
-                    : 'bg-slate-950/80 border-slate-700 hover:border-slate-500'
-                } ${!affordable ? 'opacity-65' : ''}`}
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-black text-white whitespace-nowrap">{t.name}</span>
-                  <span className="text-xs font-black text-amber-300 font-mono-num">⚙{t.cost}</span>
-                </div>
-                <div className="text-[11px] text-slate-300 mt-0.5 flex items-center justify-between">
-                  <span>{t.role}</span>
-                  <span className="text-slate-500 font-mono-num">[{t.hotkey}]</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          disabled={ultCharge < 100}
-          onClick={triggerGoldenRatioUltimate}
-          className={`pointer-events-auto min-h-[60px] px-4 rounded-2xl font-black text-xs sm:text-sm border-2 flex items-center gap-2 shrink-0 shadow-xl transition-transform active:scale-95 ${
-            ultCharge >= 100
-              ? 'bg-amber-400 hover:bg-amber-300 border-white text-slate-950'
-              : 'bg-slate-900/92 border-slate-700 text-slate-400 cursor-not-allowed'
-          }`}
-        >
-          <Sparkles className="w-4 h-4" /> 黃金比例轟炸 ({ultCharge}%)
-        </button>
-      </div>
-
-      {/* Circular Radial Tower Build Wheel (Opens on Empty Grass Tile Tap) */}
-      {radialPicker && (
-        <div
-          data-testid="math-td-radial-wheel"
-          className="fixed z-30 pointer-events-auto"
-          style={{
-            left: radialPicker.x,
-            top: radialPicker.y,
-            transform: 'translate(-50%, -50%)',
-          }}
-        >
-          <div className="relative w-56 h-56 rounded-full bg-slate-950/78 border-2 border-amber-400/80 shadow-[0_0_28px_rgba(15,23,42,0.85)] flex items-center justify-center">
-            <button
-              type="button"
-              onClick={() => setRadialPicker(null)}
-              aria-label="取消建塔"
-              className="w-11 h-11 rounded-full bg-slate-800 hover:bg-slate-700 border-2 border-slate-500 text-slate-200 font-black text-xs shadow"
-            >
-              取消
-            </button>
-            {TOWER_SHOP.map((t, idx) => {
-              const positions = [
-                'top-1.5 left-1/2 -translate-x-1/2',
-                'right-1.5 top-1/2 -translate-y-1/2',
-                'bottom-1.5 left-1/2 -translate-x-1/2',
-                'left-1.5 top-1/2 -translate-y-1/2',
-              ];
-              const affordable = gears >= t.cost;
-              return (
-                <button
-                  key={t.kind}
-                  type="button"
-                  onClick={() => placeTowerAt(radialPicker.lane, radialPicker.col, t.kind)}
-                  className={`absolute ${positions[idx]} min-w-[82px] min-h-[50px] px-2.5 py-1 rounded-2xl border-2 text-center shadow-xl transition-transform active:scale-90 ${
-                    affordable
-                      ? `bg-slate-900 ${t.accent} text-white hover:bg-slate-800`
-                      : 'bg-slate-900/85 border-slate-700 text-slate-400'
-                  }`}
-                >
-                  <div className="text-[11px] font-black whitespace-nowrap">{t.name.slice(0, 4)}</div>
-                  <div className="text-[11px] font-black text-amber-300 font-mono-num">⚙{t.cost}</div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Non-Blocking Side/Bottom Blueprint Math Solver Overlay */}
-      {solverState && (
-        <div className="fixed right-3 sm:right-4 bottom-24 z-30 w-[min(94vw,420px)] rounded-3xl bg-slate-900/96 border-2 border-amber-400 p-4 shadow-2xl pointer-events-auto">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-xs font-black text-amber-300">
-              {solverState.purpose === 'snipe'
-                ? '【黃金比例狙擊雷射】破解殭屍算式盾！'
-                : '【算數採能機】快解贏得大量齒輪＋超頻！'}
-            </span>
-            <button
-              type="button"
-              onClick={() => soundEngine.speakText(solverState.question.prompt, 'zh-TW')}
-              aria-label="朗讀數學題目"
-              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300"
-            >
-              <Volume2 className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="text-base sm:text-lg font-black text-white mb-3 leading-snug">
-            {solverState.question.prompt}
-          </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            {solverState.question.payload.options.map((opt, idx) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => {
-                  soundEngine.hapticPulse(14);
-                  handleSolveOption(idx);
-                }}
-                className="min-h-[54px] rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 border-2 border-sky-500/60 hover:border-amber-200 text-white font-black text-base font-mono-num transition-all active:scale-95"
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-          <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400">
-            <span>提示：{solverState.question.hint}</span>
-            <button
-              type="button"
-              onClick={() => setSolverState(null)}
-              className="text-slate-300 hover:text-white underline"
-            >
-              稍後再解
-            </button>
-          </div>
-        </div>
-      )}
-
       {bossWarning && stageConfig?.tier === 'boss' && (
-        <div className="fixed inset-x-0 top-24 z-30 pointer-events-none flex justify-center px-4">
-          <div className="animate-vs-banner rounded-2xl bg-rose-950/95 border-2 border-amber-400 px-6 py-3 text-center shadow-[0_0_32px_rgba(244,63,94,0.55)]">
-            <div className="text-xs font-black tracking-widest text-amber-300">
-              WARNING · 第 10 關章節大魔王進軍！
-            </div>
-            <div className="text-xl font-black text-white mt-0.5">{stageConfig.enemyName}</div>
-            {stageConfig.bossPhase2Name && (
-              <div className="text-xs text-rose-200 mt-0.5">
-                二階變身型態：{stageConfig.bossPhase2Name}（算式狙擊破防！）
-              </div>
-            )}
+        <div className="fixed inset-x-0 top-14 z-30 pointer-events-none flex justify-center px-4">
+          <div className="rounded-full bg-rose-950/95 border border-amber-400 px-4 py-1.5 text-center shadow-lg">
+            <span className="text-xs font-black text-amber-200">
+              ⚠️ 魔王進軍：{stageConfig.enemyName}
+            </span>
           </div>
         </div>
       )}
+
+      <RoguelikeCardModal
+        open={relicModalOpen}
+        title="🌟 數境防線覺醒・選擇戰術遺物"
+        choices={relicChoices}
+        onPick={(relic) => {
+          setRelicModalOpen(false);
+          if (relic.id === 'golden_aegis' || relic.id === 'wisdom_drain') {
+            castleHpRef.current = Math.min(playerStats.maxHp, castleHpRef.current + Math.round(playerStats.maxHp * 0.35));
+            setCastleHp(castleHpRef.current);
+          } else if (relic.id === 'chain_lightning' || relic.id === 'absolute_zero') {
+            ultRef.current = 100;
+            setUltCharge(100);
+          } else {
+            gearsRef.current += 120;
+            setGears(gearsRef.current);
+            relicBonusRef.current = Number((relicBonusRef.current + 0.2).toFixed(2));
+          }
+        }}
+      />
 
       <ExplanationBanner message={banner} onDismiss={() => setBanner(null)} />
       <UltimateCutIn

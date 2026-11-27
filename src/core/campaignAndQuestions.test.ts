@@ -117,3 +117,23 @@ test('Campaign map has 3 chapters × 10 progressive stages per subject/grade wit
     assert.equal(getWorldTotalStars(s, 4, progressAfterCh1Boss).earned, 5);
   }
 });
+
+import { generateProceduralMathQuestions } from '../data/proceduralQuestions';
+
+test('Expanded 108-curriculum question pool reaches 600+ and procedural math generator produces valid distinct options for Grades 3-6', () => {
+  assert.ok(ALL_QUESTIONS.length >= 600, `Expected >= 600 questions, got ${ALL_QUESTIONS.length}`);
+
+  for (const g of [3, 4, 5, 6] as const) {
+    const batchA = generateProceduralMathQuestions(g, 'upper', 1, 8);
+    const batchB = generateProceduralMathQuestions(g, 'lower', 10, 8);
+    assert.equal(batchA.length, 8);
+    assert.equal(batchB.length, 8);
+    for (const q of [...batchA, ...batchB]) {
+      assert.equal(q.grade, g);
+      assert.equal(q.payload.options.length, 4);
+      assert.equal(new Set(q.payload.options).size, 4, `Duplicate math option on ${q.id}`);
+      assert.equal(q.payload.options[q.payload.correctIndex], q.answer);
+    }
+  }
+});
+

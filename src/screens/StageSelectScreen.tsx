@@ -131,49 +131,44 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
 
   return (
     <div
-      className={`w-full h-full bg-gradient-to-br ${theme.bgGrad} text-white flex flex-col overflow-hidden`}
+      className={`w-full h-[100dvh] bg-gradient-to-br ${theme.bgGrad} text-white flex flex-col overflow-hidden`}
       data-testid="stage-select-screen"
     >
-      {/* Top World Map Header */}
-      <div className={`shrink-0 safe-top bg-slate-900/95 border-b-2 ${theme.accentBorder} px-3 sm:px-4 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2 sm:gap-3`}>
-        <div className="flex items-center gap-2.5 sm:gap-3">
+      {/* Top World Map Header (Compact Single Row) */}
+      <div className={`shrink-0 safe-top bg-slate-900/95 border-b-2 ${theme.accentBorder} px-3 sm:px-4 h-12 sm:h-14 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden`}>
+        <div className="flex items-center gap-2 min-w-0">
           <button
             type="button"
             onClick={() => {
               soundEngine.playClick();
               onExit();
             }}
-            className="min-h-[44px] px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-black text-xs inline-flex items-center gap-1.5 shrink-0"
+            className="h-8 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-black text-xs inline-flex items-center gap-1 shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" /> 返回廣場
+            <ArrowLeft className="w-4 h-4" /> 返回
           </button>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-slate-950 border-2 border-white/30 flex items-center justify-center font-black text-base sm:text-lg text-amber-300 shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-slate-950 border border-white/30 flex items-center justify-center font-black text-sm text-amber-300 shrink-0">
             {theme.emblem}
           </div>
-          <div className="min-w-0">
-            <h1 className={`text-base sm:text-xl font-black ${theme.accentText} flex flex-wrap items-center gap-1.5 sm:gap-2`}>
-              <span>
-                {theme.subjectLabel}・{theme.worldName}
-              </span>
-              <span className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 border border-slate-700">
-                {save.grade}年級 {save.semester === 'upper' ? '上學期' : '下學期'}
-              </span>
-            </h1>
-            <p className="text-[11px] sm:text-xs text-slate-400 truncate">{theme.tagline}</p>
-          </div>
+          <h1 className={`text-sm sm:text-lg font-black ${theme.accentText} truncate`}>
+            {theme.subjectLabel}・{theme.worldName}
+          </h1>
+          <span className="hidden sm:inline text-[11px] px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 border border-slate-700 shrink-0">
+            {save.grade}年級{save.semester === 'upper' ? '上' : '下'}
+          </span>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm font-black font-mono-num">
-          <span className="text-amber-300 inline-flex items-center gap-1">
-            <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-            {worldStars.earned} / {worldStars.max}
+        <div className="flex items-center gap-2 text-xs font-black font-mono-num shrink-0">
+          <span className="text-amber-300 inline-flex items-center gap-0.5">
+            <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+            {worldStars.earned}/{worldStars.max}
           </span>
-          <span className="text-emerald-300">已通關 {worldStars.clearedStages} / 30 關</span>
+          <span className="hidden sm:inline text-emerald-300">通關 {worldStars.clearedStages}/30</span>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-y-auto scroll-touch p-3 sm:p-5 pb-10">
+      {/* Main Scrollable Stage Map & Intel */}
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-touch p-3 sm:p-4 pb-6">
         <div className="max-w-6xl mx-auto space-y-4">
           {/* 3 Chapter Selector Tabs */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -250,16 +245,16 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
                         soundEngine.playClick();
                         setSelectedStageNum(stage.stageNumber);
                       }}
-                      className={`relative min-h-[108px] rounded-2xl p-2.5 border-2 flex flex-col items-center justify-between text-center transition-all active:scale-95 ${
+                      className={`relative min-h-[108px] rounded-2xl p-2.5 border-2 flex flex-col items-center justify-between text-center overflow-hidden transition-colors active:scale-95 ${
                         isSelected
-                          ? 'bg-slate-800 border-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.3)] -translate-y-0.5'
+                          ? 'bg-slate-800 border-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.3)]'
                           : unlocked
                             ? isBoss
                               ? 'bg-rose-950/60 hover:bg-rose-950/90 border-rose-500/80'
                               : isElite
                                 ? 'bg-amber-950/40 hover:bg-amber-950/70 border-amber-500/70'
                                 : 'bg-slate-950/85 hover:bg-slate-800/80 border-slate-700'
-                            : 'bg-slate-950/50 border-slate-800/80 opacity-60'
+                            : 'bg-slate-950 border-slate-800 text-slate-400'
                       }`}
                     >
                       <div className="w-full flex items-center justify-between text-[10px] font-black">
@@ -437,36 +432,52 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
                 </div>
               ) : null}
 
-              {/* Launch Button */}
-              <button
-                type="button"
-                disabled={!selectedUnlocked}
-                data-start="true"
-                onClick={() => {
-                  soundEngine.playSlash();
-                  onStartStage(selectedStage);
-                }}
-                className={`w-full min-h-[56px] rounded-2xl font-black text-base flex items-center justify-center gap-2 shadow-xl transition-transform active:scale-[0.98] ${
-                  selectedUnlocked
-                    ? selectedStage.tier === 'boss'
-                      ? 'bg-gradient-to-r from-rose-500 via-amber-400 to-orange-500 text-slate-950 hover:brightness-110'
-                      : 'bg-gradient-to-r from-amber-400 to-emerald-400 text-slate-950 hover:brightness-110'
-                    : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                }`}
-              >
-                {selectedUnlocked ? (
-                  <>
-                    <Play className="w-5 h-5 fill-slate-950" />
-                    出擊第 {selectedStage.stageNumber} 關・{selectedStage.title}！
-                  </>
-                ) : (
-                  <>
-                    <Lock className="w-5 h-5" /> 請先通關前一關解鎖（或切換練習模式自由挑戰）
-                  </>
-                )}
-              </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Sticky Bottom Launch CTA Bar (100% visible without scrolling on 390x844 & 844x390!) */}
+      <div className="shrink-0 sticky bottom-0 z-30 safe-bottom bg-slate-950/95 backdrop-blur-md border-t border-white/15 px-3 sm:px-5 py-2.5 shadow-[0_-8px_24px_rgba(2,6,23,0.75)]">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+          <div className="hidden sm:block min-w-0">
+            <div className="text-xs font-black text-amber-300 truncate">
+              {activeChapter.title} · 第 {selectedStage.stageNumber} 關（{getStageTierLabel(selectedStage.tier)}）
+            </div>
+            <div className="text-[11px] text-slate-300 truncate">
+              敵陣：{selectedStage.enemyName}｜{save.playerCount ?? 1}P 出擊
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={!selectedUnlocked}
+            data-start="true"
+            onClick={() => {
+              soundEngine.playSlash();
+              onStartStage(selectedStage);
+            }}
+            className={`w-full sm:w-auto sm:min-w-[300px] min-h-[48px] px-5 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-xl transition-transform active:scale-[0.98] ${
+              selectedUnlocked
+                ? selectedStage.tier === 'boss'
+                  ? 'bg-gradient-to-r from-rose-500 via-amber-400 to-orange-500 text-slate-950 hover:brightness-110'
+                  : 'bg-gradient-to-r from-amber-400 to-emerald-400 text-slate-950 hover:brightness-110'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            }`}
+          >
+            {selectedUnlocked ? (
+              <>
+                <Play className="w-5 h-5 fill-slate-950 shrink-0" />
+                <span className="truncate">
+                  開始第 {selectedStage.stageNumber} 關・{selectedStage.title}！
+                </span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-4 h-4 shrink-0" />
+                <span className="truncate">請先通關前一關（或切換練習模式）</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>

@@ -13,12 +13,15 @@ import { GUARDIANS } from '../data/guardians';
 import {
   calculateCombatDamage,
   calculateStarRating,
+  computeClassDamageBonus,
   getSpeedGrade,
   getUltimateChargeGain,
 } from '../core/combatMath';
 import { soundEngine } from '../audio/soundEngine';
 import {
   createGameFeel,
+  createMechaSpriteCache,
+  drawHeroClassAura,
   drawMechaShip,
   drawRoundedRect,
   FloatingTextPool,
@@ -31,13 +34,18 @@ import {
   UltimateCutIn,
   WorldPauseModal,
 } from '../components/UltimateCutIn';
+import { RoguelikeCardModal } from '../components/RoguelikeCardModal';
+import { RoguelikeRelicDef, rollRoguelikeChoices } from '../data/heroProgression';
+import { gamepadManager } from '../core/gamepadManager';
 
 interface PlayerLaser {
   x: number;
   y: number;
+  vx: number;
   vy: number;
   power: number;
   color: string;
+  targetId?: string;
 }
 
 interface EnemyBullet {
@@ -46,6 +54,7 @@ interface EnemyBullet {
   vx: number;
   vy: number;
   r: number;
+  ricochet?: boolean;
 }
 
 interface EnergyCore {
@@ -53,6 +62,23 @@ interface EnergyCore {
   y: number;
   vx: number;
   vy: number;
+  kind?: 'core' | 'supply';
+}
+
+interface LaserSweeper {
+  x: number;
+  warnTimer: number;
+  fireTimer: number;
+  width: number;
+}
+
+interface MeteorHazard {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  rot: number;
 }
 
 interface AnswerDrone {
@@ -89,15 +115,18 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   playMode,
   guardianId,
   playerStats,
+  playerCount = 1,
   stageConfig,
   masteredQuestionIds,
   wrongQuestionIds,
   onAnswerResult,
+  onDiscoverMonster,
   onFinish,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const guardian = GUARDIANS[guardianId];
+  const spriteCacheRef = useRef<ReturnType<typeof createMechaSpriteCache> | null>(null);
 
   const droneMgrRef = useRef(
     new QuestionManager<EnglishQuestion>(
@@ -109,6 +138,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         masteredQuestionIds,
         wrongQuestionIds,
         focusTags: stageConfig?.focusTags,
+        bagKey: `en_drone_g${grade}_s${semester}`,
       }
     )
   );
@@ -117,8 +147,13 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       masteredQuestionIds,
       wrongQuestionIds,
       focusTags: stageConfig?.focusTags,
+      bagKey: `en_spell_g${grade}_s${semester}`,
     })
   );
+  const [relicModalOpen, setRelicModalOpen] = useState(false);
+  const [relicChoices, setRelicChoices] = useState<RoguelikeRelicDef[]>([]);
+  const relicBonusRef = useRef(1);
+  const [bossEnraged, setBossEnraged] = useState(false);
   const [bossWarning, setBossWarning] = useState(stageConfig?.tier === 'boss');
   useEffect(() => {
     if (!bossWarning) return;
@@ -178,6 +213,9 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
     lastY: 0,
   });
 
+  const firingHeldRef = useRef(false);
+  const [firingUi, setFiringUi] = useState(false);
+
   const TOTAL_DRONE_WAVES = stageConfig ? Math.max(3, stageConfig.waveCount - 1) : 4;
 
   const simRef = useRef({
@@ -190,9 +228,13 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
     targetY: 560,
     pointerActive: false,
     tilt: 0,
+    layoutReady: false,
     shipHitFlash: 0,
     fireTimer: 0,
+    lockedTargetId: null as string | null,
     novaBeamTimer: 0,
+    hazardTimer: 4.5,
+    supplyTimer: 8.0,
     keys: new Set<string>(),
     stars: Array.from({ length: 120 }, () => ({
       x: Math.random() * 1400,
@@ -204,6 +246,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
     lasers: [] as PlayerLaser[],
     enemyBullets: [] as EnemyBullet[],
     cores: [] as EnergyCore[],
+    sweepers: [] as LaserSweeper[],
+    meteors: [] as MeteorHazard[],
     drones: [] as AnswerDrone[],
     waveIndex: 0,
     waveStartTime: Date.now(),
@@ -288,19 +332,22 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       ...payload.word.split(''),
       ...payload.distractorLetters.slice(0, 2),
     ]);
-    const W = Math.max(800, s.width);
+    const W = Math.max(320, s.width);
+    const H = Math.max(260, s.height);
+    const padX = Math.min(86, W * 0.16);
     s.letterOrbs = allLetters.map((letter, idx) => ({
       id: `orb-${idx}-${Date.now()}`,
       letter,
-      x: 120 + ((W - 240) / Math.max(1, allLetters.length - 1)) * idx,
-      y: 265 + (idx % 2) * 75,
+      x: padX + ((W - padX * 2) / Math.max(1, allLetters.length - 1)) * idx,
+      y: Math.min(H * 0.56, H * 0.36 + (idx % 2) * Math.min(48, H * 0.14)),
       vx: (Math.random() > 0.5 ? 1 : -1) * (35 + Math.random() * 30),
       vy: (Math.random() > 0.5 ? 1 : -1) * 18,
-      r: 28,
+      r: W < 480 ? 22 : 26,
       collected: false,
       flash: 0,
     }));
 
+    onDiscoverMonster?.('bst_star_mothership');
     setWave(TOTAL_DRONE_WAVES + 1);
     setRadarInfo({
       prompt: `${stageConfig?.enemyName ?? 'BOSS'} 拼字充能！依序射擊字母拼出「${payload.zhMeaning}」`,
@@ -311,7 +358,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       spellTarget: payload.word,
     });
     soundEngine.speakText(payload.speakText, 'en-US');
-  }, [TOTAL_DRONE_WAVES, stageConfig?.enemyName]);
+  }, [TOTAL_DRONE_WAVES, onDiscoverMonster, stageConfig?.enemyName]);
 
   const spawnDroneWave = useCallback(
     (waveNum: number) => {
@@ -323,6 +370,11 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         return;
       }
 
+      if (waveNum > 0 && waveNum === 2) {
+        setRelicChoices(rollRoguelikeChoices(waveNum + 2));
+        setRelicModalOpen(true);
+      }
+
       const q = droneMgrRef.current.next();
       const payload = q.payload as EnglishDronePayload;
 
@@ -330,28 +382,40 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       s.currentQuestion = q;
       s.waveStartTime = Date.now();
       s.bossMode = false;
+      onDiscoverMonster?.('bst_vocab_drone');
 
-      const W = Math.max(800, s.width);
+      const W = Math.max(320, s.width);
+      const H = Math.max(260, s.height);
       const count = payload.choices.length;
       const indexed = shuffleArray(
         payload.choices.map((label, idx) => ({ label, isCorrect: idx === payload.correctIndex }))
       );
+      const padX = Math.min(92, W * 0.19);
+      const cols = W < 520 ? 2 : count;
 
-      s.drones = indexed.map((item, i) => ({
-        id: `d-${waveNum}-${i}`,
-        label: item.label,
-        isCorrect: item.isCorrect,
-        x: 140 + ((W - 280) / Math.max(1, count - 1)) * i,
-        y: -40 - i * 25,
-        targetY: 175 + (i % 2) * 58,
-        vx: (i % 2 === 0 ? 1 : -1) * (32 + waveNum * 8),
-        hp: 45,
-        maxHp: 45,
-        hitFlash: 0,
-        shieldFlash: 0,
-        fireCd: 1.5 + i * 0.55,
-        wobble: i * 1.4,
-      }));
+      s.drones = indexed.map((item, i) => {
+        const colIdx = i % cols;
+        const rowIdx = Math.floor(i / cols);
+        const spanW = Math.max(40, W - padX * 2);
+        const xPos = cols === 1 ? W * 0.5 : padX + (spanW / Math.max(1, cols - 1)) * colIdx;
+        const rowGap = Math.max(76, Math.min(92, H * 0.25));
+        const targetY = Math.max(48, Math.min(H * 0.56, 48 + rowIdx * rowGap));
+        return {
+          id: `d-${waveNum}-${i}`,
+          label: item.label,
+          isCorrect: item.isCorrect,
+          x: xPos,
+          y: -30 - i * 18,
+          targetY,
+          vx: (i % 2 === 0 ? 1 : -1) * (24 + waveNum * 7),
+          hp: Math.round(45 * (stageConfig?.enemyHpScale ?? 1)),
+          maxHp: Math.round(45 * (stageConfig?.enemyHpScale ?? 1)),
+          hitFlash: 0,
+          shieldFlash: 0,
+          fireCd: 1.6 + i * 0.55,
+          wobble: i * 1.4,
+        };
+      });
 
       setWave(waveNum + 1);
       setRadarInfo({
@@ -362,7 +426,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       });
       soundEngine.speakText(payload.speakText, 'en-US');
     },
-    [grade, semester, spawnBossSpellingRound]
+    [TOTAL_DRONE_WAVES, onDiscoverMonster, spawnBossSpellingRound, stageConfig?.enemyHpScale, stageConfig?.tier]
   );
 
   // Boot wave 1 on mount
@@ -454,9 +518,18 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       simRef.current.width = rect.width;
       simRef.current.height = rect.height;
-      if (simRef.current.shipY > rect.height - 50) {
-        simRef.current.shipY = rect.height - 90;
-        simRef.current.targetY = rect.height - 90;
+      if (!simRef.current.layoutReady && rect.width > 100 && rect.height > 100) {
+        simRef.current.layoutReady = true;
+        simRef.current.shipX = rect.width * 0.5;
+        simRef.current.targetX = rect.width * 0.5;
+        simRef.current.shipY = rect.height - 58;
+        simRef.current.targetY = rect.height - 58;
+      } else {
+        simRef.current.shipX = Math.max(36, Math.min(rect.width - 36, simRef.current.shipX));
+        if (simRef.current.shipY > rect.height - 46) {
+          simRef.current.shipY = rect.height - 58;
+          simRef.current.targetY = rect.height - 58;
+        }
       }
       simRef.current.bossX = rect.width * 0.5;
     };
@@ -574,19 +647,20 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         tag: q.knowledgeTag,
       });
 
-      // Fan-spread penalty bullets!
-      if (playMode === 'adventure' && freezeRef.current <= 0) {
-        for (let i = -2; i <= 2; i++) {
-          const ang = Math.PI / 2 + i * 0.25;
-          s.enemyBullets.push({
-            x: drone.x,
-            y: drone.y + 24,
-            vx: Math.cos(ang) * 210,
-            vy: Math.sin(ang) * 210,
-            r: 7,
-          });
-        }
+      // Wrong-answer shield ricochet plasma bolts aimed RIGHT BACK at player ship!
+      const baseAng = Math.atan2(s.shipY - drone.y, s.shipX - drone.x);
+      for (let i = -1; i <= 1; i++) {
+        const ang = baseAng + i * 0.22;
+        s.enemyBullets.push({
+          x: drone.x,
+          y: drone.y + 20,
+          vx: Math.cos(ang) * 285,
+          vy: Math.sin(ang) * 285,
+          r: 8,
+          ricochet: true,
+        });
       }
+      s.particles.burst(drone.x, drone.y + 12, 16, ['#F97316', '#EF4444', '#FEF08A'], 70, 220, 5, 'spark');
     };
 
     const handleLetterHit = (orb: LetterOrb) => {
@@ -626,6 +700,10 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           if (s.bossHp <= 0) {
             setTimeout(() => concludeRun(true), 850);
           } else {
+            if (s.bossHp <= Math.ceil(s.bossMaxHp * 0.5)) {
+              setBossEnraged(true);
+              s.floats.spawn(s.bossX, 110, '🔥 星艦狂暴二階段！', 'crit');
+            }
             setTimeout(() => {
               if (!finishedRef.current) spawnBossSpellingRound();
             }, 950);
@@ -677,13 +755,25 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       }
 
       if (dt > 0) {
-        // Ship movement: Keyboard + Pointer tracking
+        // Ship movement: Keyboard + Switch Gamepad 1P..4P + Pointer tracking
         let kx = 0;
         let ky = 0;
         if (s.keys.has('a') || s.keys.has('arrowleft')) kx -= 1;
         if (s.keys.has('d') || s.keys.has('arrowright')) kx += 1;
         if (s.keys.has('w') || s.keys.has('arrowup')) ky -= 1;
         if (s.keys.has('s') || s.keys.has('arrowdown')) ky += 1;
+
+        const snap = gamepadManager.poll();
+        let padFire = false;
+        const p0 = snap.players.find((p) => p.connected);
+        if (p0) {
+          if (Math.abs(p0.moveX) > 0.1 || Math.abs(p0.moveY) > 0.1) {
+            kx += p0.moveX;
+            ky += p0.moveY;
+          }
+          if (p0.pressed.confirm || p0.pressed.skill1) padFire = true;
+          if (p0.justPressed.ult && ultRef.current >= 100) triggerNovaBurst();
+        }
 
         const prevX = s.shipX;
         if (kx !== 0 || ky !== 0) {
@@ -696,31 +786,150 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           s.shipY += (s.targetY - s.shipY) * Math.min(1, dt * 14);
         }
 
-        s.shipX = Math.max(44, Math.min(W - 44, s.shipX));
-        s.shipY = Math.max(H * 0.45, Math.min(H - 52, s.shipY));
+        s.shipX = Math.max(36, Math.min(W - 36, s.shipX));
+        s.shipY = Math.max(H * 0.42, Math.min(H - 36, s.shipY));
         s.tilt = Math.max(-1, Math.min(1, (s.shipX - prevX) * 0.12));
 
-        // Auto-fire neon lasers
-        s.fireTimer -= dt;
-        const fireInterval = shipVariantRef.current === 'falcon' ? 0.16 : 0.22;
-        if (s.fireTimer <= 0) {
+        // ZERO AUTO-FIRE! Player fires ONLY when holding Fire Button / Space / Switch Gamepad A/ZR OR tapping a locked target!
+        s.fireTimer = Math.max(0, s.fireTimer - dt);
+        const manualFireActive = firingHeldRef.current || s.keys.has(' ') || padFire;
+        const fireInterval = shipVariantRef.current === 'falcon' ? 0.17 : 0.22;
+        if (manualFireActive && s.fireTimer <= 0) {
           s.fireTimer = fireInterval;
+          let aimVx = 0;
+          let aimVy = -720;
+          const lockedDrone = !s.bossMode
+            ? s.drones.find((d) => d.id === s.lockedTargetId)
+            : null;
+          const lockedOrb = s.bossMode
+            ? s.letterOrbs.find((o) => !o.collected && o.id === s.lockedTargetId)
+            : null;
+          const lockPos = lockedDrone
+            ? { x: lockedDrone.x, y: lockedDrone.y, id: lockedDrone.id }
+            : lockedOrb
+              ? { x: lockedOrb.x, y: lockedOrb.y, id: lockedOrb.id }
+              : null;
+          if (lockPos) {
+            const ang = Math.atan2(lockPos.y - (s.shipY - 22), lockPos.x - s.shipX);
+            aimVx = Math.cos(ang) * 760;
+            aimVy = Math.sin(ang) * 760;
+          }
+
+          const clsMult = computeClassDamageBonus(playerStats.heroClassId, comboRef.current, comboRef.current >= 3) * relicBonusRef.current;
+          const dmgBlaster = Math.round(16 * clsMult);
+          const dmgFalcon = Math.round(24 * clsMult);
           if (shipVariantRef.current === 'blaster') {
             s.lasers.push(
-              { x: s.shipX - 14, y: s.shipY - 22, vy: -680, power: 14, color: '#22D3EE' },
-              { x: s.shipX + 14, y: s.shipY - 22, vy: -680, power: 14, color: '#22D3EE' }
+              { x: s.shipX - 13, y: s.shipY - 22, vx: aimVx, vy: aimVy, power: dmgBlaster, color: '#22D3EE', targetId: lockPos?.id },
+              { x: s.shipX + 13, y: s.shipY - 22, vx: aimVx, vy: aimVy, power: dmgBlaster, color: '#22D3EE', targetId: lockPos?.id }
             );
           } else {
-            s.lasers.push({ x: s.shipX, y: s.shipY - 28, vy: -760, power: 20, color: '#F472B6' });
+            s.lasers.push({ x: s.shipX, y: s.shipY - 28, vx: aimVx, vy: aimVy, power: dmgFalcon, color: '#F472B6', targetId: lockPos?.id });
+          }
+          // Co-op wingmen fire synchronized support bolts
+          if (playerCount > 1) {
+            for (let p = 1; p < playerCount; p++) {
+              const side = p % 2 === 1 ? -1 : 1;
+              const wx = Math.max(24, Math.min(W - 24, s.shipX + side * (36 + Math.floor(p / 2) * 24)));
+              s.lasers.push({ x: wx, y: s.shipY - 12, vx: aimVx * 0.9, vy: aimVy * 0.9, power: Math.round(10 * clsMult), color: '#FDE047', targetId: lockPos?.id });
+            }
           }
           soundEngine.playLaser();
         }
 
-        // Update player lasers & check collisions
+        // Rich Battlefield Hazards: Laser Sweepers, Self-Destructing Meteors, & Energy Supply Pods
+        const frozenHazards = freezeRef.current > 0;
+        if (!frozenHazards) {
+          s.hazardTimer -= dt;
+          if (s.hazardTimer <= 0) {
+            s.hazardTimer = playMode === 'adventure' ? 4.8 : 7.5;
+            if (Math.random() < 0.5) {
+              s.sweepers.push({
+                x: Math.max(60, Math.min(W - 60, s.shipX + (Math.random() - 0.5) * 140)),
+                warnTimer: 1.35,
+                fireTimer: 0.48,
+                width: 34,
+              });
+            } else {
+              s.meteors.push({
+                x: 60 + Math.random() * Math.max(80, W - 120),
+                y: -26,
+                vx: (Math.random() - 0.5) * 110,
+                vy: 165 + Math.random() * 85,
+                r: 17,
+                rot: 0,
+              });
+            }
+          }
+
+          s.supplyTimer -= dt;
+          if (s.supplyTimer <= 0) {
+            s.supplyTimer = 9.5;
+            s.cores.push({
+              x: 70 + Math.random() * Math.max(80, W - 140),
+              y: -18,
+              vx: 0,
+              vy: 85,
+              kind: 'supply',
+            });
+          }
+        }
+
+        // Update Laser Sweepers
+        for (let i = s.sweepers.length - 1; i >= 0; i--) {
+          const sw = s.sweepers[i];
+          if (sw.warnTimer > 0) {
+            sw.warnTimer -= dt;
+          } else {
+            sw.fireTimer -= dt;
+            if (Math.abs(s.shipX - sw.x) < sw.width * 0.55 + 18 && s.shipHitFlash <= 0) {
+              if (shieldTimerRef.current > 0) {
+                s.floats.spawn(s.shipX, s.shipY - 26, '護盾擋下雷射', 'heal');
+              } else {
+                s.shipHitFlash = 1.0;
+                hpRef.current = Math.max(0, hpRef.current - 14);
+                setHp(hpRef.current);
+                soundEngine.playWrongBuzz();
+                triggerGameFeel(s.feel, { shake: 0.45, hitstop: 0.03 });
+                s.floats.spawn(s.shipX, s.shipY - 24, '-14 掃射', 'crit');
+                if (hpRef.current <= 0) concludeRun(false);
+              }
+            }
+            if (sw.fireTimer <= 0) s.sweepers.splice(i, 1);
+          }
+        }
+
+        // Update Meteors
+        for (let i = s.meteors.length - 1; i >= 0; i--) {
+          const m = s.meteors[i];
+          m.x += m.vx * dt;
+          m.y += m.vy * dt;
+          m.rot += dt * 3.5;
+          if (m.y > H + 30) {
+            s.meteors.splice(i, 1);
+            continue;
+          }
+          if (Math.hypot(m.x - s.shipX, m.y - s.shipY) < m.r + 22) {
+            s.meteors.splice(i, 1);
+            s.particles.burst(m.x, m.y, 16, ['#F97316', '#FDE047', '#94A3B8'], 60, 200, 5);
+            if (shieldTimerRef.current <= 0) {
+              s.shipHitFlash = 0.9;
+              hpRef.current = Math.max(0, hpRef.current - 15);
+              setHp(hpRef.current);
+              soundEngine.playWrongBuzz();
+              triggerGameFeel(s.feel, { shake: 0.4 });
+              s.floats.spawn(s.shipX, s.shipY - 24, '-15 隕石', 'crit');
+              if (hpRef.current <= 0) concludeRun(false);
+            }
+          }
+        }
+
+        // Update player lasers (supports homing onto locked target!) & check collisions
         for (let i = s.lasers.length - 1; i >= 0; i--) {
           const b = s.lasers[i];
+          b.x += b.vx * dt;
           b.y += b.vy * dt;
-          if (b.y < -20) {
+          if (b.y < -30 || b.x < -30 || b.x > W + 30) {
             s.lasers.splice(i, 1);
             continue;
           }
@@ -761,7 +970,16 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           if (!frozen) {
             d.y += (d.targetY - d.y) * Math.min(1, dt * 3.5);
             d.x += d.vx * dt;
-            if (d.x < 95 || d.x > W - 95) d.vx *= -1;
+            const estHalfW = Math.max(54, Math.min(92, d.label.length * 6.8 + 20));
+            const minX = estHalfW + 14;
+            const maxX = Math.max(minX + 10, W - estHalfW - 14);
+            if (d.x < minX) {
+              d.x = minX;
+              d.vx = Math.abs(d.vx);
+            } else if (d.x > maxX) {
+              d.x = maxX;
+              d.vx = -Math.abs(d.vx);
+            }
             // Enemy firing in Adventure mode
             if (playMode === 'adventure') {
               d.fireCd -= dt;
@@ -834,20 +1052,38 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           }
         }
 
-        // Magnetized Energy Cores
+        // Magnetized Energy Cores & Energy Supply Pods
         for (let i = s.cores.length - 1; i >= 0; i--) {
           const c = s.cores[i];
           const dx = s.shipX - c.x;
           const dy = s.shipY - c.y;
           const dist = Math.hypot(dx, dy);
-          c.vx += (dx / Math.max(1, dist)) * 850 * dt;
-          c.vy += (dy / Math.max(1, dist)) * 850 * dt;
-          c.x += c.vx * dt;
-          c.y += c.vy * dt;
-          if (dist < 28) {
-            s.cores.splice(i, 1);
-            scoreRef.current += 25;
-            setScore(scoreRef.current);
+          if (c.kind === 'supply') {
+            c.y += c.vy * dt;
+            if (c.y > H + 30) {
+              s.cores.splice(i, 1);
+              continue;
+            }
+            if (dist < 38) {
+              s.cores.splice(i, 1);
+              hpRef.current = Math.min(playerStats.maxHp, hpRef.current + 18);
+              setHp(hpRef.current);
+              ultRef.current = Math.min(100, ultRef.current + 22);
+              setUltCharge(ultRef.current);
+              soundEngine.playPerfectBell();
+              s.particles.burst(s.shipX, s.shipY, 14, ['#34D399', '#FEF08A'], 50, 160, 5);
+              s.floats.spawn(s.shipX, s.shipY - 30, '+18 護盾 & +22% NOVA', 'heal');
+            }
+          } else {
+            c.vx += (dx / Math.max(1, dist)) * 850 * dt;
+            c.vy += (dy / Math.max(1, dist)) * 850 * dt;
+            c.x += c.vx * dt;
+            c.y += c.vy * dt;
+            if (dist < 28) {
+              s.cores.splice(i, 1);
+              scoreRef.current += 25;
+              setScore(scoreRef.current);
+            }
           }
         }
       }
@@ -924,14 +1160,20 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         ctx.arc(0, 16, 6, 0, Math.PI * 2);
         ctx.fill();
 
-        // Large glowing neon answer billboard (extra crisp & legible on mobile screens)
-        const fontSize = W < 640 ? 20 : 21;
+        // Large glowing neon answer billboard with strict horizontal viewport clamp
+        const fontSize = W < 480 ? 15 : 19;
         ctx.font = `900 ${fontSize}px "Fredoka", "Noto Sans TC", sans-serif`;
-        const tw = Math.max(106, ctx.measureText(d.label).width + 28);
+        const tw = Math.min(W - 36, Math.max(88, ctx.measureText(d.label).width + 24));
+        const halfW = Math.max(44, tw / 2);
+        const clampedDx = Math.max(halfW + 14, Math.min(W - halfW - 14, d.x));
+        if (clampedDx !== d.x) {
+          ctx.translate(clampedDx - d.x, 0);
+          d.x = clampedDx;
+        }
         ctx.fillStyle = d.hitFlash > 0 ? '#FFFFFF' : 'rgba(9, 14, 34, 0.96)';
         ctx.strokeStyle = d.shieldFlash > 0 ? '#F97316' : '#38BDF8';
         ctx.lineWidth = 3;
-        drawRoundedRect(ctx, -tw / 2, -23, tw, 40, 12);
+        drawRoundedRect(ctx, -tw / 2, -21, tw, 36, 11);
         ctx.fill();
         ctx.stroke();
 
@@ -945,6 +1187,20 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         ctx.fillRect(-34, -34, 68, 5);
         ctx.fillStyle = '#22D3EE';
         ctx.fillRect(-34, -34, Math.max(0, 68 * (d.hp / d.maxHp)), 5);
+
+        // Lock-On Reticle Highlight when targeted!
+        if (s.lockedTargetId === d.id) {
+          ctx.save();
+          ctx.rotate(s.time * 3.5);
+          ctx.strokeStyle = '#FDE047';
+          ctx.lineWidth = 2.6;
+          ctx.setLineDash([10, 7]);
+          ctx.beginPath();
+          ctx.arc(0, -2, Math.max(46, tw * 0.56), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
 
         ctx.restore();
       }
@@ -984,8 +1240,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           ctx.save();
           ctx.translate(orb.x, orb.y);
           ctx.fillStyle = orb.flash > 0 ? '#EF4444' : 'rgba(15, 23, 42, 0.9)';
-          ctx.strokeStyle = orb.flash > 0 ? '#FCA5A5' : '#FACC15';
-          ctx.lineWidth = 3.5;
+          ctx.strokeStyle = orb.flash > 0 ? '#FCA5A5' : s.lockedTargetId === orb.id ? '#22D3EE' : '#FACC15';
+          ctx.lineWidth = s.lockedTargetId === orb.id ? 4.5 : 3.5;
           ctx.beginPath();
           ctx.arc(0, 0, orb.r, 0, Math.PI * 2);
           ctx.fill();
@@ -999,15 +1255,69 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         }
       }
 
-      // Player Lasers
-      for (const b of s.lasers) {
-        ctx.fillStyle = b.color;
-        ctx.fillRect(b.x - 2.5, b.y - 12, 5, 22);
+      // Telegraphed Laser Sweepers
+      for (const sw of s.sweepers) {
+        if (sw.warnTimer > 0) {
+          ctx.save();
+          ctx.strokeStyle = `rgba(244, 63, 94, ${0.45 + 0.45 * Math.sin(s.time * 24)})`;
+          ctx.lineWidth = 3;
+          ctx.setLineDash([12, 8]);
+          ctx.beginPath();
+          ctx.moveTo(sw.x, 90);
+          ctx.lineTo(sw.x, H);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#FB7185';
+          ctx.font = '900 11px "Fredoka", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('⚠ LASER', sw.x, 118);
+          ctx.restore();
+        } else {
+          const lg = ctx.createLinearGradient(sw.x - sw.width / 2, 0, sw.x + sw.width / 2, 0);
+          lg.addColorStop(0, 'rgba(244,63,94,0)');
+          lg.addColorStop(0.5, '#FB7185');
+          lg.addColorStop(1, 'rgba(244,63,94,0)');
+          ctx.fillStyle = lg;
+          ctx.fillRect(sw.x - sw.width / 2, 80, sw.width, H - 80);
+        }
       }
 
-      // Enemy Bullets
+      // Self-Destructing Meteors
+      for (const m of s.meteors) {
+        ctx.save();
+        ctx.translate(m.x, m.y);
+        ctx.rotate(m.rot);
+        ctx.fillStyle = '#78350F';
+        ctx.strokeStyle = '#F97316';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        for (let k = 0; k < 7; k++) {
+          const a = (k / 7) * Math.PI * 2;
+          const rr = m.r * (k % 2 === 0 ? 1.05 : 0.78);
+          if (k === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+          else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Player Lasers
+      for (const b of s.lasers) {
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(Math.atan2(b.vy, b.vx) + Math.PI / 2);
+        ctx.fillStyle = b.color;
+        ctx.fillRect(-3, -12, 6, 22);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(-1.2, -10, 2.4, 18);
+        ctx.restore();
+      }
+
+      // Enemy Bullets (Ricochet bolts glow blazing orange-red!)
       for (const eb of s.enemyBullets) {
-        ctx.fillStyle = '#FB7185';
+        ctx.fillStyle = eb.ricochet ? '#F97316' : '#FB7185';
         ctx.beginPath();
         ctx.arc(eb.x, eb.y, eb.r, 0, Math.PI * 2);
         ctx.fill();
@@ -1017,15 +1327,53 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         ctx.fill();
       }
 
-      // Energy Cores
+      // Energy Cores & Collectible Supply Pods
       for (const c of s.cores) {
-        ctx.fillStyle = '#34D399';
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, 6, 0, Math.PI * 2);
-        ctx.fill();
+        if (c.kind === 'supply') {
+          ctx.save();
+          ctx.translate(c.x, c.y);
+          ctx.fillStyle = '#10B981';
+          ctx.strokeStyle = '#FEF08A';
+          ctx.lineWidth = 2.5;
+          drawRoundedRect(ctx, -14, -14, 28, 28, 8);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '900 13px "Fredoka", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('+⚡', 0, 1);
+          ctx.restore();
+        } else {
+          ctx.fillStyle = '#34D399';
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
-      // Player Mecha Ship
+      // Hero Class Aura + 1P..4P Co-op Mecha Ships (Offscreen Cached Sprites for 60FPS!)
+      drawHeroClassAura(ctx, s.shipX, s.shipY, s.time, playerStats.heroClassBranch, playerStats.heroTier);
+      if (!spriteCacheRef.current) {
+        spriteCacheRef.current = createMechaSpriteCache();
+      }
+      if (playerCount > 1 && spriteCacheRef.current) {
+        for (let p = 1; p < playerCount; p++) {
+          const side = p % 2 === 1 ? -1 : 1;
+          const wx = Math.max(24, Math.min(W - 24, s.shipX + side * (38 + Math.floor(p / 2) * 24)));
+          const wy = Math.min(H - 22, s.shipY + 14);
+          const spr = spriteCacheRef.current.ships[p % spriteCacheRef.current.ships.length];
+          ctx.save();
+          ctx.translate(wx, wy);
+          ctx.scale(0.62, 0.62);
+          ctx.drawImage(spr, -spr.width / 2, -spr.height / 2);
+          ctx.restore();
+          ctx.fillStyle = '#FDE047';
+          ctx.font = '900 10px "Fredoka", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${p + 1}P`, wx, wy + 26);
+        }
+      }
       drawMechaShip(
         ctx,
         shipVariantRef.current,
@@ -1034,7 +1382,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         s.time,
         s.tilt,
         shieldTimerRef.current > 0,
-        s.shipHitFlash
+        s.shipHitFlash,
+        firingHeldRef.current || s.keys.has(' ')
       );
 
       s.particles.render(ctx);
@@ -1069,22 +1418,54 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
     };
   }, [concludeRun, guardianId, onAnswerResult, playMode, playerStats.baseAttack, playerStats.maxHp, playerStats.speedBonus, spawnBossSpellingRound, spawnDroneWave]);
 
+  const fireTargetedSalvoAt = (tx: number, ty: number, targetId: string) => {
+    const s = simRef.current;
+    s.lockedTargetId = targetId;
+    const ang = Math.atan2(ty - (s.shipY - 22), tx - s.shipX);
+    const spd = 790;
+    s.lasers.push(
+      { x: s.shipX - 10, y: s.shipY - 22, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, power: 24, color: '#FDE047', targetId },
+      { x: s.shipX + 10, y: s.shipY - 22, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, power: 24, color: '#22D3EE', targetId }
+    );
+    soundEngine.playLaser();
+    soundEngine.hapticPulse(12);
+  };
+
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (pausedRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
+    const s = simRef.current;
+
+    // 1. Tap-to-Lock & Fire directly onto an Enemy Drone or Boss Letter Orb!
+    if (!s.bossMode) {
+      for (const d of s.drones) {
+        if (Math.abs(px - d.x) < 68 && Math.abs(py - d.y) < 38) {
+          fireTargetedSalvoAt(d.x, d.y, d.id);
+          return;
+        }
+      }
+    } else {
+      for (const orb of s.letterOrbs) {
+        if (!orb.collected && Math.hypot(px - orb.x, py - orb.y) < orb.r + 18) {
+          fireTargetedSalvoAt(orb.x, orb.y, orb.id);
+          return;
+        }
+      }
+    }
+
+    // 2. Otherwise drag to pilot ship (+55px upward offset on touch so thumb never hides ship)
     if (e.pointerType === 'touch') {
       e.currentTarget.setPointerCapture?.(e.pointerId);
       touchDragRef.current = { active: true, pointerId: e.pointerId, lastX: px, lastY: py };
-      // Keep mecha ship comfortably above the thumb (+52px upward offset) so thumb never blocks ship
-      simRef.current.targetX = Math.max(36, Math.min(rect.width - 36, px));
-      simRef.current.targetY = Math.max(120, Math.min(rect.height - 62, py - 52));
-      simRef.current.pointerActive = true;
+      s.targetX = Math.max(36, Math.min(rect.width - 36, px));
+      s.targetY = Math.max(120, Math.min(rect.height - 62, py - 55));
+      s.pointerActive = true;
     } else {
-      simRef.current.targetX = px;
-      simRef.current.targetY = py;
-      simRef.current.pointerActive = true;
+      s.targetX = px;
+      s.targetY = py;
+      s.pointerActive = true;
     }
   };
 
@@ -1118,151 +1499,197 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   };
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-slate-950" data-testid="galaxy-shooter-engine">
-      <canvas
-        ref={canvasRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        className="block w-full h-full cursor-crosshair touch-none"
-        data-testid="galaxy-shooter-canvas"
-      />
-
-      {/* Top Holographic Mission Radar (Zero Option Buttons!) */}
-      <div className="fixed inset-x-0 top-0 z-20 pointer-events-none safe-top p-2 sm:p-3 flex flex-wrap items-start justify-between gap-2">
-        {/* Left: Ship HP & Wave */}
-        <div className="pointer-events-auto max-w-full rounded-2xl bg-slate-900/92 border-2 border-cyan-400/80 px-2.5 sm:px-3.5 py-1.5 sm:py-2 shadow-xl flex items-center gap-2.5 sm:gap-3.5">
-          <div className="min-w-0">
-            <div className="text-[11px] font-bold text-cyan-300 truncate max-w-[140px] sm:max-w-none">
-              {stageConfig
-                ? `Word Galaxy・第${stageConfig.chapterIndex}-${stageConfig.stageNumber}關`
-                : `Word Galaxy（${grade}年級）`}
+    <div
+      className="w-screen h-[100dvh] flex flex-col overflow-hidden bg-slate-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      data-testid="galaxy-shooter-engine"
+    >
+      {/* Tier 1: Single-Row Compact HUD (h-12 shrink-0, zero overlap!) */}
+      <header className="h-12 shrink-0 px-2.5 bg-slate-900/95 border-b border-cyan-500/35 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs font-black text-cyan-300 truncate max-w-[130px] sm:max-w-none">
+            {stageConfig
+              ? `🚀 ${stageConfig.chapterIndex}-${stageConfig.stageNumber}關`
+              : `🚀 英語星際(${grade}年)`}
+          </span>
+          <div className="flex items-center gap-1">
+            <div className="w-14 sm:w-20 h-2 rounded-full bg-slate-800 border border-slate-600 overflow-hidden">
+              <div
+                className="h-full bg-cyan-400 transition-transform origin-left"
+                style={{ transform: `scaleX(${Math.max(0, hp / playerStats.maxHp)})` }}
+              />
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[10px] font-black text-rose-300">SHIELD</span>
-              <div className="w-16 sm:w-24 h-2.5 rounded-full bg-slate-800 border border-slate-600 overflow-hidden">
-                <div
-                  className="h-full bg-cyan-400 transition-transform origin-left"
-                  style={{ transform: `scaleX(${Math.max(0, hp / playerStats.maxHp)})` }}
-                />
-              </div>
-              <span className="text-[11px] font-black text-white font-mono-num">{hp}</span>
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-400">WAVE</div>
-            <div className="text-sm sm:text-base font-black text-cyan-300 font-mono-num">
-              {wave}/{TOTAL_DRONE_WAVES + 1}
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] text-slate-400">COMBO</div>
-            <div className="text-sm sm:text-base font-black text-pink-400 font-mono-num">{combo}x</div>
-          </div>
-          <div className="hidden sm:block text-center">
-            <div className="text-[9px] text-slate-400">SCORE</div>
-            <div className="text-base font-black text-white font-mono-num">{score}</div>
+            <span className="text-[11px] font-black text-white font-mono-num">{hp}</span>
           </div>
         </div>
 
-        {/* Center Holographic Mission Prompt + TTS */}
-        <div className="pointer-events-auto rounded-2xl bg-indigo-950/95 border-2 border-pink-400/90 px-4 py-2 shadow-2xl max-w-xl flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => soundEngine.speakText(radarInfo.speakText, 'en-US')}
-            aria-label="重播英文語音"
-            className="w-11 h-11 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 flex items-center justify-center shrink-0 transition-transform active:scale-95"
-          >
-            <Volume2 className="w-5 h-5" />
-          </button>
-          <div className="min-w-0">
-            <div className="text-sm sm:text-base font-black text-white leading-tight">
-              {radarInfo.prompt}
-            </div>
-            <div className="text-xs text-cyan-200 mt-0.5 flex items-center gap-2">
-              <Crosshair className="w-3.5 h-3.5 shrink-0" />
-              <span>
-                {radarInfo.isBoss
-                  ? `已拼出：${radarInfo.spellProgress || '___'} / 共 ${radarInfo.spellTarget?.length ?? 0} 字母（移動機甲射擊對應字母球！）`
-                  : `${radarInfo.zhHint} · 移動機甲瞄準正確敵機轟爆它！`}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Controls */}
-        <div className="pointer-events-auto flex items-center gap-2">
+        <div className="flex items-center gap-1.5 text-[11px] font-black shrink-0">
+          <span className="px-2 py-0.5 rounded-lg bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 font-mono-num">
+            W{wave}/{TOTAL_DRONE_WAVES + 1}
+          </span>
+          <span className="px-2 py-0.5 rounded-lg bg-pink-500/20 border border-pink-400/40 text-pink-200 font-mono-num">
+            {combo}連
+          </span>
           {freezeSecs > 0 && (
-            <div className="rounded-xl bg-sky-600 text-white font-black text-xs px-3 py-2">
-              凍結 {freezeSecs}s
-            </div>
+            <span className="px-1.5 py-0.5 rounded-lg bg-sky-600 text-white text-[10px]">
+              ❄️{freezeSecs}s
+            </span>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              soundEngine.playClick();
-              setShipVariant((v) => (v === 'blaster' ? 'falcon' : 'blaster'));
-            }}
-            className="min-h-[44px] px-3 rounded-xl bg-slate-900/92 hover:bg-slate-800 border-2 border-pink-400/70 text-pink-200 font-bold text-xs flex items-center gap-1.5"
-          >
-            <Rocket className="w-4 h-4" /> {shipVariant === 'blaster' ? 'Blaster' : 'Falcon'}
-          </button>
           <button
             type="button"
             onClick={() => setPaused(true)}
             aria-label="暫停遊戲"
-            className="w-11 h-11 rounded-xl bg-slate-900/92 hover:bg-slate-800 border-2 border-slate-600 text-white flex items-center justify-center"
+            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/15 text-white flex items-center justify-center shrink-0"
           >
-            <Pause className="w-5 h-5" />
+            <Pause className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* Main Split: Portrait Top Canvas / Bottom Controls | Landscape 54% Canvas / 46% Controls */}
+      <div className="flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden">
+        {/* Tier 2: Pure Unobstructed Space Shooter Canvas */}
+        <div className="relative h-[54dvh] shrink-0 landscape:h-full landscape:w-[54%] bg-slate-950 border-b landscape:border-b-0 landscape:border-r border-cyan-500/25 overflow-hidden">
+          <canvas
+            ref={canvasRef}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className="block w-full h-full cursor-crosshair touch-none"
+            data-testid="galaxy-shooter-canvas"
+          />
+          {bossEnraged && (
+            <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-rose-950/90 border border-rose-400 text-[11px] font-black text-rose-200 whitespace-nowrap">
+              🔥 星艦二階段狂暴模式
+            </div>
+          )}
+        </div>
+
+        {/* Tier 3: Independent Mission Prompt, TTS, Ship Switch & Manual Fire Dock */}
+        <div className="flex-1 min-h-0 landscape:w-[46%] overflow-y-auto p-2.5 sm:p-3 bg-slate-900/95 flex flex-col justify-between gap-2">
+          {/* Holographic Mission Prompt + TTS */}
+          <div className="rounded-2xl bg-indigo-950/95 border border-pink-400/70 px-3 py-2 flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => soundEngine.speakText(radarInfo.speakText, 'en-US')}
+              aria-label="重播英文語音"
+              className="w-10 h-10 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 flex items-center justify-center shrink-0 transition-transform active:scale-95"
+            >
+              <Volume2 className="w-5 h-5" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs sm:text-sm font-black text-white leading-snug line-clamp-2">
+                {radarInfo.prompt}
+              </div>
+              <div className="text-[11px] text-cyan-200 mt-0.5 flex items-center gap-1 truncate">
+                <Crosshair className="w-3 h-3 shrink-0" />
+                <span className="truncate">
+                  {radarInfo.isBoss
+                    ? `已拼：${radarInfo.spellProgress || '___'} / ${radarInfo.spellTarget?.length ?? 0} 字母`
+                    : `${radarInfo.zhHint} · 點擊敵機鎖定或長按開火`}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Utility Row: Ship Mode + Guardian Skill + NOVA Burst */}
+          <div className="grid grid-cols-3 gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playClick();
+                setShipVariant((v) => (v === 'blaster' ? 'falcon' : 'blaster'));
+              }}
+              className="min-h-[42px] px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-pink-400/60 text-pink-200 font-black text-[11px] flex items-center justify-center gap-1"
+            >
+              <Rocket className="w-3.5 h-3.5 shrink-0" /> {shipVariant === 'blaster' ? '雙砲' : '獵鷹'}
+            </button>
+            <button
+              type="button"
+              disabled={guardianUsed}
+              onClick={handleGuardianSkill}
+              className={`min-h-[42px] px-2 rounded-xl font-black text-[11px] border flex items-center justify-center gap-1 truncate ${
+                guardianUsed
+                  ? 'bg-slate-800/70 border-slate-700 text-slate-500 cursor-not-allowed'
+                  : 'bg-amber-400 hover:bg-amber-300 border-amber-200 text-slate-950'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">{guardian.activeName}</span>
+            </button>
+            <button
+              type="button"
+              disabled={ultCharge < 100}
+              onClick={triggerNovaBurst}
+              className={`min-h-[42px] px-2 rounded-xl font-black text-[11px] border flex items-center justify-center gap-1 ${
+                ultCharge >= 100
+                  ? 'bg-pink-500 hover:bg-pink-400 border-cyan-200 text-white animate-pulse'
+                  : 'bg-slate-800 border-cyan-500/40 text-cyan-300 cursor-not-allowed'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 shrink-0" /> NOVA {ultCharge}%
+            </button>
+          </div>
+
+          {/* Primary Manual Fire Trigger */}
+          <button
+            type="button"
+            data-testid="manual-fire-button"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              firingHeldRef.current = true;
+              setFiringUi(true);
+            }}
+            onPointerUp={() => {
+              firingHeldRef.current = false;
+              setFiringUi(false);
+            }}
+            onPointerLeave={() => {
+              firingHeldRef.current = false;
+              setFiringUi(false);
+            }}
+            onPointerCancel={() => {
+              firingHeldRef.current = false;
+              setFiringUi(false);
+            }}
+            className={`w-full min-h-[50px] rounded-2xl font-black text-sm border-2 flex items-center justify-center gap-2 shadow-xl transition-transform active:scale-95 select-none ${
+              firingUi
+                ? 'bg-amber-400 border-white text-slate-950 scale-[0.98]'
+                : 'bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-400 hover:to-orange-400 border-amber-200 text-white'
+            }`}
+          >
+            <Crosshair className="w-4 h-4 shrink-0" /> 🔥 鎖定開火（空白鍵 / 搖桿 A・ZR）
           </button>
         </div>
       </div>
 
-      {/* Bottom Corner Action Triggers (Nova Burst & Guardian Skill — Keeping Center 85%+ Clear!) */}
-      <div className="fixed inset-x-0 bottom-3 z-20 pointer-events-none px-4 flex items-end justify-between">
-        <button
-          type="button"
-          disabled={guardianUsed}
-          onClick={handleGuardianSkill}
-          className={`pointer-events-auto min-h-[48px] px-4 rounded-2xl font-black text-xs border-2 flex items-center gap-2 shadow-xl transition-transform active:scale-95 ${
-            guardianUsed
-              ? 'bg-slate-900/75 border-slate-700 text-slate-500 cursor-not-allowed'
-              : 'bg-amber-400 hover:bg-amber-300 border-amber-200 text-slate-950'
-          }`}
-        >
-          <Sparkles className="w-4 h-4" /> {guardian.name}：{guardian.activeName}
-        </button>
-
-        <button
-          type="button"
-          disabled={ultCharge < 100}
-          onClick={triggerNovaBurst}
-          className={`pointer-events-auto min-h-[50px] px-5 rounded-2xl font-black text-sm border-2 flex items-center gap-2 shadow-xl transition-transform active:scale-95 ${
-            ultCharge >= 100
-              ? 'bg-pink-500 hover:bg-pink-400 border-cyan-200 text-white shadow-[0_0_24px_rgba(236,72,153,0.75)]'
-              : 'bg-slate-900/90 border-cyan-500/50 text-cyan-300 cursor-not-allowed'
-          }`}
-        >
-          <Sparkles className="w-4 h-4" /> NOVA BURST ({ultCharge}%)
-        </button>
-      </div>
-
       {bossWarning && stageConfig?.tier === 'boss' && (
-        <div className="fixed inset-x-0 top-24 z-30 pointer-events-none flex justify-center px-4">
-          <div className="animate-vs-banner rounded-2xl bg-rose-950/95 border-2 border-cyan-300 px-6 py-3 text-center shadow-[0_0_32px_rgba(34,211,238,0.5)]">
-            <div className="text-xs font-black tracking-widest text-cyan-300">
-              WARNING · 第 10 關章節大魔王星艦逼近！
-            </div>
-            <div className="text-xl font-black text-white mt-0.5">{stageConfig.enemyName}</div>
-            {stageConfig.bossPhase2Name && (
-              <div className="text-xs text-rose-200 mt-0.5">
-                二階變身型態：{stageConfig.bossPhase2Name}（拼字核心擊破！）
-              </div>
-            )}
+        <div className="fixed inset-x-0 top-14 z-30 pointer-events-none flex justify-center px-4">
+          <div className="rounded-full bg-rose-950/95 border border-cyan-300 px-4 py-1.5 text-center shadow-lg">
+            <span className="text-xs font-black text-cyan-200">
+              ⚠️ BOSS 逼近：{stageConfig.enemyName}
+            </span>
           </div>
         </div>
       )}
+
+      <RoguelikeCardModal
+        open={relicModalOpen}
+        title="🌟 星際戰線覺醒・選擇戰術遺物"
+        choices={relicChoices}
+        onPick={(relic) => {
+          setRelicModalOpen(false);
+          if (relic.id === 'golden_aegis' || relic.id === 'wisdom_drain') {
+            hpRef.current = Math.min(playerStats.maxHp, hpRef.current + Math.round(playerStats.maxHp * 0.35));
+            setHp(hpRef.current);
+          } else if (relic.id === 'chain_lightning' || relic.id === 'absolute_zero') {
+            ultRef.current = 100;
+            setUltCharge(100);
+          } else {
+            relicBonusRef.current = Number((relicBonusRef.current + 0.22).toFixed(2));
+          }
+        }}
+      />
 
       <ExplanationBanner message={banner} onDismiss={() => setBanner(null)} />
       <UltimateCutIn

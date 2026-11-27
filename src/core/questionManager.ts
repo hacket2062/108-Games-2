@@ -12,11 +12,35 @@ import { shuffleArray } from '../data/questionBank';
  *   3. Unseen / unmastered questions in same grade & semester
  *   4. Previously mastered questions (shuffled)
  */
+const SHUFFLE_BAG_PREFIX = 'zhiguang_shuffle_bag_v1_';
+
+function readPersistedBag(bagKey?: string): string[] {
+  if (!bagKey || typeof globalThis === 'undefined' || !('localStorage' in globalThis)) return [];
+  try {
+    const raw = globalThis.localStorage.getItem(SHUFFLE_BAG_PREFIX + bagKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePersistedBag(bagKey: string | undefined, ids: Iterable<string>): void {
+  if (!bagKey || typeof globalThis === 'undefined' || !('localStorage' in globalThis)) return;
+  try {
+    globalThis.localStorage.setItem(SHUFFLE_BAG_PREFIX + bagKey, JSON.stringify(Array.from(ids).slice(-400)));
+  } catch {
+    // ignore quota errors
+  }
+}
+
 export class QuestionManager<T extends AnyQuestion> {
   private readonly allPool: T[];
   private readonly wrongIdSet: Set<string>;
   private readonly masteredIdSet: Set<string>;
   private readonly focusTags: string[];
+  private readonly bagKey?: string;
   private readonly usedInRun = new Set<string>();
   private queue: T[] = [];
   private lastServedId: string | null = null;
@@ -27,6 +51,7 @@ export class QuestionManager<T extends AnyQuestion> {
       wrongQuestionIds?: string[];
       masteredQuestionIds?: string[];
       focusTags?: string[];
+      bagKey?: string;
     }
   ) {
     // Deduplicate input pool by id
@@ -39,6 +64,14 @@ export class QuestionManager<T extends AnyQuestion> {
     this.wrongIdSet = new Set(options?.wrongQuestionIds ?? []);
     this.masteredIdSet = new Set(options?.masteredQuestionIds ?? []);
     this.focusTags = options?.focusTags ?? [];
+    this.bagKey = options?.bagKey;
+    for (const id of readPersistedBag(this.bagKey)) {
+      if (seen.has(id)) this.usedInRun.add(id);
+    }
+    if (this.usedInRun.size >= this.allPool.length && this.allPool.length > 0) {
+      this.usedInRun.clear();
+      writePersistedBag(this.bagKey, this.usedInRun);
+    }
     this.rebuildQueue(false);
   }
 
@@ -105,6 +138,7 @@ export class QuestionManager<T extends AnyQuestion> {
     if (idx === -1) {
       // Recycle only if fresh pool exhausted
       this.usedInRun.clear();
+      writePersistedBag(this.bagKey, this.usedInRun);
       this.rebuildQueue(true);
       idx = findIndexInQueue();
     }
@@ -117,6 +151,7 @@ export class QuestionManager<T extends AnyQuestion> {
     const [picked] = this.queue.splice(idx, 1);
     this.usedInRun.add(picked.id);
     this.lastServedId = picked.id;
+    writePersistedBag(this.bagKey, this.usedInRun);
     return picked;
   }
 
