@@ -23,6 +23,15 @@ npm error Invalid: lock file's @grpc/grpc-js@1.9.16 does not satisfy @grpc/grpc-
 
 ## 驗證狀態
 
+### 最終成功 `252d232`（建置 `96a9c6a5`，58 秒）
+
+- Cloudflare 畫面五階段全部綠燈，日誌 `Success: Deploy command completed`、`Success! Build completed.`。
+- 乾淨安裝再次成功，375 packages installed／382 audited，`found 0 vulnerabilities`。
+- Vite 建置與 16 項靜態資產上傳成功，包含五張美術圖集。
+- 分支預覽：[遊戲預覽](https://codex-security-hardening-108-games-2.hacket2062.workers.dev)；固定部署：[b7cc4b30](https://b7cc4b30-108-games-2.hacket2062.workers.dev)。已在實際 Chrome 開啟並看到四世界、角色成長與隨機任務板，本機模式正常顯示。
+- 實際成功日誌仍是 `bun run build`；設定 UI 雖顯示並儲存 npm，既有分支建置使用的命令尚未反映該變更。**不要宣稱雲端執行了 typecheck／47 測試**：這兩項是本機通過；這次雲端證據為乾淨安裝、audit、Vite build 與 preview deploy 成功。這個命令差異不是此次失敗原因，後續另核對 trigger 設定；不為命令字樣反覆重建已成功的站。
+- 本次問題已解決：原始鎖檔不一致與後續缺 `previews` 均修正，GitHub 任務分支可成功發布預覽。未合併 main、未發布正式版、未變更學生雲端資料。
+
 ### 第一輪雲端驗證 `b3aaa79`（建置 `3407ea9a`）
 
 - Cloudflare 真實 `npm clean-install` 成功：安裝 375 packages、audit 382 packages，日誌回報 **found 0 vulnerabilities**。這證明鎖檔修正已通過乾淨安裝；不代表本機 node_modules 也已更新。
