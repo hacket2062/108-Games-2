@@ -33,7 +33,13 @@ try{
     const fill=CanvasRenderingContext2D.prototype.fillText;
     CanvasRenderingContext2D.prototype.fillText=function(text,x,y,...rest){const m=this.getTransform(),ratio=this.canvas.width/this.canvas.clientWidth;if(this.canvas.dataset.testid==='galaxy-shooter-canvas')window.__mobileText[String(text)]={x:(m.a*x+m.c*y+m.e)/ratio,y:(m.b*x+m.d*y+m.f)/ratio};return fill.call(this,text,x,y,...rest);};
    });
-   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+   const page=await context.newPage(),errors=[],blockedNetworkErrors=[];
+   page.on('pageerror',e=>{
+    // WebKit surfaces our deliberate offline Firestore route abort as a pageerror.
+    // Keep it as evidence; every application exception must still fail this suite.
+    if(/^\/firestore\.googleapis\.com\/google\.firestore\.v1\.Firestore\/Listen\/channel\?.* due to access control checks\.$/.test(e.message))blockedNetworkErrors.push(e.message);
+    else errors.push(e.message);
+   });
    await page.goto(origin,{waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();
    const fixture=await page.evaluate(()=>{const key='zhiguang_108_save_v2_local_hero_01',s=JSON.parse(localStorage.getItem(key));return {...s,grade:1,playMode:'adventure',selectedGuardian:'griffin',playerCount:4};});
    // Seed before React mounts: writing a running lobby's save races its persistence effect in WebKit.
@@ -101,7 +107,7 @@ try{
     for(const art of arts){assert.ok(Math.abs(art.w/art.h-art.sw/art.sh)<.002,'Source aspect preserved '+JSON.stringify(art));assert.ok(Math.abs(art.scaleX-art.scaleY)<.002,'Uniform actor transform '+JSON.stringify(art));}
     worlds.push({world,artSamples:arts.length,aspectPreserved:true});
    }
-   assert.deepEqual(errors,[]);reports.push({engine,viewport,worlds,errors});await context.close();
+   assert.deepEqual(errors,[]);reports.push({engine,viewport,worlds,errors,blockedNetworkErrors});await context.close();
   }}finally{await browser.close();}
  }
  await writeFile(out+'/results.json',JSON.stringify({origin,reports},null,2));console.log(JSON.stringify({origin,reports},null,2));
