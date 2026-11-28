@@ -422,6 +422,7 @@ export interface EffectiveCombatStats {
 }
 
 export interface EngineCommonProps {
+  appearance?: import('../core/equipmentAppearance').EquipmentAppearance;
   grade: GradeLevel;
   semester: SemesterId;
   playMode: PlayMode;

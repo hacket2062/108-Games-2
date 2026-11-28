@@ -1,4 +1,6 @@
 import { GuardianId } from '../types/game';
+import type {EquipmentAppearance} from '../core/equipmentAppearance';
+import {drawCompanionMotion,drawEquippedHero,drawWorldAvatar,drawPaintedUnit,drawLegacyZombie} from './spriteArt';
 
 /**
  * Commercial-Grade Japanese Anime Chibi Mobile Game Art Renderer (60FPS Canvas 2D)
@@ -881,6 +883,7 @@ export function drawInkChibiHero(
   time: number,
   opts: {
     facing?: 1 | -1;
+    appearance?: EquipmentAppearance;
     attackProgress?: number;
     hitFlash?: number;
     walking?: boolean;
@@ -891,6 +894,8 @@ export function drawInkChibiHero(
 ) {
   const role: 'swordsman' | 'mage' | 'healer' =
     rawRole === 'craneMage' ? 'mage' : rawRole === 'pandaHealer' ? 'healer' : rawRole;
+  if(role==='swordsman' && opts.appearance && drawEquippedHero(ctx,x,y,time,opts.appearance,opts.facing??1,opts.scale??1,opts.attackProgress??0,Boolean(opts.walking),opts.walkPhase??0,opts.hitFlash??0)) return;
+  if(role!=='swordsman' && drawCompanionMotion(ctx,role==='mage'?'craneMage':'pandaHealer',x,y,time,{...opts,moving:Boolean(opts.walking)})) return;
   const facing = opts.facing ?? 1;
   const attack = opts.attackProgress ?? 0;
   const scale = opts.scale ?? 1;
@@ -1198,6 +1203,7 @@ export function drawInkMonster(
   } = {}
 ) {
   const scale = (opts.scale ?? 1) * (kind === 'boss' ? 1.5 : 1);
+  if(drawPaintedUnit(ctx,kind==='poring'?2:kind==='slime'?3:opts.name?.includes('墨')?5:4,x,y,time,{scale,hitFlash:opts.hitFlash,shielded:opts.shielded,hpRatio:opts.hpRatio,label:opts.name}))return;
   const floatY = Math.sin(time * 4.8) * 5;
   ctx.save();
   ctx.translate(x, y + floatY);
@@ -1448,8 +1454,10 @@ export function drawMechaShip(
   tilt = 0,
   shielded = false,
   hitFlash = 0,
-  firing = false
+  firing = false,
+  appearance?: EquipmentAppearance
 ) {
+  if(drawWorldAvatar(ctx,'ship',x,y,time,appearance,tilt,shielded,hitFlash))return;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(tilt * 0.22);
@@ -1563,6 +1571,7 @@ export function drawMathTower(
   overheated = false,
   recoil = 0
 ) {
+  if(drawPaintedUnit(ctx,{beaver:6,raccoon:7,owl:8,hedgehog:9}[kind],x-recoil*6,y,time,{hitFlash:overheated?1:0,shielded:overclocked}))return;
   ctx.save();
   ctx.translate(x - recoil * 6, y);
 
@@ -1754,8 +1763,11 @@ export function drawMathZombie(
     shieldFormula?: string | null;
     formulaShield?: string | null;
     jumpOffset?: number;
+    chapter?: number;
+    supreme?: boolean;
   } = {}
 ) {
+  if(drawLegacyZombie(ctx,kind,x,y,time,opts))return;
   const isChilled = Boolean(opts.frozen || opts.chilled);
   const badgeFormula = opts.shieldFormula ?? opts.formulaShield ?? null;
   const isFusion = kind === 'fusion';
@@ -2190,8 +2202,10 @@ export function drawChefCharacter(
   y: number,
   time: number,
   pulse = 0,
-  carryingLabel: string | null = null
+  carryingLabel: string | null = null,
+  appearance?: EquipmentAppearance
 ) {
+  if(rawTheme!=='fox' && drawWorldAvatar(ctx,rawTheme==='panda'?'redpanda':rawTheme,x,y-Math.max(0,pulse)*8,time,appearance,0,false,0,pulse))return;
   const theme: 'panda' | 'penguin' | 'mantis' | 'fox' = rawTheme === 'redpanda' ? 'panda' : rawTheme;
   const bob = Math.sin(time * 6.5) * 2.5 - pulse * 10;
   const scarfWave = Math.sin(time * 9) * 5;

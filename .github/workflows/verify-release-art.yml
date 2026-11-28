@@ -1,0 +1,41 @@
+name: Verify release artwork
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/release-current-art, codex/verify-production-startup]
+permissions:
+  contents: read
+jobs:
+  verify-art:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install application and isolated browser tools
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --prefix "$RUNNER_TEMP/art-check" --no-package-lock --no-audit --no-fund playwright
+          node "$RUNNER_TEMP/art-check/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Check types, startup and retained game logic
+        run: |
+          node node_modules/typescript/bin/tsc --noEmit
+          node --test scripts/procedural-startup.test.mjs
+          node node_modules/vite/bin/vite.js build --ssr src/core/campaignAndQuestions.test.ts --outDir .verification/test-campaign
+          node node_modules/vite/bin/vite.js build --ssr src/core/combatMath.test.ts --outDir .verification/test-combat
+          node --test .verification/test-campaign/campaignAndQuestions.test.js .verification/test-combat/combatMath.test.js
+      - name: Build production site
+        run: npm run build
+      - name: Verify actual artwork, four worlds and retained features
+        run: node scripts/verify-release-art.mjs
+        env:
+          PLAYWRIGHT_MODULE_PATH: ${{ runner.temp }}/art-check/node_modules/playwright
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-art-evidence
+          path: .verification/release-art/
+          if-no-files-found: ignore
+          retention-days: 7

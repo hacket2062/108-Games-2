@@ -37,6 +37,7 @@ import {
 import { RoguelikeCardModal } from '../components/RoguelikeCardModal';
 import { RoguelikeRelicDef, rollRoguelikeChoices } from '../data/heroProgression';
 import { gamepadManager } from '../core/gamepadManager';
+import {drawWorldAvatar} from '../canvas/spriteArt';
 
 interface PlayerLaser {
   x: number;
@@ -110,6 +111,7 @@ interface LetterOrb {
 }
 
 export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
+  appearance,
   grade,
   semester,
   playMode,
@@ -125,6 +127,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const appearanceRef = useRef(appearance);
+  appearanceRef.current = appearance;
   const guardian = GUARDIANS[guardianId];
   const spriteCacheRef = useRef<ReturnType<typeof createMechaSpriteCache> | null>(null);
 
@@ -1366,7 +1370,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           ctx.save();
           ctx.translate(wx, wy);
           ctx.scale(0.62, 0.62);
-          ctx.drawImage(spr, -spr.width / 2, -spr.height / 2);
+          if(!drawWorldAvatar(ctx,'ship',0,0,s.time,appearanceRef.current)) ctx.drawImage(spr, -spr.width / 2, -spr.height / 2);
           ctx.restore();
           ctx.fillStyle = '#FDE047';
           ctx.font = '900 10px "Fredoka", sans-serif';
@@ -1383,7 +1387,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         s.tilt,
         shieldTimerRef.current > 0,
         s.shipHitFlash,
-        firingHeldRef.current || s.keys.has(' ')
+        firingHeldRef.current || s.keys.has(' '),
+        appearanceRef.current
       );
 
       s.particles.render(ctx);

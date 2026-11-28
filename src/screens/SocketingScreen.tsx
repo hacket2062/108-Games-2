@@ -5,6 +5,7 @@ import { useGameState } from '../core/GameStateContext';
 import { GEM_ELEMENTS } from '../data/itemsAndGems';
 import { computeWeaponPower } from '../core/combatMath';
 import { soundEngine } from '../audio/soundEngine';
+import {WeaponArt} from '../components/EquipmentArt';
 
 interface SocketingScreenProps {
   onExit: () => void;
@@ -87,6 +88,7 @@ export const SocketingScreen: React.FC<SocketingScreenProps> = ({ onExit }) => {
             </div>
           )}
 
+          <WeaponArt weapon={weapon} className="shop-item-art"/>
           {/* Top Card: Weapon 3 Gem Slots + Live Total Stat */}
           <div className="rounded-3xl bg-slate-900 border-2 border-cyan-500/60 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">

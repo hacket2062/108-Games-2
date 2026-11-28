@@ -73,6 +73,7 @@ interface MapChest {
 }
 
 export const InkRpgEngine: React.FC<EngineCommonProps> = ({
+  appearance,
   grade,
   semester,
   playMode,
@@ -88,6 +89,9 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const appearanceRef = useRef(appearance);
+  appearanceRef.current = appearance;
+  const movingRef = useRef(false);
   const guardian = GUARDIANS[guardianId];
   const hpScale = stageConfig?.enemyHpScale ?? 1;
 
@@ -925,6 +929,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       w.particles.update(dt);
       w.floats.update(dt);
 
+      const walkBefore = w.walkPhase;
       if (phaseRef.current === 'explore' && dt > 0) {
         // Movement via WASD / Arrows, Virtual Touch Joystick, or click-to-walk
         let dx = w.joyX;
@@ -1346,23 +1351,28 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
           });
         }
 
+        if(dt>0) movingRef.current=w.walkPhase!==walkBefore;
         // 3-Hero RO Party
         drawInkChibiHero(ctx, 'pandaHealer', w.trail[2].x, w.trail[2].y, w.time, {
           facing: w.facing,
           walkPhase: w.walkPhase,
           label: '印璽醫者',
+          walking: movingRef.current,
           scale: 0.9,
         });
         drawInkChibiHero(ctx, 'craneMage', w.trail[1].x, w.trail[1].y, w.time, {
           facing: w.facing,
           walkPhase: w.walkPhase,
           label: '詩韻法師',
+          walking: movingRef.current,
           scale: 0.92,
         });
         drawInkChibiHero(ctx, 'swordsman', w.trail[0].x, w.trail[0].y, w.time, {
           facing: w.facing,
           walkPhase: w.walkPhase,
           label: '墨劍士',
+          appearance: appearanceRef.current,
+          walking: movingRef.current,
           scale: 1.0,
         });
 
@@ -1434,6 +1444,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
             attackProgress: w.heroAttackRole === 'swordsman' ? w.heroDash : 0,
             hitFlash: w.heroHitFlash,
             label: '墨劍士',
+            appearance: appearanceRef.current,
             scale: 1.18 * heroScaleMul,
           }
         );
@@ -1448,6 +1459,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
             attackProgress: w.heroAttackRole === 'craneMage' ? w.heroDash : 0,
             hitFlash: w.heroHitFlash,
             label: '詩韻法師',
+          walking: movingRef.current,
             scale: 1.12 * heroScaleMul,
           }
         );
@@ -1470,6 +1482,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
             attackProgress: w.heroAttackRole === 'pandaHealer' ? w.heroDash : 0,
             hitFlash: w.heroHitFlash,
             label: '印璽醫者',
+          walking: movingRef.current,
             scale: 1.12 * heroScaleMul,
           }
         );

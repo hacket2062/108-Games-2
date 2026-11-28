@@ -20,6 +20,7 @@ import {
 } from '../data/itemsAndGems';
 import { computeWeaponPower } from '../core/combatMath';
 import { soundEngine } from '../audio/soundEngine';
+import {GearArt,HeroPortrait,WeaponArt} from '../components/EquipmentArt';
 
 interface ForgeScreenProps {
   onExit: () => void;
@@ -191,40 +192,7 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                 )}
               </div>
 
-              {/* Stylized SVG Ascended Blade & Aura Rings */}
-              <div className="my-4 flex items-center justify-center">
-                <svg viewBox="0 0 220 130" className="w-56 h-32" aria-label={selectedWeapon.name}>
-                  <defs>
-                    <radialGradient id="auraGrad" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stopColor={pathDef.auraPrimary} stopOpacity="0.55" />
-                      <stop offset="100%" stopColor={pathDef.auraPrimary} stopOpacity="0" />
-                    </radialGradient>
-                  </defs>
-                  <circle cx="110" cy="65" r="58" fill="url(#auraGrad)" />
-                  <ellipse
-                    cx="110"
-                    cy="65"
-                    rx="72"
-                    ry="24"
-                    fill="none"
-                    stroke={pathDef.auraPrimary}
-                    strokeWidth="2.5"
-                    strokeDasharray={selectedWeapon.ascensionPath === 'mythic' ? '8 5' : undefined}
-                  />
-                  {/* Diagonal Sword Silhouette */}
-                  <g transform="translate(110 65) rotate(-32)">
-                    <polygon
-                      points="0,-54 9,14 0,24 -9,14"
-                      fill={selectedWeapon.ascensionPath === 'base' ? '#E2E8F0' : pathDef.auraSecondary}
-                      stroke="#0F172A"
-                      strokeWidth="3"
-                    />
-                    <rect x="-18" y="14" width="36" height="8" rx="3" fill={pathDef.auraPrimary} stroke="#0F172A" strokeWidth="2.5" />
-                    <rect x="-4" y="22" width="8" height="22" rx="2" fill="#475569" stroke="#0F172A" strokeWidth="2" />
-                    <circle cx="0" cy="46" r="6" fill={pathDef.auraPrimary} stroke="#0F172A" strokeWidth="2" />
-                  </g>
-                </svg>
-              </div>
+              <div className="forge-hero-showcase"><HeroPortrait appearance={{weapon:selectedWeapon,equipment:save.equipment}} /><WeaponArt weapon={selectedWeapon} className="forge-main-weapon" /></div>
 
               <div className="text-center">
                 <div className="text-xl font-black text-white">
@@ -279,6 +247,7 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                           : 'bg-slate-950 hover:bg-slate-800/70 border-slate-800'
                       }`}
                     >
+                      <WeaponArt weapon={w} className="inventory-weapon-art"/>
                       <div>
                         <div className="text-sm font-black text-white flex items-center gap-1.5">
                           <span
@@ -423,10 +392,12 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                   return (
                     <div
                       key={pathKey}
+                      data-ascension-path={pathKey}
                       className="rounded-3xl bg-slate-900 border-2 p-4 flex flex-col justify-between gap-3"
                       style={{ borderColor: isCurrent ? '#10B981' : def.auraPrimary }}
                     >
                       <div>
+                        <div className="ascension-art-preview"><HeroPortrait appearance={{weapon:selectedWeapon,equipment:save.equipment}} previewPath={pathKey}/></div>
                         <div className="flex items-center gap-2">
                           <span
                             className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-950"
@@ -495,8 +466,10 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                     return (
                       <div
                         key={g.slot}
+                        data-gear-slot={g.slot}
                         className="rounded-2xl bg-slate-950 border-2 border-slate-800 p-3.5 flex flex-col justify-between gap-2.5"
                       >
+                        <GearArt slot={g.slot} level={lv} className="gear-slot-art"/>
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <div className="text-sm font-black text-white flex items-center gap-1.5">

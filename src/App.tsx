@@ -73,6 +73,7 @@ const AppShell: React.FC = () => {
   const {
     save,
     combatStats,
+    equippedWeapon,
     isRestReminderVisible,
     dismissRestReminder,
     recordAnswer,
@@ -180,6 +181,7 @@ const AppShell: React.FC = () => {
   const masteredQuestionIds = save.masteredQuestionIds ?? [];
 
   const commonWorldProps = {
+    appearance: {weapon: equippedWeapon, equipment: save.equipment, heroClassBranch: combatStats.heroClassBranch},
     grade: save.grade,
     semester: save.semester,
     playMode: effectivePlayMode,

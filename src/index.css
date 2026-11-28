@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+.release-character-card { position:relative; display:flex; align-items:center; justify-content:center; gap:12px; min-height:160px; width:100%; min-width:0; overflow:hidden; border:1px solid #bd9c6066; border-radius:18px; background:radial-gradient(ellipse at center,#33445e99,#0f172acc); text-align:left; padding:8px; color:#f8e2b1; }
+.release-character-card>.hero-portrait { width:160px; height:160px; }
+.release-character-card>span { min-width:0; display:grid; gap:6px; }
+.release-character-card small { color:#cbd5e1; font-size:12px; }
+.forge-hero-showcase { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
+.forge-main-weapon { width:150px; height:150px; }
+@media(max-height:480px) { .release-character-card{min-height:100px;max-height:130px;} .release-character-card>.hero-portrait{width:110px;height:110px;} }
+@media(max-width:639px) { .release-character-card{min-height:130px;} .release-character-card>.hero-portrait{width:130px;height:130px;} }
+
 @layer base {
   :root {
     --font-display: 'Fredoka', 'Noto Sans TC', sans-serif;
@@ -174,3 +183,41 @@
     animation: none !important;
   }
 }
+
+.atlas-art { display: block; width: 100%; height: 100%; background-size: 400% 400%; background-repeat: no-repeat; }
+.weapon-art { display: inline-block; position: relative; width: 160px; height: 160px; isolation: isolate; flex-shrink: 0; }
+.weapon-art > .atlas-art { position: absolute; inset: 0; filter: drop-shadow(0 8px 12px #0007); }
+.weapon-evolution-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.weapon-art-hero { filter: drop-shadow(0 0 10px #f8d58355); }
+.weapon-art-mythic { filter: drop-shadow(0 0 12px #ac9aff66); }
+.weapon-art-inferno { filter: drop-shadow(0 0 12px #ff7d6655); }
+.hero-portrait { position: relative; width: 260px; height: 260px; flex-shrink: 0; }
+.hero-portrait-sprite { display: block; width: 100%; height: 100%; background-image: url(/art/hero-evolution-v1.png); background-size: 200% 200%; background-repeat: no-repeat; filter: drop-shadow(0 12px 12px #0006); }
+.hero-portrait .hero-held-weapon { position: absolute; width: 47%; height: 47%; right: -6%; top: 39%; transform: rotate(-12deg); }
+.lobby-player-portrait { position: absolute; right: 0; bottom: 0; width: 46%; height: 100%; z-index: -1; opacity: .95; }
+.lobby-player-portrait .hero-portrait-sprite { background-size: 200% 200%; }
+.adventure-brief-copy { max-width: 76%; }
+.forge-hero-showcase { display: flex; align-items: center; gap: 10px; border: 1px solid #d4b87966; border-radius: 24px; padding: 14px; background: radial-gradient(ellipse at top, #4b3c6155, #101829); }
+.forge-hero-showcase > .hero-portrait { width: 54%; height: auto; aspect-ratio: 1; }
+.forge-hero-showcase > div:last-child { flex: 1; min-width: 0; font-size: 12px; line-height: 1.8; color: #b9c5d7; }
+.forge-hero-showcase strong { display: block; font-size: 16px; color: #ffe5ab; }
+.forge-weapon-stage { display: flex; justify-content: center; padding: 12px; background: radial-gradient(ellipse, #a5d8e514, transparent 70%); }
+.forge-weapon-stage .weapon-art { width: 240px; height: 240px; }
+.inventory-weapon-art { width: 52px; height: 52px; }
+.ascension-art-preview { position: relative; height: 180px; display: flex; justify-content: center; }
+.ascension-art-preview > .hero-portrait { width: 170px; height: 170px; }
+.ascension-art-preview > .weapon-art { position: absolute; right: -3px; bottom: 0; width: 85px; height: 85px; }
+.gear-art { display: inline-block; position: relative; width: 100px; height: 100px; }
+.gear-art > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.gear-engraving { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; color: #ffe8a5; font-size: 11px; text-shadow: 0 2px 3px #000; }
+.gear-slot-art { align-self: center; }
+.shop-item-art { width: 150px; height: 150px; align-self: center; margin: 0 auto; }
+.fusion-art-preview { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; padding: 15px 0; }
+.fusion-art-preview .weapon-art { width: 95px; height: 95px; }
+.fusion-art-preview p { width: 100%; text-align: center; color: #c4c1df; font-size: 12px; }
+@media (max-width: 639px) { .lobby-player-portrait { opacity: .55; width: 57%; } .adventure-brief-copy { max-width: 100%; } .forge-weapon-stage .weapon-art { width: 200px; height: 200px; } }
+
+
+.hero-portrait .hero-portrait-sprite-motion { background-image:url(/art/hero-motion-v1.png); background-size:600% 400%; animation:portrait-walk 1.2s steps(1,end) infinite; }
+@keyframes portrait-walk { 0%,100% { background-position-x:0%; } 25% { background-position-x:20%; } 50% { background-position-x:0%; } 75% { background-position-x:40%; } }
+@media(prefers-reduced-motion:reduce) { .hero-portrait .hero-portrait-sprite-motion { animation:none; } }
