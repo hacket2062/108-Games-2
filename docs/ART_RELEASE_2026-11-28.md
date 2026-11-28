@@ -10,6 +10,8 @@ Preserved modules: Trial Tower, Bestiary, hero progression, class advancement, r
 
 Local checks: TypeScript noEmit and production Vite build pass; startup regressions 3/3 pass; existing main tests 11/11 pass after Vite SSR bundling. Direct native execution cannot resolve main's non-type imports; the SSR bundles test the same application modules. Existing chunk/config-loader warnings remain.
 
+First clean CI install exposed main's unused direct esbuild 0.25 constraint conflicting with Vite 8.4's optional esbuild 0.27/0.28 peer. Remove that direct constraint, adopt the existing npm package-lock and Node minimum from the previously successful security-branch preview, and preserve its gRPC 1.13.6 override. Remove stale bun.lock so Cloudflare and CI select the same package manager. Do not use force or legacy-peer-deps. Fresh CI npm ci must pass before release.
+
 `scripts/verify-release-art.mjs` checks every atlas against its source SHA-256, visible lobby/forge art, all four worlds' actual Canvas image draws, three reloads per desktop/phone viewport, retained Trial Tower/Bestiary, and preservation of weapon/class records. The workflow runs against a local production build; `RELEASE_TARGET_URL` selects a deployed URL for a separate post-release run. External browser requests are blocked; it does not test Google sign-in or write player cloud data.
 
 Cloud/browser verification and actual deployment are pending at preparation time. Do not equate a loaded lobby with verification of the correct artwork version. Unrelated security branch requirements remain open; this does not claim the overall roadmap is complete.
