@@ -94,8 +94,8 @@ try{
   for(const grade of [1,2]){
    await page.goto(origin,{waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();
    await page.getByRole('button',{name:grade+'年級',exact:true}).click();
-   await page.getByText('生活觀察',{exact:true}).first().waitFor();
-   await page.getByText('英語啟蒙（選修）',{exact:true}).first().waitFor();
+   await page.getByText(/^生活觀察(?: ·|$)/).first().waitFor();
+   await page.getByText(/^英語啟蒙（選修）(?: ·|$)/).first().waitFor();
    await page.waitForFunction(g=>JSON.parse(localStorage.getItem('zhiguang_108_save_v2_local_hero_01'))?.grade===g,grade);
    await page.reload({waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();
    assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('zhiguang_108_save_v2_local_hero_01')).grade),grade);
