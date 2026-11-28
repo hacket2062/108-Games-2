@@ -4,6 +4,8 @@ Checkpoint date: 2026-11-27. Resumed for Node/dependency validation and a child-
 
 ## Latest checkpoint (read this first)
 
+- **Cloudflare cause identified and repair prepared (2026-11-28):** actual dashboard log confirms `npm ci` rejects stale gRPC lock 1.9.16 vs override 1.13.6. Corrected lock with official registry metadata including ordered-map dependency, added explicit static `wrangler.jsonc`; saved preview build command as `npm run typecheck && npm test && npm run build`. Production branch/settings unchanged. See `docs/verification/2026-11-28-cloudflare-build.md`; follow the new remote build through full installation/build/preview success before closing the issue. Older "cause unknown" notes below are superseded.
+
 - **GitHub synchronized:** implementation commit `d998e723576d7f670d8eeece6bf7fe608ac90940`, local/remote tree `395ea7425f02a3d4d65d263ccc25f14c45fbed80`, exact ancestry preserved. Draft PR #1 updated. Local working tree was clean after sync.
 - **2026-11-28 cloud check:** GitHub reports `Workers Builds: 108-games-2` failed for this commit; check run `140800646458`, Cloudflare build `1837ebb2-cf6e-47a2-8c86-2b0da3501f7d`. The GitHub check provides only dashboard links, no error logs/annotations; root cause is not established. No usable Cloudflare build-log connector was found. No manual production deploy or cloud configuration mutation was performed. Do not equate passing local build with passing Cloudflare deployment. Inspect the actual build log before guessing a fix.
 
