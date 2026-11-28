@@ -36,8 +36,8 @@ export function HeroPortrait({ appearance, className = '', previewPath }: { appe
   const path = previewPath ?? heroArtPath(appearance);
   const frame = PATH_ART[path].frame;
   return <div className={`hero-portrait hero-portrait-${path} ${className}`} data-hero-path={path}>
-    <span className="hero-portrait-sprite" role="img" aria-label={PATH_ART[path].name}
-      style={{backgroundPosition:`${frame % 2 * 100}% ${Math.floor(frame / 2) * 100}%`}} />
+    <span className="hero-portrait-sprite hero-portrait-sprite-motion" role="img" aria-label={PATH_ART[path].name}
+      style={{backgroundPosition:`0% ${frame/3*100}%`}} />
     <WeaponArt weapon={{...appearance.weapon,ascensionPath:previewPath ?? appearance.weapon.ascensionPath}} className="hero-held-weapon" />
   </div>;
 }

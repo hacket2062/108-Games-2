@@ -1,4 +1,6 @@
 import { useLazyRef } from '../core/useLazyRef';
+import {preloadMotionAssets} from '../canvas/spriteArt';
+import {getBossAppearance} from '../core/bossAppearance';
 import { useSessionScheduler } from '../core/useSessionScheduler';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Volume2, Pause, Shield, Sparkles, Compass, Swords, Wand2, BookOpen } from 'lucide-react';
@@ -181,6 +183,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
     joyY: 0,
     facing: 1 as 1 | -1,
     walkPhase: 0,
+    moving: false,
     trail: [
       { x: 180, y: 420 },
       { x: 135, y: 445 },
@@ -220,7 +223,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       },
       {
         id: 'm3',
-        name: stageConfig?.tier === 'boss' ? stageConfig.enemyName : '亂碼魔 Boss',
+        name: getBossAppearance(stageConfig?.chapterIndex??1,stageConfig?.tier==='boss').name,
         kind: 'boss' as const,
         x: 980,
         y: 230,
@@ -261,6 +264,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
+  useEffect(()=>{void preloadMotionAssets('chinese');},[]);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -683,6 +687,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       w.floats.update(dt);
 
       if (phaseRef.current === 'explore' && dt > 0) {
+        const oldWalkPhase=w.walkPhase;
         // Movement via WASD / Arrows, Virtual Touch Joystick, or click-to-walk
         let dx = w.joyX;
         let dy = w.joyY;
@@ -714,6 +719,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         }
 
         w.playerX = Math.max(54, Math.min(w.width - 54, w.playerX));
+        w.moving=w.walkPhase!==oldWalkPhase;
         w.playerY = Math.max(105, Math.min(w.height - 65, w.playerY));
 
         // Follow party trail smoothly
@@ -945,6 +951,9 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         for (const m of w.monsters) {
           if (m.defeated) continue;
           drawInkMonster(ctx, m.kind, m.x, m.y, w.time, {
+            chapter:stageConfig?.chapterIndex??1,
+            supreme:stageConfig?.tier==='boss',
+            moving:true,
             shielded: m.shielded,
             hpRatio: m.hp / m.maxHp,
             name: m.name,
@@ -955,18 +964,21 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         drawInkChibiHero(ctx, 'pandaHealer', w.trail[2].x, w.trail[2].y, w.time, {
           facing: w.facing,
           walkPhase: w.walkPhase,
+          moving: w.moving,
           label: '印璽醫者',
           scale: 0.9,
         });
         drawInkChibiHero(ctx, 'craneMage', w.trail[1].x, w.trail[1].y, w.time, {
           facing: w.facing,
           walkPhase: w.walkPhase,
+          moving: w.moving,
           label: '詩韻法師',
           scale: 0.92,
         });
         drawInkChibiHero(ctx, 'swordsman', w.trail[0].x, w.trail[0].y, w.time, {
           facing: w.facing,
           walkPhase: w.walkPhase,
+          moving: w.moving,
           label: '墨劍士',
           appearance: appearanceRef.current,
           scale: 1.0,
@@ -1069,6 +1081,10 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         const enemy = battleEnemyRef.current;
         if (enemy) {
           drawInkMonster(ctx, enemy.kind, W * 0.72, H * 0.49 + shiftY, w.time, {
+            chapter:stageConfig?.chapterIndex??1,
+            supreme:stageConfig?.tier==='boss',
+            moving:false,
+            attacking:w.enemyAtb>80||w.heroHitFlash>0,
             hitFlash: w.enemyHitFlash,
             shielded: enemy.shielded,
             hpRatio: enemy.hp / enemy.maxHp,

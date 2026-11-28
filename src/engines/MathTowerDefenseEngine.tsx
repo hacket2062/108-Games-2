@@ -1,4 +1,5 @@
 import { useLazyRef } from '../core/useLazyRef';
+import {preloadMotionAssets} from '../canvas/spriteArt';
 import { useSessionScheduler } from '../core/useSessionScheduler';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Pause, Sparkles, Cog, Zap, Volume2, Crosshair } from 'lucide-react';
@@ -36,6 +37,9 @@ import {
 import { DEFENSE_ELEMENTS, defenseBossProfile, defenseSimulationPaused, defenseWavePressure, elementDamageMultiplier, projectileElement, ZOMBIE_DEFS, zombieForWave } from '../core/mathDefense';
 import type { ZombieKind } from '../core/mathDefense';
 import { HeroPortrait } from '../components/EquipmentArt';
+import {BOSS_APPEARANCES,getBossAppearance} from '../core/bossAppearance';
+import type {DefenseElement} from '../core/mathDefense';
+import {bossPortraitBackground} from '../core/spriteMotion';
 
 const LANES = 5;
 const COLS = 8;
@@ -72,6 +76,11 @@ interface PlacedTower {
 }
 
 interface ZombieEntity {
+  name: string;
+  element: DefenseElement;
+  moving: boolean;
+  attackPose: number;
+  motionOffset: number;
   supreme?: boolean;
   id: string;
   kind: ZombieKind;
@@ -120,6 +129,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(()=>{void preloadMotionAssets('math');},[]);
   const guardian = GUARDIANS[guardianId];
   const qMgrRef = useLazyRef(() =>
     new QuestionManager<MathQuestion>(getMathQuestions(grade, semester), {
@@ -555,12 +565,18 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       const pressure = defenseWavePressure(waveIdx,stageConfig?.chapterIndex??1);
       const supreme=isBoss && stageConfig?.tier==='boss';
       const bossProfile=defenseBossProfile(supreme);
+      const bossArt=getBossAppearance(stageConfig?.chapterIndex??1,supreme);
       const baseHp = Math.round(def.hp * (stageConfig?.enemyHpScale ?? 1) * pressure.hp * (isBoss?bossProfile.hpMultiplier:1));
       const baseSpeed = def.speed * (stageConfig?.enemySpeedScale ?? 1) * pressure.speed * (isBoss?bossProfile.speedMultiplier:1);
 
       td.zombies.push({
         id: `z-${Date.now()}-${Math.random()}`,
         kind,
+        name:isBoss?bossArt.name:def.name,
+        element:isBoss?bossArt.element:def.element,
+        moving:true,
+        attackPose:0,
+        motionOffset:ordinal*.37,
         supreme,
         specialCd: 7,
         healsRemaining: kind === 'oracle' ? 3 : 0,
@@ -690,7 +706,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           const hitZ = td.zombies.find((z) => z.lane === p.lane && Math.abs(z.x - p.x) < 0.055);
           if (hitZ) {
             const mult = hitZ.formulaQuestion ? 0.5 : 1.0;
-            const advantage = elementDamageMultiplier(projectileElement(p.kind), ZOMBIE_DEFS[hitZ.kind].element);
+            const advantage = elementDamageMultiplier(projectileElement(p.kind), hitZ.element);
             const dmg = Math.max(4, Math.round(p.damage * mult * advantage));
             hitZ.hp -= dmg;
             hitZ.hitFlash = 0.65;
@@ -717,11 +733,13 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         const frozen = freezeRef.current > 0;
         for (let i = td.zombies.length - 1; i >= 0; i--) {
           const z = td.zombies[i];
+          z.attackPose=Math.max(0,z.attackPose-dt);
+          z.moving=false;
           if (z.hitFlash > 0) z.hitFlash = Math.max(0, z.hitFlash - dt * 5);
           if (z.chillTimer > 0) z.chillTimer = Math.max(0, z.chillTimer - dt);
           if (z.kind === 'oracle' && z.healsRemaining > 0) {
             z.specialCd -= dt;
-            if (z.specialCd <= 0) { z.specialCd = 7; z.healsRemaining--; for (const ally of td.zombies) if (ally.lane === z.lane && ally.id !== z.id) ally.hp = Math.min(ally.maxHp, ally.hp + Math.round(ally.maxHp * .12)); }
+            if (z.specialCd <= 0) { z.attackPose=.5; z.specialCd = 7; z.healsRemaining--; for (const ally of td.zombies) if (ally.lane === z.lane && ally.id !== z.id) ally.hp = Math.min(ally.maxHp, ally.hp + Math.round(ally.maxHp * .12)); }
           }
 
           if (z.hp <= 0) {
@@ -744,6 +762,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
             if (blocking) {
               z.biteCd -= dt;
               if (z.biteCd <= 0) {
+                z.attackPose=.35;
                 z.biteCd = z.kind === 'pyro' ? 2.4 : 1.5;
                 blocking.hp -= ZOMBIE_DEFS[z.kind].bite * (z.kind==='boss' && z.hp<z.maxHp*.5 ? 1.2 : 1) * (z.supreme?1.5:1);
                 if (blocking.hp <= 0) {
@@ -751,6 +770,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
                 }
               }
             } else {
+              z.moving=true;
               const spd = z.speed * (z.chillTimer > 0 ? 0.45 : 1.0) * (z.kind==='boss' && z.hp<z.maxHp*.5 ? 1.2 : 1);
               z.x -= spd * dt;
             }
@@ -892,18 +912,18 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         const zx = td.gridLeft + z.x * (td.cellW * COLS);
         const zy = td.gridTop + (z.lane + 0.5) * td.cellH;
         ctx.save();ctx.translate(zx,zy);const spriteScale=Math.min(1.6,td.cellW/62,td.cellH/68);ctx.scale(spriteScale,spriteScale);
-        drawMathZombie(ctx, z.kind, 0, 0, td.time, {
+        drawMathZombie(ctx, z.kind, 0, 0, td.time+z.motionOffset, {
           hpRatio: z.hp / z.maxHp,
           chilled: z.chillTimer > 0,
           hitFlash: z.hitFlash,
           formulaShield: z.formulaQuestion ? z.formulaQuestion.payload.formulaShield : null,
           phase2: z.kind === 'boss' && z.hp < z.maxHp * .5,
+          moving:z.moving,
+          attacking:z.attackPose>0,
+          chapter:stageConfig?.chapterIndex??1,
+          supreme:z.supreme,
         });
-        if (z.supreme) {
-          ctx.strokeStyle='#e6b9ff';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(0,-38,34,12,0,0,Math.PI*2);ctx.stroke();
-          ctx.fillStyle='#e9c366';ctx.beginPath();ctx.moveTo(-24,-34);ctx.lineTo(-29,-59);ctx.lineTo(-12,-48);ctx.lineTo(0,-67);ctx.lineTo(12,-48);ctx.lineTo(29,-59);ctx.lineTo(24,-34);ctx.closePath();ctx.fill();
-        }
-        ctx.restore();ctx.fillStyle=DEFENSE_ELEMENTS[ZOMBIE_DEFS[z.kind].element].color;ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillText(`${DEFENSE_ELEMENTS[ZOMBIE_DEFS[z.kind].element].icon} ${z.supreme?defenseBossProfile(true).name:ZOMBIE_DEFS[z.kind].name}`,zx,zy+td.cellH*.43);
+        ctx.restore();ctx.fillStyle=DEFENSE_ELEMENTS[z.element].color;ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillText(`${DEFENSE_ELEMENTS[z.element].icon} ${z.name}`,zx,zy+td.cellH*.43);
       }
 
       // Golden Ratio Sky Lasers
@@ -1143,7 +1163,13 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
 
       {bestiaryOpen && <div className="math-bestiary" role="dialog" aria-modal="true" aria-label="殭屍圖鑑與屬性相剋">
         <section><div className="math-bestiary-header"><div><h2>看懂敵人，選對武器</h2><p>遊戲相剋規則：烈焰 → 寒霜 → 雷電 → 烈焰。克制 ×1.6，逆向 ×0.7，物理 ×1。</p></div><button type="button" onClick={() => setBestiaryOpen(false)}>返回防線</button></div>
-        <div className="zombie-roster">{(Object.keys(ZOMBIE_DEFS) as ZombieKind[]).map(kind=>{const z=ZOMBIE_DEFS[kind];return <article key={kind}><span className="zombie-portrait" role="img" aria-label={z.name} style={{backgroundPosition:`${z.cell%3/2*100}% ${Math.floor(z.cell/3)*100}%`}}/><h3>{z.name}</h3><span style={{color:DEFENSE_ELEMENTS[z.element].color}}>{DEFENSE_ELEMENTS[z.element].name} · HP {z.hp}</span><p>{z.role}</p></article>;})}</div>
+        <div className="zombie-roster">{(Object.keys(ZOMBIE_DEFS) as ZombieKind[]).map(kind=>{
+          const z=ZOMBIE_DEFS[kind],boss=kind==='boss'?getBossAppearance(stageConfig?.chapterIndex??1,stageConfig?.tier==='boss'):undefined;
+          const name=boss?.name??z.name,element=boss?.element??z.element;
+          return <article key={kind}><span className={boss?'boss-motion-portrait':'zombie-portrait'} role="img" aria-label={name} style={boss?bossPortraitBackground(boss.row):{backgroundPosition:`${z.cell%3/2*100}% ${Math.floor(z.cell/3)*100}%`}}/><h3>{name}</h3><span style={{color:DEFENSE_ELEMENTS[element].color}}>{DEFENSE_ELEMENTS[element].name} · 基礎 HP {z.hp}</span><p>{z.role}</p></article>;
+        })}</div>
+        <h2 className="boss-roster-heading">三章首領 · 每章都有不同的一般王與極品王</h2>
+        <div className="boss-roster">{BOSS_APPEARANCES.map(boss=><article key={boss.row}><span className="boss-motion-portrait" role="img" aria-label={boss.name} style={bossPortraitBackground(boss.row)}/><h3>{boss.name}</h3><p>第 {boss.chapter} 章 · {boss.supreme?'極品王':'一般王'} · {DEFENSE_ELEMENTS[boss.element].name}</p><p>{boss.silhouette}</p></article>)}</div>
         </section>
       </div>}
 

@@ -1,4 +1,5 @@
 import { useLazyRef } from '../core/useLazyRef';
+import {preloadMotionAssets} from '../canvas/spriteArt';
 import { useSessionScheduler } from '../core/useSessionScheduler';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Bell, Flame, Pause, Sparkles, Volume2, FlaskConical, CheckCircle2 } from 'lucide-react';
@@ -54,6 +55,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(()=>{void preloadMotionAssets('science');},[]);
   const appearanceRef = useRef(appearance);
   appearanceRef.current = appearance;
   const guardian = GUARDIANS[guardianId];

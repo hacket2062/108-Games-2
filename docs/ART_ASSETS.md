@@ -15,3 +15,18 @@
 後兩張來源分別為 `exec-697b31d5-0773-4443-bd67-7c64100a3106.png` 與 `exec-25acb7bd-19b5-40bc-89b8-0ef06ac7478b.png`，同一 generated_images 工作階段。五張 PNG 共約 13.54 MB。
 
 已在實際鍛造／圖鑑／成長面板與 `scripts/verify-art-gallery.mjs` 的 36 張 Canvas 畫面檢視。圖集列距並非完全均分，runtime 使用個別列界線與格內裁切避免鄰格露出；原始 PNG 不修改。手機 Canvas 的可讀性與首次載入速度仍需實機試玩；不宣稱每張圖有獨立逐格骨骼動畫。
+
+
+## 2026-11-28 motion atlas batch
+
+Generated with the imagegen skill and copied into the repository. Prompts required detailed painterly chibi art, transparent backgrounds/gutters, stable baselines, consistent identities, distinct bent elbows/knees and real pose changes rather than translated stills. Hero/party face right; zombies/bosses face left. Runtime Canvas crops select poses; no external image manipulation was used.
+
+| Project asset | Layout / prompt specification | Generated source basename |
+| --- | --- | --- |
+| `public/art/hero-motion-v1.png` | 6×4: four evolution forms, idle / alternate gait A / gait B / wind-up / strike / hurt; reference hero-evolution-v1. Follow-up edit strengthened opposite gait in column 3 and transparency. | `exec-f18abca0-b788-4b48-8362-567f981ccef4.png` |
+| `public/art/zombie-motion-v1.png` | 4×5: walker, lightning runner, ice guard, fire mage, ice oracle; idle / two walking poses / attack; reference zombie-roster-v1. | `exec-64928d67-018a-42f4-a90f-629dd07946fd.png` |
+| `public/art/boss-motion-v1.png` | 4×6: clockwork giant, ice minotaur, lava dragon brute, jade stag revenant, frost lich queen, void winged dragon; idle / two walking poses / attack. Require different anatomy and silhouettes. | `exec-32c3f1e1-9ae6-4449-9575-b988aa78493e.png` |
+| `public/art/party-motion-v1.png` | 6×2: jade panda healer and crimson crane mage; idle / alternate gait / wind-up / casting release / hurt, matching existing identities. | `exec-ad59e28d-04d5-4b43-bf3e-46f3e685debc.png` |
+| `public/art/chef-motion-v1.png` | 6×4: three chef species × four evolution outfits, each with preparation and pan-flip action; reference world-avatars-v1. | `exec-0717ba6a-d866-4f13-8ad6-5fcf1a111ae8.png` |
+
+All sources were saved under the Codex generated_images directory before copying. Runtime evidence and limits: [motion verification](verification/2026-11-28-motion.md). These images implement 2D pose animation, not a full skeletal rig.

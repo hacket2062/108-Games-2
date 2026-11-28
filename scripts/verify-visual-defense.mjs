@@ -42,7 +42,11 @@ try{
  await page.clock.runFor(1000);await page.clock.fastForward(29000);assert.equal(await page.getByTestId('math-wave-state').textContent(),activeState);assert.equal(await page.getByTestId('math-castle-hp').textContent(),activeHp);assert.deepEqual(await page.evaluate(()=>window.finished),[]);
  await page.screenshot({path:'.verification/math-reading-protection.png'});
  await page.getByRole('button',{name:'稍後再解',exact:true}).click();await page.getByRole('button',{name:'敵人圖鑑與相剋',exact:true}).click();
- assert.equal(await page.locator('.zombie-roster article').count(),6);await page.screenshot({path:'.verification/zombie-roster.png'});await page.getByRole('button',{name:'返回防線',exact:true}).click();
+ assert.equal(await page.locator('.zombie-roster article').count(),6);assert.equal(await page.locator('.boss-roster article').count(),6);
+ assert.equal(new Set(await page.locator('.boss-roster h3').allTextContents()).size,6);
+ await page.screenshot({path:'.verification/zombie-roster.png'});
+ await page.setViewportSize({width:390,height:844});await page.locator('.boss-roster-heading').scrollIntoViewIfNeeded();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:'.verification/boss-roster-390.png'});await page.setViewportSize({width:1440,height:1000});
+ await page.getByRole('button',{name:'返回防線',exact:true}).click();
  await page.evaluate(()=>window.showState('forge'));await page.getByRole('button',{name:'三路線升階',exact:true}).waitFor();
  await page.getByRole('button',{name:'三路線升階',exact:true}).click();assert.equal(await page.locator('[data-ascension-path]').count(),3);await page.screenshot({path:'.verification/forge-evolution.png',fullPage:true});
  await page.locator('[data-ascension-path="hero"] button').click();await page.waitForFunction(()=>window.liveSave.weapons[0].ascensionPath==='hero');

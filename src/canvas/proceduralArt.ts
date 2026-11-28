@@ -2,7 +2,7 @@ import type { GuardianId } from '../types/game';
 import { GUARDIANS } from '../data/guardians';
 import type { EquipmentAppearance } from '../core/equipmentAppearance';
 import type { ZombieKind } from '../core/mathDefense';
-import { drawArtCell, drawEquippedHero, drawPaintedUnit, drawUpgradeRig, drawWorldAvatar, drawZombieArt } from './spriteArt';
+import { drawArtCell, drawChapterBoss, drawCompanionMotion, drawEquippedHero, drawPaintedUnit, drawUpgradeRig, drawWorldAvatar, drawZombieArt } from './spriteArt';
 
 // ============================================================================
 // Zero-GC Pooled Particle Ring Buffer & RO-Style Floating Damage Numbers
@@ -545,6 +545,7 @@ export function drawInkChibiHero(
     facing?: 1 | -1;
     appearance?: EquipmentAppearance;
     walkPhase?: number;
+    moving?: boolean;
     attackProgress?: number; // 0..1
     hitFlash?: number;
     label?: string;
@@ -557,7 +558,8 @@ export function drawInkChibiHero(
   const scale = opts.scale ?? 1;
   const bob = Math.abs(Math.sin(walk * 8)) * -4 + Math.sin(time * 4.2) * 2.2;
   const legSwing = Math.sin(walk * 8) * 6;
-  if (role === 'swordsman' && opts.appearance && drawEquippedHero(ctx,x,y,time,opts.appearance,facing,scale,atk)) return;
+  if (role === 'swordsman' && opts.appearance && drawEquippedHero(ctx,x,y,time,opts.appearance,facing,scale,atk,Boolean(opts.moving),walk,opts.hitFlash)) return;
+  if(role!=='swordsman' && drawCompanionMotion(ctx,role,x,y,time,opts))return;
   if(role!=='swordsman' && drawPaintedUnit(ctx,role==='pandaHealer'?0:1,x,y+bob,time,{scale,facing,hitFlash:opts.hitFlash,label:opts.label}))return;
 
   ctx.save();
@@ -747,9 +749,10 @@ export function drawInkMonster(
   x: number,
   y: number,
   time: number,
-  opts: { hitFlash?: number; shielded?: boolean; hpRatio?: number; name?: string; scale?: number } = {}
+  opts: { hitFlash?: number; shielded?: boolean; hpRatio?: number; name?: string; scale?: number; chapter?:number;supreme?:boolean;moving?:boolean;attacking?:boolean } = {}
 ) {
   const scale = opts.scale ?? (kind === 'boss' ? 1.45 : 1);
+  if(kind==='boss'&&drawChapterBoss(ctx,x,y,time,{...opts,scale}))return;
   if(drawPaintedUnit(ctx,kind==='poring'?2:kind==='slime'?3:opts.name?.includes('王')?5:4,x,y,time,{scale,hitFlash:opts.hitFlash,shielded:opts.shielded,hpRatio:opts.hpRatio,label:opts.name}))return;
   const squishX = 1 + Math.sin(time * 5.2) * 0.08;
   const squishY = 1 - Math.sin(time * 5.2) * 0.08;
@@ -1147,6 +1150,10 @@ export function drawMathZombie(
     hitFlash?: number;
     formulaShield?: string | null;
     phase2?: boolean;
+    moving?: boolean;
+    attacking?: boolean;
+    chapter?: number;
+    supreme?: boolean;
   }
 ) {
   const scale = kind === 'boss' ? 1.4 : 1;
@@ -1162,7 +1169,7 @@ export function drawMathZombie(
   ctx.ellipse(0, 22 - hop * 0.5, 18, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const spriteDrawn = drawZombieArt(ctx, kind, opts.phase2);
+  const spriteDrawn = drawZombieArt(ctx, kind, opts.phase2,time,opts.moving,opts.attacking,opts.chapter,opts.supreme);
   if (!spriteDrawn) {
   // Body fallback while the atlas loads.
   ctx.fillStyle = opts.chilled ? '#67E8F9' : kind === 'boss' ? '#4C1D95' : '#65A30D';
@@ -1421,7 +1428,7 @@ export function drawChefCharacter(
   appearance?: EquipmentAppearance
 ) {
   const bob = Math.sin(time * 6) * 3 - cookingPulse * 8;
-  if(drawWorldAvatar(ctx,chef,x,y+bob,time,appearance))return;
+  if(drawWorldAvatar(ctx,chef,x,y+bob,time,appearance,0,false,0,cookingPulse))return;
   ctx.save();
   ctx.translate(x, y + bob);
   if (appearance) drawUpgradeRig(ctx,0,-4,appearance,time,.9);
