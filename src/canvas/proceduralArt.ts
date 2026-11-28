@@ -349,6 +349,7 @@ export function updateGameFeel(
   feel: GameFeelState,
   rawDt: number
 ): { dt: number; simDt: number; shakeX: number; shakeY: number } {
+  if(!(rawDt>0))return {dt:0,simDt:0,shakeX:0,shakeY:0};
   if (feel.flashAlpha > 0) {
     feel.flashAlpha = Math.max(0, feel.flashAlpha - rawDt * 2.6);
   }

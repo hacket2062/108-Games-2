@@ -35,7 +35,7 @@ try{
    });
    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.goto(origin,{waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();
-   await page.evaluate(()=>{const key='zhiguang_108_save_v2_local_hero_01',s=JSON.parse(localStorage.getItem(key));Object.assign(s,{grade:1,playMode:'practice',selectedGuardian:'griffin',playerCount:4});localStorage.setItem(key,JSON.stringify(s));});
+   await page.evaluate(()=>{const key='zhiguang_108_save_v2_local_hero_01',s=JSON.parse(localStorage.getItem(key));Object.assign(s,{grade:1,playMode:'adventure',selectedGuardian:'griffin',playerCount:4});localStorage.setItem(key,JSON.stringify(s));});
    const worlds=[];
    for(const world of ['math','english','science','chinese']){
     await page.goto(origin+'/?autostart=1&world='+world,{waitUntil:'domcontentloaded'});
@@ -72,7 +72,7 @@ try{
      await within(page.getByRole('button',{name:'關閉解析提示'}),viewport,'Feedback continue button');
      const fb=await page.getByTestId('answer-explanation').boundingBox(),main=await page.locator('.game-layout').boundingBox();assert.ok(fb.y>=main.y+main.height-1,'Feedback occupies its own space instead of covering options');
      assert.ok(await page.locator('.game-layout').evaluate(e=>e.inert),'Answer controls are inert while reading');
-     await page.waitForTimeout(200);const frozen=await canvas.evaluate(e=>e.toDataURL());await page.waitForTimeout(600);assert.equal(await canvas.evaluate(e=>e.toDataURL()),frozen,'Science animation/timer combat freezes while feedback is read');
+     await page.waitForTimeout(200);const frozen=await canvas.evaluate(e=>e.toDataURL()),hud=await page.locator('.game-hud').textContent();await page.waitForTimeout(600);assert.equal(await canvas.evaluate(e=>e.toDataURL()),frozen,'Science animation/timer combat freezes while feedback is read');assert.equal(await page.locator('.game-hud').textContent(),hud,'The actual adventure timer and HP freeze during reading');
      await screenshot(page,engine+'-science-feedback-'+viewport.width);
      await page.getByRole('button',{name:'關閉解析提示'}).click();await page.waitForFunction(()=>document.body.dataset.state==='playing');
      const correct=q.payload.ingredients.find(i=>i.isCorrect).name;await options.filter({has:page.getByText(correct,{exact:true})}).click();
@@ -80,13 +80,12 @@ try{
     }else if(world==='english'){
      await page.waitForFunction(()=>document.querySelector('.game-controls')?.textContent.includes('英語啟蒙'));
      await within(page.getByTestId('manual-fire-button'),viewport,'Touch fire control');
-     await screenshot(page,engine+'-english-'+viewport.width);
      const prompt=await page.locator('.game-controls').textContent(),q=bank.ENGLISH_QUESTIONS.find(q=>q.grade===1&&q.type==='listen'&&prompt.includes(q.prompt));assert.ok(q,'Real early English prompt is present');
-     const wrong=q.payload.choices.find(x=>x!==q.answer);await page.waitForFunction(t=>Boolean(window.__mobileText[t]),wrong);
-     for(let attempt=0;attempt<6&&!await page.getByTestId('answer-explanation').count();attempt++){
-      const pos=await page.evaluate(t=>window.__mobileText[t],wrong);await canvas.click({position:pos});await page.waitForTimeout(400);
-     }
-     await page.getByTestId('answer-explanation').waitFor();await page.waitForFunction(()=>document.body.dataset.state==='reading');
+     await page.waitForFunction(choices=>choices.every(t=>window.__mobileText[t]?.y>=38),q.payload.choices);
+     await screenshot(page,engine+'-english-'+viewport.width);
+     const wrong=q.payload.choices.find(x=>x!==q.answer),pos=await page.evaluate(t=>window.__mobileText[t],wrong);
+     await canvas.click({position:pos});
+     await page.getByTestId('answer-explanation').waitFor({timeout:10000});await page.waitForFunction(()=>document.body.dataset.state==='reading');
      await within(page.getByRole('button',{name:'關閉解析提示'}),viewport,'English feedback continue');
      await page.waitForTimeout(200);const frozen=await canvas.evaluate(e=>e.toDataURL());await page.waitForTimeout(600);assert.equal(await canvas.evaluate(e=>e.toDataURL()),frozen,'English bullets/ship/enemies freeze during reading');
      await screenshot(page,engine+'-english-feedback-'+viewport.width);
