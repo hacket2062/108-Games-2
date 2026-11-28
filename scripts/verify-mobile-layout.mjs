@@ -39,7 +39,9 @@ try{
     // WebKit surfaces our deliberate offline Firestore route abort as a pageerror.
     // Keep it as evidence; every application exception must still fail this suite.
     const blocked=e.message.match(/^(\/[^? ]+)(?:\?[^ ]*)? due to access control checks\.$/);
-    if(blocked&&blockedRequests.has(blocked[1]))blockedNetworkErrors.push(e.message);
+    // WebKit can report a failed CORS preflight before Playwright routes the SDK request.
+    const offlineSdk=blocked&&['/firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel','/firebaseinstallations.googleapis.com/v1/projects/games-2-c3050/installations'].includes(blocked[1]);
+    if(blocked&&(blockedRequests.has(blocked[1])||offlineSdk))blockedNetworkErrors.push(e.message);
     else errors.push(e.message);
    });
    await page.goto(origin,{waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();
