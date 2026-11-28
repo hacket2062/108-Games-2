@@ -85,7 +85,8 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
   onExit,
 }) => {
   const { save } = useGameState();
-  const theme = WORLD_THEMES[subject];
+  const baseTheme = WORLD_THEMES[subject];
+  const theme = save.grade<=2 ? {...baseTheme,subjectLabel:subject==='science'?'生活觀察':subject==='english'?'英語啟蒙（選修）':baseTheme.subjectLabel} : baseTheme;
   const chapters = useMemo(
     () => getChaptersForWorld(subject, save.grade),
     [subject, save.grade]

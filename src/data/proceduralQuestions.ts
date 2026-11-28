@@ -7,6 +7,7 @@ import {
   ScienceQuestion,
   SemesterId,
 } from '../types/game';
+import {generateEarlyMath} from './questions/earlyGrades';
 
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -90,6 +91,7 @@ export function generateProceduralMathQuestions(
   stageNumber = 1,
   count = 16
 ): MathQuestion[] {
+  if (grade <= 2) return generateEarlyMath(grade as 1|2, semester, stageNumber, count);
   const diff = stageToDifficulty(stageNumber);
   const out: MathQuestion[] = [];
   const usedFormulas = new Set<string>();

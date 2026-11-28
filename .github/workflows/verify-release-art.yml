@@ -2,7 +2,7 @@ name: Verify release artwork
 on:
   workflow_dispatch:
   push:
-    branches: [codex/fix-lobby-ghost, codex/verify-lobby-ghost]
+    branches: [codex/early-grades, codex/verify-early-grades]
 permissions:
   contents: read
 jobs:
@@ -22,12 +22,19 @@ jobs:
       - name: Check types, startup and retained game logic
         run: |
           node node_modules/typescript/bin/tsc --noEmit
-          node --test scripts/procedural-startup.test.mjs
-          node node_modules/vite/bin/vite.js build --ssr src/core/campaignAndQuestions.test.ts --outDir .verification/test-campaign
-          node node_modules/vite/bin/vite.js build --ssr src/core/combatMath.test.ts --outDir .verification/test-combat
-          node --test .verification/test-campaign/campaignAndQuestions.test.js .verification/test-combat/combatMath.test.js
+          npm test
       - name: Build production site
         run: npm run build
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Verify grade range and ownership against actual Firestore emulator
+        run: |
+          npm install --prefix "$RUNNER_TEMP/rules-check" --no-package-lock --no-audit --no-fund firebase-tools @firebase/rules-unit-testing firebase
+          node "$RUNNER_TEMP/rules-check/node_modules/firebase-tools/lib/bin/firebase.js" emulators:exec --project demo-early-grades --config firebase.emulator.json --only firestore "node scripts/verify-early-grade-rules.mjs"
+        env:
+          RULE_TEST_PACKAGE_JSON: ${{ runner.temp }}/rules-check/package.json
       - name: Verify actual artwork, four worlds and retained features
         run: node scripts/verify-release-art.mjs
         env:

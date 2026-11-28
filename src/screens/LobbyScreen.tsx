@@ -745,7 +745,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
               {/* Compact 1P-4P + Switch Gamepad Bar */}
               <div className={`flex items-center justify-between gap-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 px-1.5 py-1 ${isCompactLandscape ? 'mb-1' : 'mb-1.5 max-w-sm'}`}>
-                <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                <div className="flex flex-wrap items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
                   {([1, 2, 3, 4] as PlayerCount[]).map((cnt) => (
                     <button
                       key={cnt}
@@ -883,12 +883,12 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             <div className={`w-[62%] h-full flex flex-col justify-between min-w-0 ${isCompactLandscape ? 'gap-1.5' : 'gap-3'}`}>
               {/* Single-Row Segmented Controls */}
               <div
-                className={`rounded-2xl bg-slate-900/92 backdrop-blur-sm border border-slate-700/90 shadow-xl flex items-center justify-between gap-1.5 ${
+                className={`rounded-2xl bg-slate-900/92 backdrop-blur-sm border border-slate-700/90 shadow-xl flex flex-wrap items-center justify-between gap-1.5 ${
                   isCompactLandscape ? 'p-1' : 'p-2'
                 }`}
               >
-                <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
-                  {([3, 4, 5, 6] as GradeLevel[]).map((g) => (
+                <div className="flex flex-wrap items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
+                  {([1, 2, 3, 4, 5, 6] as GradeLevel[]).map((g) => (
                     <button
                       key={g}
                       type="button"
@@ -910,7 +910,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
+                  <div className="flex flex-wrap items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
                     {(['upper', 'lower'] as SemesterId[]).map((sem) => (
                       <button
                         key={sem}
@@ -932,7 +932,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     ))}
                   </div>
 
-                  <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
+                  <div className="flex flex-wrap items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
                     <button
                       type="button"
                       disabled={save.parentSettings.forcePracticeMode}
@@ -1011,7 +1011,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
                           <span className="text-[10px] sm:text-[11px] font-bold text-slate-300 truncate">
-                            {planet.subjectLabel}
+                            {save.grade <= 2 && planet.id === 'science' ? '生活觀察' : save.grade <= 2 && planet.id === 'english' ? '英語啟蒙（選修）' : planet.subjectLabel}
                           </span>
                           <span className="inline-flex items-center gap-0.5 text-[10px] sm:text-[11px] font-black text-amber-300 font-mono-num shrink-0">
                             <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
@@ -1245,10 +1245,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               </button>
             </div>
 
-            {/* Compact Segmented Bar: Grade (3~6) | Semester (上/下) | Mode (計時/練習) */}
+            {/* Compact Segmented Bar: Grade (1~6) | Semester (上/下) | Mode (計時/練習) */}
             <div className="rounded-2xl bg-slate-900/92 backdrop-blur-sm border border-slate-700/90 p-1.5 shadow-xl flex flex-col gap-1.5">
-              <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
-                {([3, 4, 5, 6] as GradeLevel[]).map((g) => (
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                {([1, 2, 3, 4, 5, 6] as GradeLevel[]).map((g) => (
                   <button
                     key={g}
                     type="button"
@@ -1354,7 +1354,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     </div>
                     <div className="min-w-0">
                       <div className="text-[10px] font-bold text-slate-300">
-                        {planet.subjectLabel} · {planet.shortTag}
+                        {save.grade <= 2 && planet.id === 'science' ? '生活觀察' : save.grade <= 2 && planet.id === 'english' ? '英語啟蒙（選修）' : planet.subjectLabel} · {planet.shortTag}
                       </div>
                       <div className="text-[15px] font-black text-white leading-tight truncate mt-0.5">
                         {planet.worldTitle}

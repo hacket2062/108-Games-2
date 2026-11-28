@@ -1,5 +1,12 @@
 rules_version = '2';
 
+// Existing models: /users/{uid} is a verified user's private save (uid,
+// displayName, currencies, grade/semester, guardian, saveData, timestamps).
+// /pvpRooms/{id} contains host/guest loadouts, scores, grade and timestamps;
+// nested events contain sender/participant IDs and combat actions.
+// This prototype only extends validated grade values to integers 1–6.
+// User ownership, immutable identity/timestamps and field allowlists stay intact.
+
 service cloud.firestore {
   match /databases/{database}/documents {
     // Global Safety Net: default deny everything
@@ -36,6 +43,11 @@ service cloud.firestore {
       return g in ['qilin', 'stardragon', 'griffin', 'deer'];
     }
 
+    // Prototype grade extension: elementary grades 1–6 only; ownership unchanged.
+    function isValidGrade(g) {
+      return g is int && g >= 1 && g <= 6;
+    }
+
     function isValidWeaponPath(p) {
       return p in ['base', 'hero', 'mythic', 'inferno'];
     }
@@ -64,7 +76,7 @@ service cloud.firestore {
       && data.pvpRating is number && data.pvpRating >= 0 && data.pvpRating <= 9999
       && data.pvpWins is number && data.pvpWins >= 0 && data.pvpWins <= 100000
       && data.pvpLosses is number && data.pvpLosses >= 0 && data.pvpLosses <= 100000
-      && data.grade is number && data.grade >= 3 && data.grade <= 6
+      && isValidGrade(data.grade)
       && data.semester is string && data.semester in ['upper', 'lower']
       && data.selectedGuardian is string && isValidGuardian(data.selectedGuardian)
       && data.saveData is map && data.saveData.size() <= 40
@@ -91,7 +103,7 @@ service cloud.firestore {
       ])
       && data.roomCode is string && data.roomCode.size() >= 4 && data.roomCode.size() <= 16 && data.roomCode.matches('^[A-Z0-9]+$')
       && data.status is string && data.status in ['waiting', 'playing', 'finished']
-      && data.grade is number && data.grade >= 3 && data.grade <= 6
+      && isValidGrade(data.grade)
       && data.subjectFilter is string && data.subjectFilter in ['all', 'chinese', 'english', 'math', 'science']
       && data.hostUid is string && isValidId(data.hostUid)
       && data.hostName is string && data.hostName.size() >= 1 && data.hostName.size() <= 40

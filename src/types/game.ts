@@ -1,5 +1,5 @@
 export type SubjectId = 'chinese' | 'english' | 'math' | 'science';
-export type GradeLevel = 3 | 4 | 5 | 6;
+export type GradeLevel = 1 | 2 | 3 | 4 | 5 | 6;
 export type SemesterId = 'upper' | 'lower';
 export type PlayMode = 'adventure' | 'practice';
 export type GuardianId = 'qilin' | 'stardragon' | 'griffin' | 'deer';

@@ -29,7 +29,7 @@ test('Question bank has 400+ original Taiwan 108 Curriculum questions with >= 25
   }
 
   const subjects: SubjectId[] = ['chinese', 'english', 'math', 'science'];
-  const grades: GradeLevel[] = [3, 4, 5, 6];
+  const grades: GradeLevel[] = [1, 2, 3, 4, 5, 6];
   for (const s of subjects) {
     for (const g of grades) {
       const bucket = ALL_QUESTIONS.filter((q) => q.subject === s && q.grade === g);

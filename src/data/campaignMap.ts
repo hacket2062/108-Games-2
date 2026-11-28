@@ -353,7 +353,17 @@ export function buildStageKey(
 }
 
 export function getChaptersForWorld(subject: SubjectId, grade: GradeLevel): CampaignChapter[] {
-  const templates = CHAPTER_TEMPLATES[subject];
+  const templates = CHAPTER_TEMPLATES[subject].map((tpl,index) => {
+    if(grade>2) return tpl;
+    const topics:Record<SubjectId,string[]>= {
+      chinese:grade===1?['注音與識字','基本字形','短句閱讀']:['注音複習','形近字辨識','生活短文'],
+      english:['字母與聲音','生活單字','單字排序'],
+      math:grade===1?['10以內加減','20以內加減','數量小故事']:['100以內加減','進退位練習','生活加減題'],
+      science:grade===1?['五官與生活','動物與植物','安全好習慣']:['天氣與季節','物品小觀察','環境與安全'],
+    };
+    const topic=topics[subject][index];
+    return {...tpl,title:topic,unitSummary:(subject==='english'?'選修啟蒙・':'')+topic,focusTags:[topic],stageTitles:Array.from({length:10},(_,i)=>topic+' '+(i+1)) as ChapterTemplate['stageTitles']};
+  });
   return templates.map((tpl) => {
     const stages: CampaignStageConfig[] = tpl.stageTitles.map((stageTitle, idx) => {
       const stageNumber = idx + 1;
