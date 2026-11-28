@@ -42,6 +42,7 @@ try{
   await page.locator('[data-testid="lobby-hub"][data-art-version="motion-v1"]').waitFor();
   const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('zhiguang_108_save_v2_local_hero_01')));
   await page.getByRole('button',{name:'查看角色與武器',exact:true}).waitFor();
+  await page.evaluate(async()=>{for(const url of ['/art/hero-motion-v1.png','/art/equipment-atlas-v1.png']){const image=new Image();image.src=url;await image.decode();}});
   assert.match(await page.locator('.hero-portrait-sprite').first().evaluate(e=>getComputedStyle(e).backgroundImage),/hero-motion-v1/);
   await page.screenshot({path:out+'/lobby-'+viewport.width+'.png',fullPage:true});
   for(let i=0;i<3;i++){await page.reload({waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();}
