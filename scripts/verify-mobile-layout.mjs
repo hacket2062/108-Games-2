@@ -35,9 +35,12 @@ try{
    });
    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.goto(origin,{waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();
-   await page.evaluate(()=>{const key='zhiguang_108_save_v2_local_hero_01',s=JSON.parse(localStorage.getItem(key));Object.assign(s,{grade:1,playMode:'adventure',selectedGuardian:'griffin',playerCount:4});localStorage.setItem(key,JSON.stringify(s));});
+   const fixture=await page.evaluate(()=>{const key='zhiguang_108_save_v2_local_hero_01',s=JSON.parse(localStorage.getItem(key));return {...s,grade:1,playMode:'adventure',selectedGuardian:'griffin',playerCount:4};});
+   // Seed before React mounts: writing a running lobby's save races its persistence effect in WebKit.
+   await context.addInitScript(save=>localStorage.setItem('zhiguang_108_save_v2_local_hero_01',JSON.stringify(save)),fixture);
    const worlds=[];
    for(const world of ['math','english','science','chinese']){
+    console.log('MOBILE_CASE',engine,viewport.width,world);
     await page.goto(origin+'/?autostart=1&world='+world,{waitUntil:'domcontentloaded'});
     const root=page.locator('.game-screen'),canvas=root.locator('.game-stage canvas');await canvas.waitFor();
     await page.waitForFunction(()=>Object.keys(window.__mobileArt).length>0);
@@ -78,7 +81,7 @@ try{
      const correct=q.payload.ingredients.find(i=>i.isCorrect).name;await options.filter({has:page.getByText(correct,{exact:true})}).click();
      await within(page.getByRole('button',{name:'確認答案！',exact:true}),viewport,'Life observation confirmation');
     }else if(world==='english'){
-     await page.waitForFunction(()=>document.querySelector('.game-controls')?.textContent.includes('英語啟蒙'));
+     await page.waitForFunction(()=>document.querySelector('.game-controls')?.textContent.includes('英語啟蒙')).catch(async error=>{console.log('MOBILE_FAILURE',JSON.stringify({errors,controls:await page.locator('.game-controls').textContent(),save:await page.evaluate(()=>localStorage.getItem('zhiguang_108_save_v2_local_hero_01'))}));await screenshot(page,engine+'-english-failure-'+viewport.width);throw error;});
      await within(page.getByTestId('manual-fire-button'),viewport,'Touch fire control');
      const prompt=await page.locator('.game-controls').textContent(),q=bank.ENGLISH_QUESTIONS.find(q=>q.grade===1&&q.type==='listen'&&prompt.includes(q.prompt));assert.ok(q,'Real early English prompt is present');
      await page.waitForFunction(choices=>choices.every(t=>window.__mobileText[t]?.y>=38),q.payload.choices);
