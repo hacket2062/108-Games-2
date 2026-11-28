@@ -63,8 +63,8 @@ try{
      await screenshot(page,engine+'-math-answer-'+viewport.width);
     }else if(world==='science'){
      const options=page.getByTestId('science-ingredient-option');await options.first().waitFor();
-     for(let i=0;i<await options.count();i++)await within(options.nth(i),viewport,'Science choice '+i);
      await screenshot(page,engine+'-science-'+viewport.width);
+     for(let i=0;i<await options.count();i++)await within(options.nth(i),viewport,'Science choice '+i);
      const prompt=await page.locator('.science-order-requirement').textContent(),q=bank.SCIENCE_QUESTIONS.find(q=>q.grade===1&&q.payload.orderRequirement===prompt);assert.ok(q);
      const wrong=q.payload.ingredients.find(i=>!i.isCorrect).name;
      await options.filter({has:page.getByText(wrong,{exact:true})}).click();
