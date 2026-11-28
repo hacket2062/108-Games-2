@@ -938,10 +938,10 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
         </div>
       </header>
 
-      {/* Main Split: Portrait Top Canvas / Bottom Workbench | Landscape 54% Left Canvas / 46% Right Workbench */}
+      {/* Main Split: Portrait Top Canvas / Bottom Workbench | Landscape 45% Left Canvas / 55% Right Workbench */}
       <div className="flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden">
         {/* Tier 2: Pure Unobstructed Dragon Lord & Cauldron Canvas */}
-        <div className="relative h-[30dvh] shrink-0 landscape:h-full landscape:w-[54%] border-b landscape:border-b-0 landscape:border-r border-orange-500/35 overflow-hidden">
+        <div className="relative h-[28dvh] shrink-0 landscape:h-full landscape:w-[45%] border-b landscape:border-b-0 landscape:border-r border-orange-500/35 overflow-hidden">
           <canvas
             ref={canvasRef}
             className="block w-full h-full"
@@ -955,21 +955,21 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
         </div>
 
         {/* Tier 3: Independent Order Queue + 4-Station Workbench */}
-        <div className="flex-1 min-h-0 landscape:w-[46%] flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 landscape:w-[55%] flex flex-col overflow-hidden">
 
       {/* Dual Concurrent Order Ticket Strip (Active Order + Next Incoming Order Queue!) */}
       <div
-        className="shrink-0 bg-amber-50 border-y-2 border-amber-500 px-3 py-1.5 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+        className="shrink-0 bg-amber-50 border-y-2 border-amber-500 px-3 py-2 shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-2"
         data-testid="science-order-queue"
       >
-        <div className="flex items-center justify-between gap-2 min-w-0 flex-1">
-          <div className="min-w-0">
+        <div className="flex items-start justify-between gap-2.5 min-w-0 flex-1">
+          <div className="min-w-0 flex-1">
             <div className="text-[11px] font-black text-orange-700 flex flex-wrap items-center gap-1.5">
-              <span className="px-1.5 py-0.5 rounded bg-orange-600 text-white text-[10px]">🔥 當前訂單</span>
+              <span className="px-1.5 py-0.5 rounded bg-orange-600 text-white text-[10px] shrink-0">🔥 當前訂單</span>
               <span>【{currentDish.payload.dishName}】</span>
               <span className="text-emerald-700">· {currentDish.knowledgeTag}</span>
             </div>
-            <div className="text-xs sm:text-sm font-black text-slate-900 truncate mt-0.5">
+            <div className="text-sm font-black text-slate-900 leading-snug break-words mt-1">
               {currentDish.payload.orderRequirement}
             </div>
           </div>
@@ -982,16 +982,16 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
               )
             }
             aria-label="朗讀料理訂單"
-            className="w-9 h-9 rounded-xl bg-orange-500 hover:bg-orange-400 text-white flex items-center justify-center shrink-0"
+            className="w-9 h-9 rounded-xl bg-orange-500 hover:bg-orange-400 text-white flex items-center justify-center shrink-0 mt-0.5"
           >
             <Volume2 className="w-4 h-4" />
           </button>
         </div>
 
         {/* Queued Next Order Preview Ticket */}
-        <div className="sm:w-64 shrink-0 rounded-xl bg-amber-100/90 border border-amber-400 px-2.5 py-1 flex items-center justify-between gap-2">
+        <div className="xl:w-56 shrink-0 rounded-xl bg-amber-100/90 border border-amber-400 px-2.5 py-1.5 flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[10px] font-black text-amber-800 truncate">
+            <div className="text-[11px] font-black text-amber-800 truncate">
               ⏳ 排隊中：{nextDish.payload.dishName}
             </div>
             <div className="text-[10px] font-bold text-slate-600 truncate">
@@ -1005,73 +1005,78 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       </div>
 
       {/* Bottom Interactive 4-Station Tactile Kitchen Workbench */}
-      <div className="flex-1 bg-slate-900 border-t-2 border-orange-400 p-3 sm:p-4 flex flex-col justify-between gap-3 overflow-y-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 items-stretch">
-          {/* Station 1: Cold Storage Ingredient Picker (5 cols) */}
-          <div
-            className={`lg:col-span-5 rounded-2xl p-3 border-2 flex flex-col justify-between ${
-              step === 'ingredients'
-                ? 'bg-slate-800/95 border-amber-400 shadow-lg'
-                : 'bg-slate-950/70 border-slate-700 opacity-85'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm font-black text-amber-300">
-                1. 食材冷藏櫃（選取 {pickedIds.length}/{currentDish.payload.neededCount} 項正確食材）
-              </div>
-              {step !== 'ingredients' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+      <div className="flex-1 min-h-0 bg-slate-900 border-t-2 border-orange-400 p-3 sm:p-4 flex flex-col gap-3 overflow-y-auto">
+        {/* Station 1: Full-width Cold Storage Ingredient Picker so all ingredient names display cleanly */}
+        <div
+          className={`rounded-2xl p-3 sm:p-3.5 border-2 flex flex-col gap-2.5 shrink-0 ${
+            step === 'ingredients'
+              ? 'bg-slate-800/95 border-amber-400 shadow-lg'
+              : 'bg-slate-950/70 border-slate-700 opacity-85'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-black text-amber-300 leading-snug">
+              1. 食材冷藏櫃（選取 {pickedIds.length}/{currentDish.payload.neededCount} 項正確食材）
             </div>
-            <div className="grid grid-cols-2 gap-2 flex-1">
-              {currentDish.payload.ingredients.map((ing) => {
-                const picked = pickedIds.includes(ing.id);
-                return (
-                  <button
-                    key={ing.id}
-                    type="button"
-                    disabled={step !== 'ingredients' || picked}
-                    onClick={() => handlePickIngredient(ing)}
-                    className={`min-h-[62px] rounded-xl p-2.5 border-2 text-left transition-transform active:scale-95 flex items-center gap-2.5 ${
-                      picked
-                        ? 'bg-emerald-900/60 border-emerald-400 text-emerald-100'
-                        : 'bg-slate-900 hover:bg-slate-700 border-slate-600 text-white'
-                    }`}
-                  >
-                    <span
-                      className="w-8 h-8 rounded-lg shrink-0 border-2 border-slate-950"
-                      style={{ backgroundColor: ing.color }}
-                    />
-                    <div className="min-w-0">
-                      <div className="text-sm font-black truncate">{ing.name}</div>
-                      <div className={`text-[11px] truncate ${picked ? 'text-emerald-300 font-bold' : 'text-slate-400'}`}>
-                        {picked ? `✓ ${ing.categoryTag}` : '點擊投入檢驗'}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            {step !== 'ingredients' && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />}
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {currentDish.payload.ingredients.map((ing) => {
+              const picked = pickedIds.includes(ing.id);
+              return (
+                <button
+                  key={ing.id}
+                  type="button"
+                  disabled={step !== 'ingredients' || picked}
+                  onClick={() => handlePickIngredient(ing)}
+                  className={`min-h-[64px] rounded-xl px-3 py-2.5 border-2 text-left transition-transform active:scale-95 flex items-center gap-3 ${
+                    picked
+                      ? 'bg-emerald-900/60 border-emerald-400 text-emerald-100'
+                      : 'bg-slate-900 hover:bg-slate-700 border-slate-600 text-white'
+                  }`}
+                >
+                  <span
+                    className="w-7 h-7 rounded-lg shrink-0 border-2 border-slate-950 shadow-inner"
+                    style={{ backgroundColor: ing.color }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm sm:text-[15px] font-black leading-snug break-words whitespace-normal">
+                      {ing.name}
+                    </div>
+                    <div className={`text-xs leading-tight break-words mt-0.5 ${picked ? 'text-emerald-300 font-bold' : 'text-slate-400'}`}>
+                      {picked ? `✓ ${ing.categoryTag}` : '點擊投入檢驗'}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-          {/* Station 2: Magic Temperature Stove Rhythm Bar (4 cols) */}
+        {/* Lower Row: Station 2 (Temperature Stove) + Station 3 & 4 (pH Tubes + Serve Bell) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 items-stretch">
+          {/* Station 2: Magic Temperature Stove Rhythm Bar */}
           <div
-            className={`lg:col-span-4 rounded-2xl p-3 border-2 flex flex-col justify-between ${
+            className={`rounded-2xl p-3 sm:p-3.5 border-2 flex flex-col justify-between gap-2.5 ${
               step === 'temperature'
                 ? 'bg-slate-800/95 border-orange-400 shadow-lg'
                 : 'bg-slate-950/70 border-slate-700 opacity-85'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-black text-orange-300 flex items-center gap-1.5">
-                <Flame className="w-4 h-4" /> 2. 控溫魔法爐
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-black text-orange-300 flex items-center gap-1.5">
+                  <Flame className="w-4 h-4 shrink-0" /> 2. 控溫魔法爐
+                </div>
+                {tempResult && <span className="text-xs font-black text-amber-300">{tempResult} ★</span>}
               </div>
-              {tempResult && <span className="text-xs font-black text-amber-300">{tempResult} ★</span>}
-            </div>
-            <div className="text-xs text-slate-200 font-bold mt-1">
-              目標火候：{currentDish.payload.targetTempLabel}
+              <div className="text-xs text-slate-200 font-bold mt-1 leading-snug break-words">
+                目標火候：{currentDish.payload.targetTempLabel}
+              </div>
             </div>
 
             {/* Dynamic Thermal Rhythm Gauge */}
-            <div className="my-3">
+            <div>
               <div className="relative h-9 rounded-xl overflow-hidden border-2 border-slate-600 bg-gradient-to-r from-sky-500 via-amber-400 to-rose-500">
                 {/* Target Highlight Zone */}
                 <div
@@ -1085,7 +1090,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
                   style={{ left: '50%' }}
                 />
               </div>
-              <div className="flex justify-between text-[11px] font-bold text-slate-400 mt-1">
+              <div className="flex justify-between gap-1 text-[11px] font-bold text-slate-400 mt-1.5">
                 <span>0°C 急凍藍區</span>
                 <span>55°C 中火區</span>
                 <span>100°C 沸騰紅區</span>
@@ -1099,7 +1104,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
                 soundEngine.hapticPulse(18);
                 handleLockTemperature();
               }}
-              className={`w-full min-h-[56px] rounded-xl font-black text-sm sm:text-base transition-transform active:scale-95 ${
+              className={`w-full min-h-[52px] px-3 py-2 rounded-xl font-black text-sm transition-transform active:scale-95 ${
                 step === 'temperature'
                   ? 'bg-orange-500 hover:bg-orange-400 text-white shadow-[0_0_18px_rgba(249,115,22,0.55)]'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed'
@@ -1109,23 +1114,25 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
             </button>
           </div>
 
-          {/* Station 3 & 4: Acid/Alkali Test Tubes + Serving Attack Bell (3 cols) */}
-          <div className="lg:col-span-3 flex flex-col gap-2.5 justify-between">
+          {/* Station 3 & 4: Acid/Alkali Test Tubes + Serving Attack Bell */}
+          <div className="flex flex-col gap-2.5 justify-between">
             <div
-              className={`rounded-2xl p-3 border-2 ${
+              className={`rounded-2xl p-3 sm:p-3.5 border-2 flex-1 flex flex-col justify-between gap-2 ${
                 step === 'ph'
                   ? 'bg-slate-800/95 border-teal-400 shadow-lg'
                   : 'bg-slate-950/70 border-slate-700 opacity-85'
               }`}
             >
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="text-xs font-black text-teal-300 flex items-center gap-1">
-                  <FlaskConical className="w-4 h-4" /> 3. 酸鹼試管架
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="text-sm font-black text-teal-300 flex items-center gap-1.5">
+                    <FlaskConical className="w-4 h-4 shrink-0" /> 3. 酸鹼試管架
+                  </div>
+                  {selectedPh && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
                 </div>
-                {selectedPh && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-              </div>
-              <div className="text-[11px] text-slate-300 mb-2">
-                需求：{currentDish.payload.targetPhLabel}
+                <div className="text-xs text-slate-200 font-bold leading-snug break-words">
+                  需求：{currentDish.payload.targetPhLabel}
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <button
@@ -1135,10 +1142,10 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
                     soundEngine.hapticPulse(14);
                     handleDropReagent('acid');
                   }}
-                  className="min-h-[54px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95"
+                  className="min-h-[54px] px-1.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95 flex flex-col items-center justify-center"
                 >
-                  酸性
-                  <div className="text-[10px] font-normal">檸檬紅</div>
+                  <span>酸性</span>
+                  <span className="text-[11px] font-normal mt-0.5">檸檬紅</span>
                 </button>
                 <button
                   type="button"
@@ -1147,10 +1154,10 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
                     soundEngine.hapticPulse(14);
                     handleDropReagent('neutral');
                   }}
-                  className="min-h-[54px] rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95"
+                  className="min-h-[54px] px-1.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95 flex flex-col items-center justify-center"
                 >
-                  中性
-                  <div className="text-[10px] font-normal">純水紫</div>
+                  <span>中性</span>
+                  <span className="text-[11px] font-normal mt-0.5">純水紫</span>
                 </button>
                 <button
                   type="button"
@@ -1159,16 +1166,16 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
                     soundEngine.hapticPulse(14);
                     handleDropReagent('alkali');
                   }}
-                  className="min-h-[54px] rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95"
+                  className="min-h-[54px] px-1.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95 flex flex-col items-center justify-center"
                 >
-                  鹼性
-                  <div className="text-[10px] font-normal">蘇打藍</div>
+                  <span>鹼性</span>
+                  <span className="text-[11px] font-normal mt-0.5">蘇打藍</span>
                 </button>
               </div>
             </div>
 
             {/* Station 4: Serve Attack Bell + Ultimate */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
                 disabled={step !== 'serve'}
@@ -1176,25 +1183,25 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
                   soundEngine.hapticPulse(22);
                   handleRingServeBell();
                 }}
-                className={`min-h-[60px] rounded-2xl font-black text-sm border-2 flex items-center justify-center gap-1.5 transition-transform active:scale-95 ${
+                className={`min-h-[56px] px-2.5 py-2 rounded-2xl font-black text-sm border-2 flex items-center justify-center gap-1.5 transition-transform active:scale-95 whitespace-nowrap ${
                   step === 'serve'
                     ? 'bg-amber-400 hover:bg-amber-300 border-white text-slate-950 shadow-[0_0_24px_rgba(251,191,36,0.85)]'
                     : 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
                 }`}
               >
-                <Bell className="w-5 h-5" /> 搖鈴出餐！
+                <Bell className="w-4 h-4 shrink-0" /> 搖鈴出餐！
               </button>
               <button
                 type="button"
                 disabled={ultCharge < 100}
                 onClick={triggerElementFeastUltimate}
-                className={`min-h-[60px] rounded-2xl font-black text-xs border-2 flex items-center justify-center gap-1 transition-transform active:scale-95 ${
+                className={`min-h-[56px] px-2.5 py-2 rounded-2xl font-black text-xs sm:text-sm border-2 flex items-center justify-center gap-1 transition-transform active:scale-95 whitespace-nowrap ${
                   ultCharge >= 100
                     ? 'bg-rose-500 hover:bg-rose-400 border-amber-200 text-white'
                     : 'bg-slate-800 border-slate-700 text-slate-400 cursor-not-allowed'
                 }`}
               >
-                <Sparkles className="w-4 h-4" /> 元素大滿貫 ({ultCharge}%)
+                <Sparkles className="w-4 h-4 shrink-0" /> 大滿貫 ({ultCharge}%)
               </button>
             </div>
           </div>
