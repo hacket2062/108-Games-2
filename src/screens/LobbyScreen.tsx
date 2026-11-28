@@ -42,7 +42,6 @@ import { xpRequiredForLevel } from '../core/combatMath';
 import { soundEngine } from '../audio/soundEngine';
 import {
   drawGuardianSpirit,
-  drawRoundedRect,
   FloatingTextPool,
   ParticlePool,
 } from '../core/canvasEffects';
@@ -214,6 +213,7 @@ const GuardianMiniCanvas: React.FC<{
   return (
     <canvas
       ref={miniRef}
+      data-testid="guardian-mini"
       style={{ width: size, height: size }}
       className="rounded-2xl bg-slate-950/90 border border-slate-700/80 shrink-0"
     />
@@ -282,20 +282,13 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   const [questToast, setQuestToast] = useState<string | null>(null);
   const [miniBounceSignal, setMiniBounceSignal] = useState(0);
 
-  const guardianIdRef = useRef<GuardianId>(save.selectedGuardian);
-  const auraColorRef = useRef(ASCENSION_PATHS[equippedWeapon.ascensionPath].auraPrimary);
-  const petBounceRef = useRef(0);
   const particlesRef = useRef(new ParticlePool(160));
   const floatsRef = useRef(new FloatingTextPool(24));
 
   useEffect(() => {
-    guardianIdRef.current = save.selectedGuardian;
     setSpeechBubble(GUARDIANS[save.selectedGuardian].petLines[0]);
   }, [save.selectedGuardian]);
 
-  useEffect(() => {
-    auraColorRef.current = ASCENSION_PATHS[equippedWeapon.ascensionPath].auraPrimary;
-  }, [equippedWeapon.ascensionPath]);
 
   // Auto-dismiss auth notification toast after 1.8s so it never blocks UI
   useEffect(() => {
@@ -325,7 +318,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [drawer, focusedScreen, onOpenWorldMap]);
 
-  // Live Starry Knowledge-Rune Backdrop Canvas (Renders Full Pedestal on Left 38% in BOTH Phone Landscape & Desktop!)
+  // Decorative background only; hero and guardian render in separate foreground cards.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -405,9 +398,6 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       lastTs = now;
       time += dt;
 
-      if (petBounceRef.current > 0) {
-        petBounceRef.current = Math.max(0, petBounceRef.current - dt * 2.4);
-      }
       particlesRef.current.update(dt);
       floatsRef.current.update(dt);
 
@@ -455,33 +445,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         ctx.fill();
       }
 
-      // Landscape Mode (Phone Landscape 844x390 + Tablet + Desktop): Render Sacred Guardian Pedestal on Left 38%!
-      const landscapeNow = width > height && width >= 600;
-      if (landscapeNow) {
-        const compact = height < 560;
-        const px = width * 0.19;
-        const py = compact ? height * 0.42 : height * 0.44;
-        const spriteScale = compact ? 1.12 : 1.82;
-        const pedW = compact ? 62 : 92;
-        const pedH = compact ? 16 : 24;
-
-        ctx.save();
-        ctx.translate(px, py + (compact ? 32 : 48));
-        ctx.fillStyle = '#334155';
-        ctx.strokeStyle = auraColorRef.current;
-        ctx.lineWidth = compact ? 2.5 : 3.5;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, pedW, pedH, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#1E293B';
-        drawRoundedRect(ctx, -pedW * 0.65, pedH * 0.55, pedW * 1.3, compact ? 12 : 18, 7);
-        ctx.fill();
-        ctx.restore();
-
-        drawGuardianSpirit(ctx, guardianIdRef.current, px, py, time, spriteScale, petBounceRef.current);
-      }
+      // Background canvas paints scenery only. Characters belong to their own cards.
 
       particlesRef.current.render(ctx);
       floatsRef.current.render(ctx);
@@ -508,7 +472,6 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   const triggerPetGuardian = () => {
     soundEngine.playPetChime();
     soundEngine.hapticPulse(16);
-    petBounceRef.current = 1.0;
     setMiniBounceSignal((n) => n + 1);
     petGuardian();
     const lines = guardian.petLines;
@@ -749,7 +712,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           }`}
         >
           <div className="max-w-7xl mx-auto h-full flex items-stretch gap-3 lg:gap-6">
-            {/* LEFT 38%: Crest + Live Pedestal Canvas Window + Guardian Interaction Card */}
+            {/* LEFT 38%: Hero showcase and separate guardian interaction card */}
             <div className="w-[38%] h-full flex flex-col justify-between min-w-0">
               <div className="flex items-center gap-2">
                 <span
@@ -777,7 +740,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 </div>
               </div>
 
-              {/* Open transparent window revealing the animated 60FPS Guardian Spirit on the background canvas */}
+              {/* The hero has one foreground showcase; no actor is drawn behind it. */}
               <button type="button" className="release-character-card" aria-label="查看角色與武器" onClick={()=>onNavigate('forge')}><HeroPortrait appearance={{weapon:equippedWeapon,equipment:save.equipment,heroClassBranch:combatStats.heroClassBranch}}/><span><strong>{currentHeroClass.name}</strong><small>{equippedWeapon.name} +{equippedWeapon.enhanceLevel}</small></span></button>
 
               {/* Compact 1P-4P + Switch Gamepad Bar */}
@@ -866,6 +829,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                   isCompactLandscape ? 'p-1.5' : 'p-3 max-w-sm'
                 }`}
               >
+                <div className="flex items-center gap-2" data-testid="guardian-interaction">
+                  <GuardianMiniCanvas guardianId={save.selectedGuardian} auraColor={weaponPathDef.auraPrimary} bounceSignal={miniBounceSignal} size={isCompactLandscape?40:56} />
+                  <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1.5">
                   <div
                     className={`font-black text-amber-300 truncate ${
@@ -907,6 +873,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                   >
                     切換
                   </button>
+                </div>
+                  </div>
                 </div>
               </div>
             </div>

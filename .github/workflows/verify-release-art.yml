@@ -2,7 +2,7 @@ name: Verify release artwork
 on:
   workflow_dispatch:
   push:
-    branches: [codex/release-current-art, codex/verify-production-startup]
+    branches: [codex/fix-lobby-ghost, codex/verify-lobby-ghost]
 permissions:
   contents: read
 jobs:
