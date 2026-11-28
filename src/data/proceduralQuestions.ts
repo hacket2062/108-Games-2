@@ -35,9 +35,10 @@ function buildNumericOptions(correct: number, unit = '', spread = 6): { options:
     const cand = correct + d;
     if (cand >= 0 && cand !== correct) vals.add(cand);
   }
-  while (vals.size < 4) {
-    const cand = Math.max(1, correct + randInt(1, Math.max(8, spread * 2)));
-    vals.add(cand);
+  // Deterministic, distinct fallbacks: random retries can never terminate when
+  // a negative answer makes every clamped candidate equal to 1.
+  for (let offset = 1; vals.size < 4; offset++) {
+    vals.add(Math.max(0, correct) + offset);
   }
   const arr = Array.from(vals);
   for (let i = arr.length - 1; i > 0; i--) {
@@ -223,9 +224,9 @@ export function generateProceduralMathQuestions(
           (ans + 1.0).toFixed(1),
         ]);
       } else {
-        const a = randInt(40, 120);
         const b = randInt(4, 9);
         const c = randInt(3, 8);
+        const a = randInt(Math.max(40, b * c), 120);
         const ans = a - b * c;
         formulaShield = `${a} - ${b}×${c}`;
         prompt = `先乘除後加減：${a} - ${b} × ${c} = ?`;

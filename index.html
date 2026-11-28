@@ -15,10 +15,16 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=JetBrains+Mono:wght@600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=JetBrains+Mono:wght@600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <style>
+      .startup-card{box-sizing:border-box;max-width:440px;margin:15vh auto;padding:28px;border:1px solid #475569;border-radius:20px;background:#0f172a;color:#f8fafc;font:16px/1.7 system-ui,sans-serif}
+      .startup-card h1{font-size:23px;color:#fde68a}.startup-card button{min-height:48px;padding:10px 20px;border:0;border-radius:12px;background:#fcd34d;color:#0f172a;font:700 16px system-ui;cursor:pointer}
+    </style>
+    <script src="/startup.js" defer></script>
   </head>
   <body class="bg-slate-950 text-slate-50 antialiased selection:bg-amber-400 selection:text-slate-950 overflow-hidden">
-    <div id="root"></div>
+    <div id="root"><section id="startup-status" class="startup-card" role="status"><h1>智光守護者，準備出發！</h1><p id="startup-message">正在開啟冒險世界…</p><p>遊戲紀錄會保留，請稍候。</p><button id="startup-retry" type="button" hidden>重新載入遊戲</button></section></div>
+    <noscript><p class="startup-card">請開啟 JavaScript，才能進入遊戲。</p></noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
