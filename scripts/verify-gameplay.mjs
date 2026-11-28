@@ -19,7 +19,7 @@ const browser=await chromium.launch({channel:'chrome',headless:true});const resu
 try{
  for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
   const context=await browser.newContext({viewport,reducedMotion:'reduce'});await context.route('**/*',r=>new URL(r.request().url()).origin==='http://127.0.0.1:3006'?r.continue():r.abort());const page=await context.newPage(),errors=[];page.on('pageerror',e=>{errors.push(e.stack||e.message);console.error(e.stack||e.message);});
-  await page.goto('http://127.0.0.1:3006/.verification/gameplay.html?autostart=1&world=math');await page.getByTestId('math-td-engine').waitFor();await page.clock.install();
+  await page.goto('http://127.0.0.1:3006/.verification/gameplay.html?autostart=1&world=math');await page.getByTestId('math-td-engine').waitFor();await page.clock.install();await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));
   const solve=async correct=>{await page.getByRole('button',{name:/算數採能機/}).click();const panel=page.getByTestId('math-question-panel');await panel.waitFor();const answer=await panel.evaluate((el,correct)=>{const q=window.questions.find(q=>q.subject==='math'&&el.textContent.includes(q.prompt));if(!q)throw Error('Question not found');return q.payload.options[correct?q.payload.correctIndex:(q.payload.correctIndex+1)%q.payload.options.length];},correct);await panel.getByRole('button',{name:answer,exact:true}).click();await panel.waitFor({state:'detached'});};
   await solve(true);await page.getByRole('button',{name:'開始第一波',exact:true}).click();for(let i=0;i<60&&/場上 0/.test(await page.getByTestId('math-wave-state').textContent());i++)await page.clock.runFor(500);assert.doesNotMatch(await page.getByTestId('math-wave-state').textContent(),/場上 0/);
   for(const correct of [true,false,true,false]){
@@ -30,7 +30,7 @@ try{
    const state=await page.evaluate(()=>({frames:window.frames,xs:window.zombieXs}));assert.ok(state.frames>before+5,'Canvas loop must survive an answer');assert.ok(new Set(state.xs.map(x=>x.toFixed(2))).size>1,'Zombies must resume moving or the next enemy must spawn after answer / dismissed explanation');
   }
   await page.getByRole('button',{name:'暫停遊戲',exact:true}).click();await page.getByRole('button',{name:'重新挑戰',exact:true}).click();assert.match(await page.getByTestId('math-wave-state').textContent(),/準備中.*場上 0/);await page.getByRole('button',{name:'暫停遊戲',exact:true}).click();await page.getByRole('button',{name:'返回章節地圖',exact:true}).click();await page.getByTestId('stage-select-screen').waitFor();assert.deepEqual(errors,[]);
-  await page.goto('http://127.0.0.1:3006/.verification/gameplay.html?autostart=1&world=science');await page.getByTestId('science-cooking-engine').waitFor();await page.clock.install();
+  await page.clock.resume();await page.goto('http://127.0.0.1:3006/.verification/gameplay.html?autostart=1&world=science');await page.getByTestId('science-cooking-engine').waitFor();await page.clock.install();await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));
   const dish=await page.evaluate(()=>window.questions.find(q=>q.subject==='science'&&q.grade===4&&document.body.textContent.includes(q.payload.orderRequirement)&&document.body.textContent.includes(q.payload.dishName)));
   assert.ok(dish,'Find the actual displayed order');
   const wrong=dish.payload.ingredients.find(i=>!i.isCorrect);if(wrong){await page.getByRole('button',{name:new RegExp(wrong.name+' 點擊投入')}).click();await page.getByRole('button',{name:'看懂了，繼續遊戲',exact:true}).click();}
@@ -43,11 +43,11 @@ try{
   await lock.click();assert.equal(await lock.isDisabled(),true,'Temperature step must still complete after resume');
   const phNames={acid:/酸性/,neutral:/中性/,alkali:/鹼性/};await page.getByRole('button',{name:phNames[dish.payload.targetPh]}).click();
   const serve=page.getByRole('button',{name:'搖鈴出餐！',exact:true});await serve.evaluate(e=>{e.click();e.click();});await page.clock.runFor(1500);
-  assert.ok(await page.getByRole('button',{name:/點擊投入檢驗/}).count()>0||await page.getByRole('button',{name:/再戰|再挑戰|再試/}).count()>0,'Serving must advance to another order or settlement');
-  await page.goto('http://127.0.0.1:3006/.verification/gameplay.html?autostart=1&world=english');await page.getByTestId('galaxy-shooter-engine').waitFor();await page.clock.install();await page.clock.runFor(1500);
+  assert.ok(await page.getByRole('button',{name:/點擊投入檢驗/}).evaluateAll(buttons=>buttons.some(button=>!button.disabled))||await page.getByText('關卡大勝利！',{exact:true}).count()>0,'Serving must enable the next order ingredients or reach victory settlement');
+  await page.clock.resume();await page.goto('http://127.0.0.1:3006/.verification/gameplay.html?autostart=1&world=english');await page.getByTestId('galaxy-shooter-engine').waitFor();await page.clock.install();await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));await page.clock.runFor(1500);
   const labels=await page.evaluate(()=>Object.values(window.labels).filter(p=>p.y>0));assert.ok(labels.length>=4,'Answer drone labels must render');assert.ok(labels.every(p=>p.x>=0&&p.x<=viewport.width),'All answer drones must be inside the canvas');
   if(viewport.width>=1000){
-   await page.goto('http://127.0.0.1:3006/.verification/gameplay.html?autostart=1&world=chinese');await page.getByTestId('ink-rpg-engine').waitFor();await page.clock.install();await page.getByRole('button',{name:'自動尋路迎戰魔物',exact:true}).click();
+   await page.clock.resume();await page.goto('http://127.0.0.1:3006/.verification/gameplay.html?autostart=1&world=chinese');await page.getByTestId('ink-rpg-engine').waitFor();await page.clock.install();await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));await page.getByRole('button',{name:'自動尋路迎戰魔物',exact:true}).click();
    const slash=page.getByRole('button',{name:/墨痕斬・普攻/});for(let i=0;i<90&&!await slash.isVisible();i++)await page.clock.runFor(500);await slash.waitFor();
    for(const correct of [false,true]){
     for(let i=0;i<60&&await slash.isDisabled();i++)await page.clock.runFor(250);await slash.click();await page.getByRole('button',{name:'朗讀題目',exact:true}).waitFor();

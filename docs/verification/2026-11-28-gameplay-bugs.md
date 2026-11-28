@@ -18,3 +18,7 @@ Branch `codex/security-hardening`, base `824bb47a80d5dc457f382bed6a97362955cf04b
 - Final Node 24.22.3 validation: **53 tests**, TypeScript and Vite build pass; large JS chunk warning remains. Defense reading-protection/evolution/mission integration also rerun.
 
 No Firebase rules/project/UID changes or save migration. External network calls are blocked by local browser fixtures. Firebase Emulator, all possible end-to-end victories/defeats, teacher review and low-end real-device performance remain outside this verification. No new art was generated in this bug-fix batch: the user's feedback on round body proportions and insufficient animation smoothness remains outstanding. GitHub sync and preview check follow validation; main stays unmerged.
+
+## Preview deployment evidence
+
+Application fix commit `e1b1f30b223df493fa40db4bfe2558e7ce9da9fd`: GitHub check `140830503412` completed successfully; Cloudflare build `30eab15d-d848-46cc-a2e6-fd09b1c4c97e`. Branch preview: https://codex-security-hardening-108-games-2.hacket2062.workers.dev . Subsequent test-only refinement pauses the browser clock while clicking and explicitly accepts actual victory settlement; this does not modify the shipped application.
