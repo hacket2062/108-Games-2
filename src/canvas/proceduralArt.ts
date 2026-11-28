@@ -257,7 +257,7 @@ export class FloatingTextPool {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D) {
+  render(ctx: CanvasRenderingContext2D, fontScale=1) {
     for (let i = 0; i < this.pool.length; i++) {
       const f = this.pool[i];
       if (!f.active) continue;
@@ -268,7 +268,7 @@ export class FloatingTextPool {
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
       ctx.translate(f.x, f.y);
-      ctx.scale(f.scale * pop, f.scale * pop);
+      ctx.scale(f.scale * pop * fontScale, f.scale * pop * fontScale);
       ctx.font = '900 22px "Fredoka", "Noto Sans TC", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';

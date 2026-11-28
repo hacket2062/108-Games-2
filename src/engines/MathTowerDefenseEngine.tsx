@@ -722,7 +722,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
               t.cooldown = 5.5;
               gearsRef.current += 25;
               setGears(gearsRef.current);
-              td.floats.spawn(tx, ty - 24, '+25 齒輪', 'perfect');
+              td.floats.spawn(tx, ty - td.cellH*.3, '⚙ +25', 'perfect');
               td.particles.burst(tx, ty - 10, 6, ['#FACC15', '#FEF08A'], 30, 90, 4);
             } else {
               const laneHasZombie = td.zombies.some((z) => z.lane === t.lane && z.x > t.col / COLS);
@@ -1139,7 +1139,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       }
 
       td.particles.render(ctx);
-      td.floats.render(ctx);
+      td.floats.render(ctx,Math.min(1,td.cellW/75));
 
       if (td.feel.flashAlpha > 0.01) {
         ctx.fillStyle = td.feel.flashColor;

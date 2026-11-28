@@ -13,7 +13,7 @@ const server=external?null:await preview({preview:{host:'127.0.0.1',port:3018,st
 const origin=external||'http://127.0.0.1:3018',out='.verification/mobile-layout';await mkdir(out,{recursive:true});
 const reports=[];
 const within=async(locator,viewport,name)=>{const b=await locator.boundingBox();assert.ok(b&&b.x>=-1&&b.y>=-1&&b.x+b.width<=viewport.width+1&&b.y+b.height<=viewport.height+1,name+' outside visible phone viewport '+JSON.stringify(b));return b;};
-const screenshot=async(page,label)=>{const bytes=await page.screenshot({path:out+'/'+label+'.jpg',type:'jpeg',quality:65});if(label.includes('390'))console.log('MOBILE_VISUAL_'+label.replaceAll('-','_')+':'+bytes.toString('base64'));};
+const screenshot=async(page,label)=>{const bytes=await page.screenshot({path:out+'/'+label+'.jpg',type:'jpeg',quality:60});if(/^(chromium|webkit)-(math|english-feedback|science)-390$/.test(label))console.log('MOBILE_VISUAL_'+label.replaceAll('-','_')+':'+bytes.toString('base64'));};
 try{
  for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
   const browser=await type.launch({headless:true});
@@ -78,6 +78,7 @@ try{
      const correct=q.payload.ingredients.find(i=>i.isCorrect).name;await options.filter({has:page.getByText(correct,{exact:true})}).click();
      await within(page.getByRole('button',{name:'確認答案！',exact:true}),viewport,'Life observation confirmation');
     }else if(world==='english'){
+     await page.waitForFunction(()=>document.querySelector('.game-controls')?.textContent.includes('英語啟蒙'));
      await within(page.getByTestId('manual-fire-button'),viewport,'Touch fire control');
      await screenshot(page,engine+'-english-'+viewport.width);
      const prompt=await page.locator('.game-controls').textContent(),q=bank.ENGLISH_QUESTIONS.find(q=>q.grade===1&&q.type==='listen'&&prompt.includes(q.prompt));assert.ok(q,'Real early English prompt is present');
