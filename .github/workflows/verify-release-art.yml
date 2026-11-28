@@ -38,6 +38,7 @@ jobs:
       - name: Verify actual artwork, four worlds and retained features
         run: node scripts/verify-release-art.mjs
         env:
+          RELEASE_TARGET_URL: https://108-games-2.hacket2062.workers.dev
           PLAYWRIGHT_MODULE_PATH: ${{ runner.temp }}/art-check/node_modules/playwright
       - uses: actions/upload-artifact@v4
         if: always()
