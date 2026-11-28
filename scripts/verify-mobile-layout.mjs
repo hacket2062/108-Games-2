@@ -83,9 +83,11 @@ try{
      const prompt=await page.locator('.game-controls').textContent(),q=bank.ENGLISH_QUESTIONS.find(q=>q.grade===1&&q.type==='listen'&&prompt.includes(q.prompt));assert.ok(q,'Real early English prompt is present');
      await page.waitForFunction(choices=>choices.every(t=>window.__mobileText[t]?.y>=38),q.payload.choices);
      await screenshot(page,engine+'-english-'+viewport.width);
-     const wrong=q.payload.choices.find(x=>x!==q.answer),pos=await page.evaluate(t=>window.__mobileText[t],wrong);
-     await canvas.click({position:pos});
+     const wrong=await page.evaluate(choices=>choices.sort((a,b)=>window.__mobileText[a].y-window.__mobileText[b].y)[0],q.payload.choices.filter(x=>x!==q.answer));
+     const pos=await page.evaluate(t=>window.__mobileText[t],wrong),cb=await canvas.boundingBox();
+     await page.touchscreen.tap(cb.x+pos.x,cb.y+pos.y);
      await page.getByTestId('answer-explanation').waitFor({timeout:10000});await page.waitForFunction(()=>document.body.dataset.state==='reading');
+     assert.ok((await page.getByTestId('answer-explanation').textContent()).includes('「'+wrong+'」'),'Locked shot must resolve the tapped choice, not a different drone in its path');
      await within(page.getByRole('button',{name:'關閉解析提示'}),viewport,'English feedback continue');
      await page.waitForTimeout(200);const frozen=await canvas.evaluate(e=>e.toDataURL());await page.waitForTimeout(600);assert.equal(await canvas.evaluate(e=>e.toDataURL()),frozen,'English bullets/ship/enemies freeze during reading');
      await screenshot(page,engine+'-english-feedback-'+viewport.width);

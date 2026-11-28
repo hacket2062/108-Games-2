@@ -1,4 +1,4 @@
-import {kitchenSceneScale} from '../core/renderLayout';
+import {kitchenStageLayout} from '../core/renderLayout';
 import {ScienceWorkbench} from '../components/ScienceWorkbench';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Bell, Flame, Pause, Sparkles, Volume2, FlaskConical, CheckCircle2 } from 'lucide-react';
@@ -646,15 +646,11 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       }
 
       // Short phone stages use a horizontal composition with uniform actor scales.
-      const compact=H<260;
-      const bossScale=compact?Math.min(.65,(H-12)/190,W/440):kitchenSceneScale(W,H);
-      const bossX=W*(compact?.73:.5),bossY=H*(compact?.53:.36);
+      const {compact,bossScale,bossX,bossY,potX,potY,propScale}=kitchenStageLayout(W,H);
       ctx.fillStyle='#92400E';ctx.strokeStyle='#451A03';ctx.lineWidth=2;
       drawRoundedRect(ctx,W*(compact?.53:.16),H*(compact?.82:.44),W*(compact?.40:.68),compact?10:28,6);ctx.fill();ctx.stroke();
       ctx.save();ctx.translate(bossX,bossY);ctx.scale(bossScale,bossScale);
       drawDarkGluttonBoss(ctx,0,0,s.time,bossHpRef.current/bossMaxHp,s.bossHitFlash,s.bossMood);ctx.restore();
-      const potX=W*(compact?.37:.5),potY=H*.77;
-      const propScale=compact?Math.min(.65,(H-12)/150):Math.min(1,W/440,H/430);
       ctx.save();ctx.translate(potX,potY);ctx.scale(propScale,propScale);
       ctx.fillStyle='#1E293B';ctx.strokeStyle='#0F172A';ctx.lineWidth=3.5;
       ctx.beginPath();ctx.ellipse(0,0,64,34,0,0,Math.PI*2);ctx.fill();ctx.stroke();

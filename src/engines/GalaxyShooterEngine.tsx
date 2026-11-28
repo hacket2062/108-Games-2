@@ -931,6 +931,12 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         // Update player lasers (supports homing onto locked target!) & check collisions
         for (let i = s.lasers.length - 1; i >= 0; i--) {
           const b = s.lasers[i];
+          const locked=b.targetId?(s.bossMode?s.letterOrbs.find(o=>o.id===b.targetId&&!o.collected):s.drones.find(d=>d.id===b.targetId)):null;
+          if(b.targetId&&!locked){s.lasers.splice(i,1);continue;}
+          if(locked&&dt>0){
+            const dx=locked.x-b.x,dy=locked.y-b.y,distance=Math.hypot(dx,dy),speed=Math.hypot(b.vx,b.vy);
+            if(distance>0){b.vx=dx/distance*speed;b.vy=dy/distance*speed;}
+          }
           b.x += b.vx * dt;
           b.y += b.vy * dt;
           if (b.y < -30 || b.x < -30 || b.x > W + 30) {
@@ -941,6 +947,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           let hit = false;
           if (!s.bossMode) {
             for (const d of s.drones) {
+              if(b.targetId&&d.id!==b.targetId)continue;
               if (Math.abs(b.x - d.x) < 58 && Math.abs(b.y - d.y) < 30) {
                 hit = true;
                 d.hitFlash = 0.7;
@@ -955,6 +962,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
             }
           } else {
             for (const orb of s.letterOrbs) {
+              if(b.targetId&&orb.id!==b.targetId)continue;
               if (!orb.collected && Math.hypot(b.x - orb.x, b.y - orb.y) < orb.r + 8) {
                 hit = true;
                 handleLetterHit(orb);

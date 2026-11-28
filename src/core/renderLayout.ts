@@ -11,3 +11,11 @@ export function lawnUnitLayout(cellWidth:number,cellHeight:number,magnification=
 }
 /** Kitchen art was authored around a 500px-high stage, not a phone's short strip. */
 export function kitchenSceneScale(width:number,height:number):number{return Math.min(1,width/440,height/430);}
+export function kitchenStageLayout(width:number,height:number){
+ const compact=height<260;
+ return {
+  bossScale:compact?Math.max(0,Math.min(.65,(height-12)/190,width/440)):kitchenSceneScale(width,height),
+  propScale:compact?Math.max(0,Math.min(.65,(height-12)/150)):kitchenSceneScale(width,height),
+  bossX:width*(compact?.73:.5),bossY:height*(compact?.53:.36),potX:width*(compact?.37:.5),potY:height*.77,compact,
+ };
+}
