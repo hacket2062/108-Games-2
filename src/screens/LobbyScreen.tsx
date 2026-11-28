@@ -36,6 +36,8 @@ import { useAuth } from '../auth/AuthContext';
 import { useGameState } from '../core/GameStateContext';
 import { ASCENSION_PATHS } from '../data/itemsAndGems';
 import { GAME_TITLES, getPvPRankTier, GUARDIAN_LIST, GUARDIANS } from '../data/spiritsAndTitles';
+import { CharacterGrowthPanel } from '../components/CharacterGrowthPanel';
+import { RandomMissionPanel } from '../components/RandomMissionPanel';
 import { xpRequiredForLevel } from '../core/combatMath';
 import { soundEngine } from '../audio/soundEngine';
 import {
@@ -759,7 +761,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                   onClick={triggerPetGuardian}
                   className="flex-1 min-h-[46px] rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-black text-xs flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                 >
-                  <Heart className="w-4 h-4 fill-white" /> 摸摸精靈 (+羈絆)
+                  <Heart className="w-4 h-4 fill-white" /> 摸摸精靈（每日首次 +2 經驗）
                 </button>
                 <button
                   type="button"
@@ -777,6 +779,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
           {/* RIGHT 7 COLS (Full Width on Mobile): Grade/Semester/Mode + 4 Worlds + Online PvP */}
           <div className="lg:col-span-8 flex flex-col gap-3">
+            <CharacterGrowthPanel />
+            <RandomMissionPanel />
             <AdventureBrief save={save} onStart={(stage) => {
               soundEngine.playClick();
               soundEngine.hapticPulse(12);

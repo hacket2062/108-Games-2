@@ -287,6 +287,12 @@ export interface PvPProfileStats {
 }
 
 export interface PlayerSaveData {
+  recentQuestionIds?: string[];
+  randomMissions?: import('../core/randomMissions').RandomMissionBoard;
+  unlockedSkills?: import('../core/randomMissions').SpecialSkill[];
+  selectedSkill?: import('../core/randomMissions').SpecialSkill;
+  characterJob?: 'adventurer' | 'sentinel' | 'arcanist' | 'ranger';
+  guardianCare?: Partial<Record<GuardianId, {day:string;points:number;petted:boolean;fed:boolean}>>;
   level: number;
   xp: number;
   coins: number;
@@ -373,6 +379,8 @@ export interface EffectiveCombatStats {
 }
 
 export interface EngineCommonProps {
+  recentQuestionIds?: string[];
+  appearance?: { weapon: WeaponInstance; equipment: EquipmentLevels; characterJob?: PlayerSaveData['characterJob'] };
   grade: GradeLevel;
   semester: SemesterId;
   playMode: PlayMode;

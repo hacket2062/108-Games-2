@@ -236,13 +236,23 @@ export function computePlayerCombatStats(
 export function computeSaveCombatStats(save: PlayerSaveData): EffectiveCombatStats {
   const equipped =
     save.weapons.find((w) => w.uid === save.equippedWeaponUid) ?? save.weapons[0] ?? null;
-  return computePlayerCombatStats(
+  const stats = computePlayerCombatStats(
     save.level,
     save.equipment,
     save.selectedGuardian,
     save.guardianBonds[save.selectedGuardian] ?? 1,
     equipped
   );
+  if (save.level >= 5) {
+    if (save.characterJob === 'sentinel') stats.maxHp = Math.round(stats.maxHp * 1.15);
+    if (save.characterJob === 'arcanist') stats.baseAttack = Math.round(stats.baseAttack * 1.1);
+    if (save.characterJob === 'ranger') { stats.speedBonus += .1; stats.critChance = Math.min(.65,stats.critChance+.03); }
+  }
+  if (save.selectedSkill && save.unlockedSkills?.includes(save.selectedSkill)) {
+    if (save.selectedSkill==='star_guard') stats.maxHp=Math.round(stats.maxHp*1.08);
+    if (save.selectedSkill==='flame_focus') stats.baseAttack=Math.round(stats.baseAttack*1.06);
+  }
+  return stats;
 }
 
 export function calculateStarRating(
@@ -259,7 +269,8 @@ export function calculateStarRating(
 }
 
 export function xpRequiredForLevel(level: number): number {
-  return Math.round(120 + (level - 1) * 65);
+  const n = Math.max(0, Math.min(199, Math.floor(level) - 1));
+  return Math.round(120 + n * 90 + n * n * 18);
 }
 
 export function applyXpGain(currentLevel: number, currentXp: number, xpEarned: number) {

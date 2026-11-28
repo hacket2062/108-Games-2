@@ -11,6 +11,9 @@ await writeFile('.verification/learning-ui.html', `<!doctype html><html lang="zh
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {BattleEndModal} from '/src/components/BattleEndModal.tsx';
+import {MistakeNotebookModal} from '/src/components/MistakeNotebookModal.tsx';
+import {createInitialPlayerSave} from '/src/core/playerSave.ts';
+import {resolveWrongRecordOnce} from '/src/core/saveIntegrity.ts';
 import {AuthProvider, useAuth} from '/src/auth/AuthContext.tsx';
 import {GameStateProvider, useGameState} from '/src/core/GameStateContext.tsx';
 import '/src/index.css';
@@ -24,6 +27,18 @@ function Probe(){const {save,applyWorldResult,saveNotice}=useGameState();const {
  React.createElement('pre',{id:'save'},JSON.stringify(save)),
  React.createElement('button',{disabled:authLoading,onClick:()=>applyWorldResult(window.probeResult)},'Apply practice result'));}
 window.showProbe=()=>root.render(React.createElement(AuthProvider,null,React.createElement(GameStateProvider,null,React.createElement(Probe))));
+function ReviewFlow(){
+ const [save,setSave]=React.useState(()=>{const value=createInitialPlayerSave();const base={subject:'math',grade:4,correctAnswer:'5',explanation:'2 加 3 等於 5。',knowledgeTag:'加法',wrongCount:1,lastWrongAt:100,revengeOptions:['4','5','6']};
+ value.wrongRecords=[{...base,questionId:'old',prompt:'以前的數學題'}, {...base,questionId:'recent',prompt:'這一局：2 加 3 等於多少？'}, {...base,subject:'english',questionId:'english-old',prompt:'以前的英文題'}];return value;});
+ const [open,setOpen]=React.useState(false);
+ const focus=React.useMemo(()=>({subject:'math',questionIds:['recent']}),[]);
+ const recent=save.wrongRecords.filter(r=>r.questionId==='recent');
+ return React.createElement(React.Fragment,null,React.createElement('output',{id:'review-save',hidden:true},JSON.stringify(save)),
+ !open&&React.createElement(BattleEndModal,{result:{subject:'math',victory:false,score:0,stars:0,correctCount:0,totalAttempts:1,maxCombo:0,clearSeconds:10,coinsEarned:0,xpEarned:0,crystalsEarned:0,knowledgeTags:[],progressSummary:'受控整合測試'},
+ runMistakes:recent,wrongRecordCount:save.wrongRecords.length,onRetry:()=>{},onReturnLobby:()=>{},onReviewMistakes:()=>setOpen(true)}),
+ React.createElement(MistakeNotebookModal,{open,save,reviewFocus:focus,onClose:()=>setOpen(false),onClearMistake:id=>setSave(prev=>resolveWrongRecordOnce(prev,id))}));
+}
+window.showReviewFixture=()=>root.render(React.createElement(ReviewFlow));
 window.fixtureReady=true;
 </script></body></html>`);
 const server = await createServer({ server: { host: '127.0.0.1', port: 3002, strictPort: true }, logLevel: 'error' });
@@ -61,8 +76,30 @@ try {
   assert.equal(after.crystals,before.crystals,'Practice boss cannot grant campaign chest crystals');
   assert.deepEqual(after.dailyQuests,before.dailyQuests,'Practice cannot complete the adventure Boss quest');
   assert.match(after.trajectory[0].note,/【練習】/);
+  await page.evaluate(()=>window.showReviewFixture());
+  await page.getByRole('region',{name:'本局錯題速覽'}).waitFor();
+  await page.getByText('這一局：2 加 3 等於多少？',{exact:true}).click();
+  assert.equal(await page.getByText('參考答案：5',{exact:true}).isVisible(),true);
+  await page.getByRole('button',{name:'複習本局錯題（1 題）'}).click();
+  await page.getByRole('dialog',{name:'智光錯題本與複習挑戰'}).waitFor();
+  assert.equal(await page.locator('[data-review-question]').count(),1);
+  assert.equal(await page.getByRole('article',{name:'這一局：2 加 3 等於多少？'}).count(),1);
+  await page.screenshot({path:'.verification/recent-review-390.png'});
+  const reviewBefore=JSON.parse(await page.locator('#review-save').textContent());
+  await page.getByRole('button',{name:'自己試一次',exact:true}).click();
+  await page.getByRole('button',{name:'5',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'5',exact:true}).isDisabled(),true);
+  const reviewAfter=JSON.parse(await page.locator('#review-save').textContent());
+  assert.equal(reviewAfter.coins,reviewBefore.coins+25);
+  assert.deepEqual(reviewAfter.wrongRecords.map(r=>r.questionId),['old','english-old']);
+  await page.getByRole('button',{name:'返回錯題清單'}).click();
+  await page.getByText('本局沒有待複習的錯題了！',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'查看其他待複習題'}).click();
+  assert.equal(await page.getByRole('article',{name:'以前的數學題'}).count(),1);
+  await page.getByRole('button',{name:'全部科目',exact:true}).click();
+  assert.equal(await page.locator('[data-review-question]').count(),2);
   assert.deepEqual(errors,[]);
-  const report={noAttemptsNot100Percent:true,actualAccuracy:true,reviewAction:true,practiceAction:true,practiceCampaignAndChestPreserved:true,uncaughtErrors:errors};
+  const report={noAttemptsNot100Percent:true,actualAccuracy:true,reviewAction:true,practiceAction:true,practiceCampaignAndChestPreserved:true,recentRunInlineExplanation:true,recentRunNotebookFilter:true,historicalMistakesPreserved:true,reviewRewardsOnce:true,uncaughtErrors:errors};
   await writeFile('.verification/learning-ui-results.json',JSON.stringify(report,null,2));
   console.log(JSON.stringify(report,null,2));
 } finally { await browser.close(); await server.close(); }

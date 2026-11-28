@@ -13,6 +13,7 @@ import { CHINESE_QUESTIONS as BASE_CHINESE } from './questions/chineseQuestions'
 import { ENGLISH_QUESTIONS as BASE_ENGLISH } from './questions/englishQuestions';
 import { MATH_QUESTIONS as BASE_MATH } from './questions/mathQuestions';
 import { SCIENCE_QUESTIONS as BASE_SCIENCE } from './questions/scienceQuestions';
+import { ADVENTURE_CHINESE, ADVENTURE_ENGLISH, ADVENTURE_MATH, ADVENTURE_SCIENCE } from './questions/adventureExpansion';
 import {
   BONUS_CHINESE_QUESTIONS,
   BONUS_ENGLISH_QUESTIONS,
@@ -30,21 +31,25 @@ export const CHINESE_QUESTIONS: ChineseQuestion[] = [
   ...BASE_CHINESE,
   ...BONUS_CHINESE_QUESTIONS,
   ...EPIC_CHINESE_QUESTIONS,
+  ...ADVENTURE_CHINESE,
 ];
 export const ENGLISH_QUESTIONS: EnglishQuestion[] = [
   ...BASE_ENGLISH,
   ...BONUS_ENGLISH_QUESTIONS,
   ...EPIC_ENGLISH_QUESTIONS,
+  ...ADVENTURE_ENGLISH,
 ];
 export const MATH_QUESTIONS: MathQuestion[] = [
   ...BASE_MATH,
   ...BONUS_MATH_QUESTIONS,
   ...EPIC_MATH_QUESTIONS,
+  ...ADVENTURE_MATH,
 ];
 export const SCIENCE_QUESTIONS: ScienceQuestion[] = [
   ...BASE_SCIENCE,
   ...BONUS_SCIENCE_QUESTIONS,
   ...EPIC_SCIENCE_QUESTIONS,
+  ...ADVENTURE_SCIENCE,
 ];
 
 export const ALL_QUESTIONS: AnyQuestion[] = [

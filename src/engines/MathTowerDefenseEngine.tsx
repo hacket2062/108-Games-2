@@ -33,6 +33,9 @@ import {
   UltimateCutIn,
   WorldPauseModal,
 } from '../components/UltimateCutIn';
+import { DEFENSE_ELEMENTS, defenseBossProfile, defenseSimulationPaused, defenseWavePressure, elementDamageMultiplier, projectileElement, ZOMBIE_DEFS, zombieForWave } from '../core/mathDefense';
+import type { ZombieKind } from '../core/mathDefense';
+import { HeroPortrait } from '../components/EquipmentArt';
 
 const LANES = 5;
 const COLS = 8;
@@ -51,6 +54,8 @@ const TOWER_SHOP: TowerConfig[] = [
   { kind: 'raccoon', name: '浣熊機槍塔', role: '高速數字連射', cost: 80, hotkey: '2', accent: 'border-sky-400' },
   { kind: 'owl', name: '貓頭鷹冰塔', role: '幾何冰凍減速', cost: 110, hotkey: '3', accent: 'border-cyan-300' },
   { kind: 'hedgehog', name: '刺蝟質數塔', role: '範圍高傷爆破', cost: 130, hotkey: '4', accent: 'border-rose-400' },
+  { kind: 'flame', name: '熔火噴射砲', role: '烈焰・克制寒霜重盾', cost: 145, hotkey: '5', accent: 'border-orange-400' },
+  { kind: 'prism', name: '星稜雷射塔', role: '雷電・克制熔火術士', cost: 165, hotkey: '6', accent: 'border-violet-400' },
 ];
 
 interface PlacedTower {
@@ -67,8 +72,11 @@ interface PlacedTower {
 }
 
 interface ZombieEntity {
+  supreme?: boolean;
   id: string;
-  kind: 'zero' | 'bucket' | 'hopper' | 'boss';
+  kind: ZombieKind;
+  specialCd: number;
+  healsRemaining: number;
   lane: number;
   x: number; // 0..1 normalized across grid width (1.02 = right spawn, 0 = castle gate)
   hp: number;
@@ -85,7 +93,7 @@ interface MathProjectile {
   x: number;
   speed: number;
   damage: number;
-  kind: 'digit' | 'frost' | 'prime';
+  kind: 'digit' | 'frost' | 'prime' | 'fire' | 'beam';
   color: string;
 }
 
@@ -96,6 +104,7 @@ interface SkyLaserBeam {
 }
 
 export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
+  appearance,
   grade,
   semester,
   playMode,
@@ -104,6 +113,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   stageConfig,
   masteredQuestionIds,
   wrongQuestionIds,
+  recentQuestionIds,
   onAnswerResult,
   onFinish,
   onRestart,
@@ -115,6 +125,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     new QuestionManager<MathQuestion>(getMathQuestions(grade, semester), {
       masteredQuestionIds,
       wrongQuestionIds,
+      recentQuestionIds,
       focusTags: stageConfig?.focusTags,
     })
   );
@@ -126,6 +137,11 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   }, [bossWarning]);
 
   const [paused, setPaused] = useState(false);
+  const [battleStarted, setBattleStarted] = useState(false);
+  const [firstAttemptDone, setFirstAttemptDone] = useState(false);
+  const [bestiaryOpen, setBestiaryOpen] = useState(false);
+  const readProtection = useRef(true);
+  const solverClaimed = useRef(false);
   const { schedule, cancelAll } = useSessionScheduler(paused);
   const [selectedTower, setSelectedTower] = useState<MathTowerKind>('raccoon');
   const [radialPicker, setRadialPicker] = useState<{
@@ -134,7 +150,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     x: number;
     y: number;
   } | null>(null);
-  const [gears, setGears] = useState(guardianId === 'griffin' ? 210 : 150);
+  const [gears, setGears] = useState(guardianId === 'griffin' ? 260 : 220);
   const [castleHp, setCastleHp] = useState(playerStats.maxHp);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
@@ -144,6 +160,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   const [freezeSecs, setFreezeSecs] = useState(0);
   const [cutIn, setCutIn] = useState(false);
   const [shieldedCount, setShieldedCount] = useState(0);
+  const [enemyCount, setEnemyCount] = useState(0);
   const [banner, setBanner] = useState<{
     title: string;
     answer: string;
@@ -160,7 +177,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   } | null>(null);
 
   const pausedRef = useRef(false);
-  const gearsRef = useRef(guardianId === 'griffin' ? 210 : 150);
+  const gearsRef = useRef(guardianId === 'griffin' ? 260 : 220);
   const castleHpRef = useRef(playerStats.maxHp);
   const scoreRef = useRef(0);
   const comboRef = useRef(0);
@@ -174,6 +191,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   const freezeRef = useRef(0);
   const doubleNextRef = useRef(false);
   const selectedTowerRef = useRef<MathTowerKind>('raccoon');
+  readProtection.current = defenseSimulationPaused(paused, battleStarted, Boolean(solverState), Boolean(banner) || bestiaryOpen, finishedRef.current);
 
   const TOTAL_WAVES = stageConfig ? stageConfig.waveCount : 3;
 
@@ -215,8 +233,9 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
     projectiles: [] as MathProjectile[],
     lasers: [] as SkyLaserBeam[],
     waveIndex: 0,
-    zombiesToSpawn: 5,
-    spawnTimer: 1.5,
+    zombiesToSpawn: 3,
+    spawnTimer: 6,
+    spawnCount: 0,
     bossSpawned: false,
     particles: new ParticlePool(340),
     floats: new FloatingTextPool(48),
@@ -278,6 +297,11 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   );
 
   const openHarvestSolver = () => {
+    if (finishedRef.current || pausedRef.current) return;
+    readProtection.current = true;
+    setEnemyCount(tdRef.current.zombies.length);
+    solverClaimed.current = false;
+    setBanner(null);
     soundEngine.playClick();
     const q = pullMathQ();
     setSolverState({
@@ -289,12 +313,16 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   };
 
   const openSnipeNearestShield = () => {
+    if (finishedRef.current || pausedRef.current) return;
+    readProtection.current = true;
     const target = tdRef.current.zombies.find((z) => z.formulaQuestion);
     if (!target || !target.formulaQuestion) {
       openHarvestSolver();
       return;
     }
     soundEngine.playClick();
+    solverClaimed.current = false;
+    setBanner(null);
     setSolverState({
       purpose: 'snipe',
       question: target.formulaQuestion,
@@ -305,7 +333,9 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   };
 
   const handleSolveOption = (optIdx: number) => {
-    if (!solverState) return;
+    if (!solverState || solverClaimed.current || pausedRef.current || finishedRef.current) return;
+    solverClaimed.current = true;
+    setFirstAttemptDone(true);
     const { question, purpose, targetZombieId, startedAt } = solverState;
     const isCorrect = optIdx === question.payload.correctIndex;
     const td = tdRef.current;
@@ -397,9 +427,9 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       // Wrong answer -> explanation + nearest tower overheats 3s
       comboRef.current = 0;
       setCombo(0);
-      soundEngine.playWrongBuzz();
+      soundEngine.playClick();
       setBanner({
-        title: '算式過熱！一座砲塔停機冷卻 3 秒',
+        title: '先看看線索，再試一次。閱讀解析時敵人會暫停。',
         answer: question.answer,
         explanation: question.explanation,
         tag: question.knowledgeTag,
@@ -487,11 +517,11 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       td.height = rect.height;
       const isNarrow = rect.width < 640;
       td.gridLeft = isNarrow ? 44 : Math.max(96, rect.width * 0.1);
-      td.gridTop = isNarrow ? 156 : 98;
+      td.gridTop = isNarrow ? 192 : 132;
       const availW = rect.width - td.gridLeft - (isNarrow ? 8 : 36);
       const availH = rect.height - td.gridTop - (isNarrow ? 94 : 104);
-      td.cellW = Math.max(38, availW / COLS);
-      td.cellH = Math.max(48, availH / LANES);
+      td.cellW = Math.max(24, availW / COLS);
+      td.cellH = Math.max(22, availH / LANES);
     };
     resize();
     const ro = new ResizeObserver(resize);
@@ -504,6 +534,8 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       else if (e.key === '2') setSelectedTower('raccoon');
       else if (e.key === '3') setSelectedTower('owl');
       else if (e.key === '4') setSelectedTower('hedgehog');
+      else if (e.key === '5') setSelectedTower('flame');
+      else if (e.key === '6') setSelectedTower('prism');
     };
     window.addEventListener('keydown', onKeyDown);
 
@@ -515,18 +547,25 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
 
     const spawnZombie = (waveIdx: number, isBoss = false) => {
       const td = tdRef.current;
-      const lane = isBoss ? 2 : Math.floor(Math.random() * LANES);
-      const kinds: Array<'zero' | 'bucket' | 'hopper'> = ['zero', 'bucket', 'hopper'];
-      const kind = isBoss ? 'boss' : kinds[Math.min(kinds.length - 1, Math.floor(Math.random() * (waveIdx + 2)))];
+      const ordinal = td.spawnCount++;
+      const lane = isBoss || (waveIdx === 0 && ordinal < 2) ? 2 : (ordinal * 2 + waveIdx) % LANES;
+      const kind: ZombieKind = isBoss ? 'boss' : zombieForWave(waveIdx, ordinal, stageConfig?.chapterIndex ?? 1,stageConfig?.stageNumber??1);
       const hasFormulaShield = isBoss || kind === 'bucket' || Math.random() < 0.42;
-      const baseHp = isBoss ? 520 : kind === 'bucket' ? 175 : kind === 'hopper' ? 115 : 100;
-      const baseSpeed = isBoss ? 0.022 : kind === 'hopper' ? 0.045 : 0.031;
+      const def = ZOMBIE_DEFS[kind];
+      const pressure = defenseWavePressure(waveIdx,stageConfig?.chapterIndex??1);
+      const supreme=isBoss && stageConfig?.tier==='boss';
+      const bossProfile=defenseBossProfile(supreme);
+      const baseHp = Math.round(def.hp * (stageConfig?.enemyHpScale ?? 1) * pressure.hp * (isBoss?bossProfile.hpMultiplier:1));
+      const baseSpeed = def.speed * (stageConfig?.enemySpeedScale ?? 1) * pressure.speed * (isBoss?bossProfile.speedMultiplier:1);
 
       td.zombies.push({
         id: `z-${Date.now()}-${Math.random()}`,
         kind,
+        supreme,
+        specialCd: 7,
+        healsRemaining: kind === 'oracle' ? 3 : 0,
         lane,
-        x: 1.03,
+        x: .97,
         hp: baseHp,
         maxHp: baseHp,
         speed: playMode === 'practice' ? baseSpeed * 0.65 : baseSpeed,
@@ -544,8 +583,8 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       lastTs = now;
       const td = tdRef.current;
 
-      const { simDt, shakeX, shakeY } = updateGameFeel(td.feel, pausedRef.current ? 0 : rawDt);
-      const dt = pausedRef.current ? 0 : simDt;
+      const { simDt, shakeX, shakeY } = updateGameFeel(td.feel, readProtection.current ? 0 : rawDt);
+      const dt = readProtection.current ? 0 : simDt;
       td.time += dt;
 
       if (freezeRef.current > 0 && dt > 0) freezeRef.current = Math.max(0, freezeRef.current - dt);
@@ -559,14 +598,15 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
             const isBossLast = td.waveIndex === TOTAL_WAVES - 1 && td.zombiesToSpawn === 0 && !td.bossSpawned;
             if (isBossLast) td.bossSpawned = true;
             spawnZombie(td.waveIndex, isBossLast);
-            td.spawnTimer = Math.max(2.1, 4.2 - td.waveIndex * 0.65);
+            td.spawnTimer = defenseWavePressure(td.waveIndex,stageConfig?.chapterIndex??1).interval;
           }
         } else if (td.zombies.length === 0) {
           if (td.waveIndex + 1 < TOTAL_WAVES) {
             td.waveIndex += 1;
             setWave(td.waveIndex + 1);
-            td.zombiesToSpawn = 5 + td.waveIndex * 2;
-            td.spawnTimer = 1.8;
+            td.zombiesToSpawn = defenseWavePressure(td.waveIndex,stageConfig?.chapterIndex??1).count;
+            td.spawnTimer = 7;
+            td.spawnCount = 0;
             gearsRef.current += 60;
             setGears(gearsRef.current);
             td.floats.spawn(td.width * 0.5, td.height * 0.35, `第 ${td.waveIndex + 1} 波來襲！`, 'perfect', '+60 齒輪補給');
@@ -620,6 +660,9 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
                     kind: 'frost',
                     color: '#67E8F9',
                   });
+                } else if (t.kind === 'flame' || t.kind === 'prism') {
+                  t.cooldown = t.kind === 'flame' ? 1.1 : 1.8;
+                  td.projectiles.push({lane:t.lane,x:(t.col+.65)/COLS,speed:t.kind==='flame'?.5:.9,damage:Math.round(playerStats.baseAttack*(t.kind==='flame'?1.1:1.5)),kind:t.kind==='flame'?'fire':'beam',color:t.kind==='flame'?'#ff9768':'#cbb4ff'});
                 } else {
                   t.cooldown = 2.2;
                   td.projectiles.push({
@@ -647,12 +690,14 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           const hitZ = td.zombies.find((z) => z.lane === p.lane && Math.abs(z.x - p.x) < 0.055);
           if (hitZ) {
             const mult = hitZ.formulaQuestion ? 0.5 : 1.0;
-            const dmg = Math.max(4, Math.round(p.damage * mult));
+            const advantage = elementDamageMultiplier(projectileElement(p.kind), ZOMBIE_DEFS[hitZ.kind].element);
+            const dmg = Math.max(4, Math.round(p.damage * mult * advantage));
             hitZ.hp -= dmg;
             hitZ.hitFlash = 0.65;
             if (p.kind === 'frost') hitZ.chillTimer = 3.5;
             const px = td.gridLeft + hitZ.x * (td.cellW * COLS);
             const py = td.gridTop + (hitZ.lane + 0.5) * td.cellH;
+            if (advantage > 1) td.floats.spawn(px,py-20,`克制 ×${advantage}`,'perfect');
             if (p.kind === 'prime') {
               soundEngine.playExplosion();
               td.particles.burst(px, py, 16, ['#FB7185', '#FACC15'], 60, 180, 6);
@@ -674,6 +719,10 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           const z = td.zombies[i];
           if (z.hitFlash > 0) z.hitFlash = Math.max(0, z.hitFlash - dt * 5);
           if (z.chillTimer > 0) z.chillTimer = Math.max(0, z.chillTimer - dt);
+          if (z.kind === 'oracle' && z.healsRemaining > 0) {
+            z.specialCd -= dt;
+            if (z.specialCd <= 0) { z.specialCd = 7; z.healsRemaining--; for (const ally of td.zombies) if (ally.lane === z.lane && ally.id !== z.id) ally.hp = Math.min(ally.maxHp, ally.hp + Math.round(ally.maxHp * .12)); }
+          }
 
           if (z.hp <= 0) {
             const zx = td.gridLeft + z.x * (td.cellW * COLS);
@@ -695,20 +744,20 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
             if (blocking) {
               z.biteCd -= dt;
               if (z.biteCd <= 0) {
-                z.biteCd = 1.0;
-                blocking.hp -= z.kind === 'boss' ? 35 : 18;
+                z.biteCd = z.kind === 'pyro' ? 2.4 : 1.5;
+                blocking.hp -= ZOMBIE_DEFS[z.kind].bite * (z.kind==='boss' && z.hp<z.maxHp*.5 ? 1.2 : 1) * (z.supreme?1.5:1);
                 if (blocking.hp <= 0) {
                   td.towers = td.towers.filter((t) => t.id !== blocking.id);
                 }
               }
             } else {
-              const spd = z.speed * (z.chillTimer > 0 ? 0.45 : 1.0);
+              const spd = z.speed * (z.chillTimer > 0 ? 0.45 : 1.0) * (z.kind==='boss' && z.hp<z.maxHp*.5 ? 1.2 : 1);
               z.x -= spd * dt;
             }
 
             // Reached Mechanical Castle Gate!
             if (z.x <= 0.01) {
-              const gateDmg = z.kind === 'boss' ? 40 : 18;
+              const gateDmg = ZOMBIE_DEFS[z.kind].gate * (z.supreme?1.5:1);
               castleHpRef.current = Math.max(0, castleHpRef.current - gateDmg);
               setCastleHp(castleHpRef.current);
               soundEngine.playWrongBuzz();
@@ -736,6 +785,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       if (hudAccum > 0.18) {
         hudAccum = 0;
         setShieldedCount(td.zombies.filter((z) => z.formulaQuestion).length);
+        setEnemyCount(td.zombies.length);
         setFreezeSecs(Math.ceil(freezeRef.current));
       }
 
@@ -779,12 +829,19 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           const x = td.gridLeft + c * td.cellW;
           const y = td.gridTop + r * td.cellH;
           const alt = (r + c) % 2 === 0;
-          ctx.fillStyle = alt ? '#22C55E' : '#16A34A';
-          ctx.fillRect(x, y, td.cellW - 2, td.cellH - 2);
+          const chapter = stageConfig?.chapterIndex??1;
+          const palette = chapter===3?['#443654','#352c47']:chapter===2?['#28495c','#203f52']:['#264d43','#204439'];
+          const tile = ctx.createLinearGradient(x,y,x,y+td.cellH);
+          tile.addColorStop(0,palette[alt?0:1]);tile.addColorStop(1,chapter===3?'#252339':'#142f31');
+          ctx.fillStyle = tile;
+          drawRoundedRect(ctx,x+2,y+2,td.cellW-4,td.cellH-4,Math.min(10,td.cellW*.12));ctx.fill();
           // Subtle architectural blueprint grid line
-          ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+          ctx.strokeStyle = 'rgba(169,213,192,0.14)';
           ctx.lineWidth = 1;
           ctx.strokeRect(x + 2, y + 2, td.cellW - 6, td.cellH - 6);
+          ctx.fillStyle='#b1c9ad25';
+          for(let k=0;k<3;k++){const px=x+td.cellW*(.18+k*.29),py=y+td.cellH*(.25+((r+c+k)%3)*.2);ctx.fillRect(px,py,2,4);}
+          ctx.strokeStyle='#b9d8bd25';ctx.beginPath();ctx.moveTo(x+td.cellW*.46,y+td.cellH*.5);ctx.lineTo(x+td.cellW*.54,y+td.cellH*.5);ctx.moveTo(x+td.cellW*.5,y+td.cellH*.46);ctx.lineTo(x+td.cellW*.5,y+td.cellH*.54);ctx.stroke();
         }
       }
 
@@ -797,7 +854,9 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       for (const t of td.towers) {
         const tx = td.gridLeft + (t.col + 0.5) * td.cellW;
         const ty = td.gridTop + (t.lane + 0.5) * td.cellH;
-        drawMathTower(ctx, t.kind, tx, ty, td.time, t.overclockTimer > 0, t.overheatTimer > 0, t.recoil);
+        const towerScale=Math.min(1.5,td.cellW/60,td.cellH/64);
+        ctx.save();ctx.translate(tx,ty);ctx.scale(towerScale,towerScale);
+        drawMathTower(ctx, t.kind, 0, 0, td.time, t.overclockTimer > 0, t.overheatTimer > 0, t.recoil);ctx.restore();
       }
 
       // Projectiles
@@ -815,6 +874,10 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
+        } else if (p.kind === 'beam') {
+          ctx.fillRect(px-18,py-3,36,6);ctx.fillStyle='#fff';ctx.fillRect(px-14,py-1,28,2);
+        } else if (p.kind === 'fire') {
+          ctx.beginPath();ctx.moveTo(px+15,py);ctx.lineTo(px-11,py-9);ctx.lineTo(px-5,py);ctx.lineTo(px-11,py+9);ctx.closePath();ctx.fill();ctx.stroke();
         } else {
           ctx.beginPath();
           ctx.arc(px, py, p.kind === 'prime' ? 10 : 7, 0, Math.PI * 2);
@@ -828,12 +891,19 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       for (const z of sortedZ) {
         const zx = td.gridLeft + z.x * (td.cellW * COLS);
         const zy = td.gridTop + (z.lane + 0.5) * td.cellH;
-        drawMathZombie(ctx, z.kind, zx, zy, td.time, {
+        ctx.save();ctx.translate(zx,zy);const spriteScale=Math.min(1.6,td.cellW/62,td.cellH/68);ctx.scale(spriteScale,spriteScale);
+        drawMathZombie(ctx, z.kind, 0, 0, td.time, {
           hpRatio: z.hp / z.maxHp,
           chilled: z.chillTimer > 0,
           hitFlash: z.hitFlash,
           formulaShield: z.formulaQuestion ? z.formulaQuestion.payload.formulaShield : null,
+          phase2: z.kind === 'boss' && z.hp < z.maxHp * .5,
         });
+        if (z.supreme) {
+          ctx.strokeStyle='#e6b9ff';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(0,-38,34,12,0,0,Math.PI*2);ctx.stroke();
+          ctx.fillStyle='#e9c366';ctx.beginPath();ctx.moveTo(-24,-34);ctx.lineTo(-29,-59);ctx.lineTo(-12,-48);ctx.lineTo(0,-67);ctx.lineTo(12,-48);ctx.lineTo(29,-59);ctx.lineTo(24,-34);ctx.closePath();ctx.fill();
+        }
+        ctx.restore();ctx.fillStyle=DEFENSE_ELEMENTS[ZOMBIE_DEFS[z.kind].element].color;ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillText(`${DEFENSE_ELEMENTS[ZOMBIE_DEFS[z.kind].element].icon} ${z.supreme?defenseBossProfile(true).name:ZOMBIE_DEFS[z.kind].name}`,zx,zy+td.cellH*.43);
       }
 
       // Golden Ratio Sky Lasers
@@ -993,7 +1063,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
                   style={{ transform: `scaleX(${Math.max(0, castleHp / playerStats.maxHp)})` }}
                 />
               </div>
-              <span className="text-[11px] font-black text-white font-mono-num">{castleHp}</span>
+              <span data-testid="math-castle-hp" className="text-[11px] font-black text-white font-mono-num">{castleHp}</span>
             </div>
           </div>
           <div className="hidden sm:block h-8 w-px bg-slate-700" />
@@ -1057,8 +1127,25 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           >
             <Pause className="w-5 h-5" />
           </button>
+          <button type="button" className="math-bestiary-trigger" onClick={() => setBestiaryOpen(true)}>敵人圖鑑與相剋</button>
         </div>
       </div>
+
+      {!battleStarted ? <section className="math-preparation" aria-label="首波準備區">
+        {appearance && <HeroPortrait appearance={appearance} />}
+        <div><strong>先解題、再佈陣。準備好才開戰。</strong><p>完成第一題取得齒輪，可先自由建塔。尚未開始時沒有敵人攻擊。</p></div>
+        <button type="button" onClick={openHarvestSolver}>{firstAttemptDone ? '再答一題補給' : '回答第一題'}</button>
+        <button type="button" disabled={!firstAttemptDone || Boolean(solverState) || Boolean(banner)} onClick={() => { if (firstAttemptDone && !solverState && !banner) setBattleStarted(true); }}>開始第一波</button>
+      </section> : null}
+      <div className="math-protection-state" role="status" data-testid="math-wave-state">
+        {!battleStarted ? '準備中・敵人尚未出現' : solverState || banner || bestiaryOpen ? '解題保護中・敵人與倒數已凍結' : '防線運作中'} · 場上 {enemyCount} 名敵人
+      </div>
+
+      {bestiaryOpen && <div className="math-bestiary" role="dialog" aria-modal="true" aria-label="殭屍圖鑑與屬性相剋">
+        <section><div className="math-bestiary-header"><div><h2>看懂敵人，選對武器</h2><p>遊戲相剋規則：烈焰 → 寒霜 → 雷電 → 烈焰。克制 ×1.6，逆向 ×0.7，物理 ×1。</p></div><button type="button" onClick={() => setBestiaryOpen(false)}>返回防線</button></div>
+        <div className="zombie-roster">{(Object.keys(ZOMBIE_DEFS) as ZombieKind[]).map(kind=>{const z=ZOMBIE_DEFS[kind];return <article key={kind}><span className="zombie-portrait" role="img" aria-label={z.name} style={{backgroundPosition:`${z.cell%3/2*100}% ${Math.floor(z.cell/3)*100}%`}}/><h3>{z.name}</h3><span style={{color:DEFENSE_ELEMENTS[z.element].color}}>{DEFENSE_ELEMENTS[z.element].name} · HP {z.hp}</span><p>{z.role}</p></article>;})}</div>
+        </section>
+      </div>}
 
       {/* Bottom Unified Tower Blueprint Dock (Never overlaps 5x8 grid tiles!) */}
       <div className="fixed inset-x-0 bottom-2 z-20 pointer-events-none px-4 flex items-end justify-between gap-3">
@@ -1118,7 +1205,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
             transform: 'translate(-50%, -50%)',
           }}
         >
-          <div className="relative w-56 h-56 rounded-full bg-slate-950/78 border-2 border-amber-400/80 shadow-[0_0_28px_rgba(15,23,42,0.85)] flex items-center justify-center">
+          <div className="math-build-picker">
             <button
               type="button"
               onClick={() => setRadialPicker(null)}
@@ -1128,19 +1215,13 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
               取消
             </button>
             {TOWER_SHOP.map((t, idx) => {
-              const positions = [
-                'top-1.5 left-1/2 -translate-x-1/2',
-                'right-1.5 top-1/2 -translate-y-1/2',
-                'bottom-1.5 left-1/2 -translate-x-1/2',
-                'left-1.5 top-1/2 -translate-y-1/2',
-              ];
               const affordable = gears >= t.cost;
               return (
                 <button
                   key={t.kind}
                   type="button"
                   onClick={() => placeTowerAt(radialPicker.lane, radialPicker.col, t.kind)}
-                  className={`absolute ${positions[idx]} min-w-[82px] min-h-[50px] px-2.5 py-1 rounded-2xl border-2 text-center shadow-xl transition-transform active:scale-90 ${
+                  className={`min-w-[82px] min-h-[50px] px-2.5 py-1 rounded-2xl border-2 text-center shadow-xl transition-transform active:scale-90 ${
                     affordable
                       ? `bg-slate-900 ${t.accent} text-white hover:bg-slate-800`
                       : 'bg-slate-900/85 border-slate-700 text-slate-400'
@@ -1157,7 +1238,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
 
       {/* Non-Blocking Side/Bottom Blueprint Math Solver Overlay */}
       {solverState && (
-        <div className="fixed right-3 sm:right-4 bottom-24 z-30 w-[min(94vw,420px)] rounded-3xl bg-slate-900/96 border-2 border-amber-400 p-4 shadow-2xl pointer-events-auto">
+        <div data-testid="math-question-panel" className="math-question-panel fixed right-3 sm:right-4 bottom-24 z-30 w-[min(94vw,420px)] rounded-3xl bg-slate-900/96 border-2 border-amber-400 p-4 shadow-2xl pointer-events-auto">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-xs font-black text-amber-300">
               {solverState.purpose === 'snipe'
@@ -1176,6 +1257,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           <div className="text-base sm:text-lg font-black text-white mb-3 leading-snug">
             {solverState.question.prompt}
           </div>
+          <p className="text-xs text-emerald-200 mb-3">解題保護：閱讀與作答期間，敵人不移動、不攻擊。</p>
           <div className="grid grid-cols-2 gap-2.5">
             {solverState.question.payload.options.map((opt, idx) => (
               <button

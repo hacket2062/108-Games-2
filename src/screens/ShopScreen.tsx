@@ -15,6 +15,7 @@ import { useGameState } from '../core/GameStateContext';
 import { BATTLE_ITEMS, GEM_ELEMENTS, WEAPON_CATALOG } from '../data/itemsAndGems';
 import { GUARDIAN_LIST } from '../data/spiritsAndTitles';
 import { soundEngine } from '../audio/soundEngine';
+import { BattleItemArt, WeaponArt } from '../components/EquipmentArt';
 
 interface ShopScreenProps {
   onExit: () => void;
@@ -174,6 +175,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({ onExit }) => {
                   key={w.templateId}
                   className="rounded-3xl bg-slate-900 border-2 border-slate-700 p-4 flex flex-col justify-between gap-3"
                 >
+                  <WeaponArt weapon={{...w,uid:w.templateId,enhanceLevel:0,ascensionPath:'base',socketedGems:[null,null,null]}} className="shop-item-art" />
                   <div>
                     <div className="text-xs font-black text-amber-300 uppercase">{w.rarity} · 基礎攻擊 {w.baseAttack}</div>
                     <div className="text-lg font-black text-white mt-1">{w.name}</div>
@@ -241,6 +243,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({ onExit }) => {
                       key={id}
                       className="rounded-2xl bg-slate-900 border-2 border-slate-700 p-4 flex flex-col justify-between gap-3"
                     >
+                      <BattleItemArt id={id} className="shop-item-art" />
                       <div>
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-black" style={{ color: item.color }}>
@@ -267,7 +270,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({ onExit }) => {
 
               <div className="rounded-3xl bg-slate-900 border-2 border-rose-500/40 p-4 space-y-3">
                 <div className="text-sm font-black text-rose-300">
-                  守護精靈靈果屋（餵食靈果提升羈絆等級，立即強化全隊攻防！）
+                  守護精靈靈果屋（每位夥伴每天可餵一次，累積經驗提升羈絆）
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {GUARDIAN_LIST.map((g) => (
@@ -284,7 +287,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({ onExit }) => {
                         onClick={() => setFeedback(unlockOrBondGuardian(g.id))}
                         className="min-h-[42px] rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-black text-xs"
                       >
-                        90 金幣餵食靈果 (+2 羈絆)
+                        90 金幣餵食靈果（+8 羈絆經驗）
                       </button>
                     </div>
                   ))}
@@ -301,6 +304,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({ onExit }) => {
                   key={w.templateId}
                   className="rounded-3xl bg-slate-900 border-2 border-fuchsia-400 p-5 flex flex-col justify-between gap-3"
                 >
+                  <WeaponArt weapon={{...w,uid:w.templateId,enhanceLevel:5,ascensionPath:'base',socketedGems:[null,null,null]}} className="shop-item-art" />
                   <div>
                     <div className="text-xs font-black text-fuchsia-300">
                       競技場專屬神話神兵 · 基礎攻擊 {w.baseAttack}（自帶 +5）

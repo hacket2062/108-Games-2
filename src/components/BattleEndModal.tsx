@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Star, Coins, Sparkles, RotateCcw, Home, Award, Gift, ArrowRight, BookOpen } from 'lucide-react';
 import { getLearningFeedback } from '../core/gameExperience';
+import type { RunMistake } from '../core/runReview';
 import type { WorldRunResult } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
 
@@ -13,6 +14,7 @@ interface BattleEndModalProps {
   onReviewMistakes?: () => void;
   onTryPractice?: () => void;
   wrongRecordCount?: number;
+  runMistakes?: readonly RunMistake[];
 }
 
 const SUBJECT_NAMES: Record<WorldRunResult['subject'], string> = {
@@ -31,6 +33,7 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
   onReviewMistakes,
   onTryPractice,
   wrongRecordCount = 0,
+  runMistakes = [],
 }) => {
   const [litStars, setLitStars] = useState(0);
   const [chestOpened, setChestOpened] = useState(false);
@@ -214,8 +217,15 @@ export const BattleEndModal: React.FC<BattleEndModalProps> = ({
         )}
 
         <div className="learning-next-step" role="status"><strong>守護者的小提醒</strong><p>{message}</p><p>本次作答 {result.totalAttempts} 次 · 答對 {result.correctCount} 次</p></div>
+        {runMistakes.length > 0 && <section className="run-review-preview" aria-label="本局錯題速覽">
+          <h3>這一局，帶走的新線索</h3>
+          <p>本局 {runMistakes.length} 道錯題 · 先看前 3 題，不用急著重打。</p>
+          {runMistakes.slice(0, 3).map((wrong) => <details key={wrong.questionId}>
+            <summary>{wrong.prompt}</summary><p>參考答案：{wrong.correctAnswer}</p><p>{wrong.explanation}</p>
+          </details>)}
+        </section>}
         <div className="mt-5 flex flex-col gap-2.5">
-          {onReviewMistakes && wrongRecordCount > 0 && <button type="button" className="learning-review-button" onClick={onReviewMistakes}><BookOpen size={17} /> 打開我的錯題本（{wrongRecordCount} 題）</button>}
+          {onReviewMistakes && (runMistakes.length > 0 || wrongRecordCount > 0) && <button type="button" className="learning-review-button" onClick={onReviewMistakes}><BookOpen size={17} /> {runMistakes.length > 0 ? `複習本局錯題（${runMistakes.length} 題）` : `打開我的錯題本（${wrongRecordCount} 題）`}</button>}
           {!result.victory && result.playMode !== 'practice' && onTryPractice && <button type="button" className="learning-review-button" onClick={onTryPractice}>先用練習模式熟悉這一關</button>}
           {onNextStage && (
             <button

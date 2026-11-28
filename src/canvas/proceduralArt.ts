@@ -1,5 +1,8 @@
 import type { GuardianId } from '../types/game';
 import { GUARDIANS } from '../data/guardians';
+import type { EquipmentAppearance } from '../core/equipmentAppearance';
+import type { ZombieKind } from '../core/mathDefense';
+import { drawArtCell, drawEquippedHero, drawPaintedUnit, drawUpgradeRig, drawWorldAvatar, drawZombieArt } from './spriteArt';
 
 // ============================================================================
 // Zero-GC Pooled Particle Ring Buffer & RO-Style Floating Damage Numbers
@@ -540,6 +543,7 @@ export function drawInkChibiHero(
   time: number,
   opts: {
     facing?: 1 | -1;
+    appearance?: EquipmentAppearance;
     walkPhase?: number;
     attackProgress?: number; // 0..1
     hitFlash?: number;
@@ -553,6 +557,8 @@ export function drawInkChibiHero(
   const scale = opts.scale ?? 1;
   const bob = Math.abs(Math.sin(walk * 8)) * -4 + Math.sin(time * 4.2) * 2.2;
   const legSwing = Math.sin(walk * 8) * 6;
+  if (role === 'swordsman' && opts.appearance && drawEquippedHero(ctx,x,y,time,opts.appearance,facing,scale,atk)) return;
+  if(role!=='swordsman' && drawPaintedUnit(ctx,role==='pandaHealer'?0:1,x,y+bob,time,{scale,facing,hitFlash:opts.hitFlash,label:opts.label}))return;
 
   ctx.save();
   ctx.translate(x, y);
@@ -744,6 +750,7 @@ export function drawInkMonster(
   opts: { hitFlash?: number; shielded?: boolean; hpRatio?: number; name?: string; scale?: number } = {}
 ) {
   const scale = opts.scale ?? (kind === 'boss' ? 1.45 : 1);
+  if(drawPaintedUnit(ctx,kind==='poring'?2:kind==='slime'?3:opts.name?.includes('王')?5:4,x,y,time,{scale,hitFlash:opts.hitFlash,shielded:opts.shielded,hpRatio:opts.hpRatio,label:opts.name}))return;
   const squishX = 1 + Math.sin(time * 5.2) * 0.08;
   const squishY = 1 - Math.sin(time * 5.2) * 0.08;
 
@@ -882,11 +889,14 @@ export function drawMechaShip(
   time: number,
   tilt = 0,
   shielded = false,
-  hitFlash = 0
+  hitFlash = 0,
+  appearance?: EquipmentAppearance
 ) {
+  if(drawWorldAvatar(ctx,'ship',x,y,time,appearance,tilt,shielded,hitFlash))return;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(tilt * 0.22);
+  if (appearance) drawUpgradeRig(ctx,0,0,appearance,time,1);
 
   // Thruster flames
   const flameLen = 18 + Math.sin(time * 40) * 6;
@@ -959,7 +969,7 @@ export function drawMechaShip(
   ctx.restore();
 }
 
-export type MathTowerKind = 'beaver' | 'raccoon' | 'owl' | 'hedgehog';
+export type MathTowerKind = 'beaver' | 'raccoon' | 'owl' | 'hedgehog' | 'flame' | 'prism';
 
 export function drawMathTower(
   ctx: CanvasRenderingContext2D,
@@ -972,6 +982,15 @@ export function drawMathTower(
   recoil = 0
 ) {
   const bob = Math.sin(time * 4.5) * 2.5;
+  const towerCell={beaver:6,raccoon:7,owl:8,hedgehog:9,flame:10,prism:11}[kind];
+  if(drawPaintedUnit(ctx,towerCell,x-recoil*3,y,time,{hitFlash:overheated?1:0,shielded:overclocked}))return;
+  if (kind === 'flame' || kind === 'prism') {
+    ctx.save();ctx.translate(x,y);ctx.fillStyle='#26324b';ctx.strokeStyle=kind==='flame'?'#ff9a66':'#d8b5ff';ctx.lineWidth=3;
+    drawRoundedRect(ctx,-23,0,46,26,6);ctx.fill();ctx.stroke();
+    if(kind==='flame'){ctx.fillStyle='#9c3f36';drawRoundedRect(ctx,-15,-19,44,23,6);ctx.fill();ctx.stroke();ctx.fillStyle='#ffd280';ctx.beginPath();ctx.moveTo(28,-4);ctx.lineTo(43,-11);ctx.lineTo(29,-17);ctx.closePath();ctx.fill();}
+    else{ctx.fillStyle='#8f80d8';ctx.beginPath();ctx.moveTo(0,-42+bob);ctx.lineTo(20,-15+bob);ctx.lineTo(0,7+bob);ctx.lineTo(-20,-15+bob);ctx.closePath();ctx.fill();ctx.stroke();ctx.beginPath();ctx.ellipse(0,-16,30,8,0,0,Math.PI*2);ctx.stroke();}
+    ctx.restore();return;
+  }
   ctx.save();
   ctx.translate(x, y);
 
@@ -1118,7 +1137,7 @@ export function drawMathTower(
 
 export function drawMathZombie(
   ctx: CanvasRenderingContext2D,
-  kind: 'zero' | 'bucket' | 'hopper' | 'boss',
+  kind: ZombieKind,
   x: number,
   y: number,
   time: number,
@@ -1127,6 +1146,7 @@ export function drawMathZombie(
     chilled?: boolean;
     hitFlash?: number;
     formulaShield?: string | null;
+    phase2?: boolean;
   }
 ) {
   const scale = kind === 'boss' ? 1.4 : 1;
@@ -1142,7 +1162,9 @@ export function drawMathZombie(
   ctx.ellipse(0, 22 - hop * 0.5, 18, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Body
+  const spriteDrawn = drawZombieArt(ctx, kind, opts.phase2);
+  if (!spriteDrawn) {
+  // Body fallback while the atlas loads.
   ctx.fillStyle = opts.chilled ? '#67E8F9' : kind === 'boss' ? '#4C1D95' : '#65A30D';
   ctx.strokeStyle = '#0F172A';
   ctx.lineWidth = 2.4;
@@ -1212,6 +1234,7 @@ export function drawMathZombie(
   ctx.font = '900 13px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
   ctx.fillText(kind === 'hopper' ? '½' : '0', 0, 12);
+  }
 
   if (opts.hitFlash && opts.hitFlash > 0) {
     ctx.fillStyle = `rgba(255,255,255,${Math.min(0.8, opts.hitFlash)})`;
@@ -1394,11 +1417,14 @@ export function drawChefCharacter(
   x: number,
   y: number,
   time: number,
-  cookingPulse = 0
+  cookingPulse = 0,
+  appearance?: EquipmentAppearance
 ) {
   const bob = Math.sin(time * 6) * 3 - cookingPulse * 8;
+  if(drawWorldAvatar(ctx,chef,x,y+bob,time,appearance))return;
   ctx.save();
   ctx.translate(x, y + bob);
+  if (appearance) drawUpgradeRig(ctx,0,-4,appearance,time,.9);
 
   // Chef body apron
   ctx.fillStyle = '#FFFFFF';

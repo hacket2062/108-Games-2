@@ -4,6 +4,7 @@ import type { CampaignStageConfig, PlayerSaveData } from '../types/game';
 import { getNextAdventure } from '../core/adventureGuide';
 import { effectivePlayMode } from '../core/gameExperience';
 import { WorldScene } from './WorldScene';
+import { HeroPortrait } from './EquipmentArt';
 
 export function AdventureBrief({ save, onStart }: {
   save: PlayerSaveData;
@@ -13,6 +14,7 @@ export function AdventureBrief({ save, onStart }: {
   return (
     <section className="adventure-brief" aria-labelledby="adventure-heading">
       <WorldScene subject={stage.subject} className="adventure-brief-art" />
+      <HeroPortrait className="lobby-player-portrait" appearance={{weapon:save.weapons.find(w=>w.uid===save.equippedWeaponUid) ?? save.weapons[0],equipment:save.equipment,characterJob:save.characterJob}} />
       <div className="adventure-brief-copy">
         <span className="adventure-eyebrow"><Sparkles size={14} /> 你的知識，就是超能力</span>
         <h2 id="adventure-heading">下一站，<br />讓世界亮起來。</h2>

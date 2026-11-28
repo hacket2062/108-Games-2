@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {createServer} from 'vite';
+const require=createRequire(import.meta.url);
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
+await mkdir('.verification',{recursive:true});
+await writeFile('.verification/visual-defense.html',`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module">
+import React from 'react';import {createRoot} from 'react-dom/client';
+import {MathTowerDefenseEngine} from '/src/engines/MathTowerDefenseEngine.tsx';
+import {ForgeScreen} from '/src/screens/ForgeScreen.tsx';
+import {CharacterGrowthPanel} from '/src/components/CharacterGrowthPanel.tsx';
+import {RandomMissionPanel} from '/src/components/RandomMissionPanel.tsx';
+import {AuthProvider} from '/src/auth/AuthContext.tsx';import {GameStateProvider,useGameState} from '/src/core/GameStateContext.tsx';
+import {createInitialPlayerSave} from '/src/core/playerSave.ts';import {computeSaveCombatStats} from '/src/core/combatMath.ts';import {getMathQuestions,ALL_QUESTIONS} from '/src/data/questionBank.ts';
+import '/src/index.css';
+const save=createInitialPlayerSave(); save.level=15;save.coins=10000;save.crystals=300; save.weapons=[save.weapons[0]];save.equippedWeaponUid=save.weapons[0].uid;save.weapons[0].enhanceLevel=5;save.weapons.push({...save.weapons[0],uid:'fixture-partner',templateId:'wp_star_lance',name:'星港長槍'});
+localStorage.setItem('zhiguang_108_save_v2_local_hero_01',JSON.stringify(save));
+const root=createRoot(document.getElementById('root'));window.attempts=[];window.finished=[];window.mathQuestions=getMathQuestions(4,'upper');
+window.showMath=()=>root.render(React.createElement(MathTowerDefenseEngine,{grade:4,semester:'upper',playMode:'adventure',guardianId:'qilin',playerStats:computeSaveCombatStats(createInitialPlayerSave()),appearance:{weapon:save.weapons[0],equipment:save.equipment},onAnswerResult:(q,c)=>window.attempts.push({id:q.id,c}),onFinish:r=>window.finished.push(r),onExit:()=>{},onRestart:()=>{}}));
+function Probe({kind}){const state=useGameState();window.liveSave=state.save;window.completeMissions=()=>{for(const subject of ['chinese','english','math','science'])for(let i=0;i<20;i++)state.recordAnswer(ALL_QUESTIONS.find(q=>q.subject===subject&&q.grade===4),true,3000);for(let i=0;i<2;i++)state.applyWorldResult({subject:'math',victory:true,playMode:'practice',score:10,stars:0,correctCount:1,totalAttempts:1,maxCombo:1,clearSeconds:10,coinsEarned:0,xpEarned:0,crystalsEarned:0,knowledgeTags:[],progressSummary:'fixture'});};return kind==='forge'?React.createElement(ForgeScreen,{onExit:()=>{}}):kind==='missions'?React.createElement(RandomMissionPanel):React.createElement(CharacterGrowthPanel);}
+window.showState=(kind)=>root.render(React.createElement(AuthProvider,null,React.createElement(GameStateProvider,null,React.createElement(Probe,{kind}))));
+window.ready=true;
+</script></body></html>`);
+const server=await createServer({server:{host:'127.0.0.1',port:3003,strictPort:true},logLevel:'error'});await server.listen();
+const browser=await chromium.launch({channel:'chrome',headless:true});
+const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+await context.route('**/*',r=>new URL(r.request().url()).origin==='http://127.0.0.1:3003'?r.continue():r.abort());
+const page=await context.newPage(), errors=[];page.on('pageerror',e=>errors.push(e.message));
+try{
+ await page.goto('http://127.0.0.1:3003/.verification/visual-defense.html');await page.waitForFunction(()=>window.ready);
+ await page.evaluate(()=>window.showMath());await page.getByTestId('math-wave-state').waitFor();
+ await page.clock.install();const hp=await page.getByTestId('math-castle-hp').textContent();
+ await page.clock.fastForward(20000);assert.match(await page.getByTestId('math-wave-state').textContent(),/場上 0/);assert.equal(await page.getByTestId('math-castle-hp').textContent(),hp);assert.equal(await page.getByRole('button',{name:'開始第一波',exact:true}).isDisabled(),true);
+ await page.getByRole('button',{name:'回答第一題',exact:true}).click();await page.getByTestId('math-question-panel').waitFor();await page.clock.fastForward(30000);assert.equal(await page.getByTestId('math-castle-hp').textContent(),hp);
+ const answer=await page.getByTestId('math-question-panel').evaluate(el=>{const q=window.mathQuestions.find(q=>el.textContent.includes(q.prompt));return q.payload.options[q.payload.correctIndex];});
+ await page.getByTestId('math-question-panel').getByRole('button',{name:answer,exact:true}).click();assert.equal(await page.evaluate(()=>window.attempts.length),1);
+ await page.getByRole('button',{name:'開始第一波',exact:true}).click();
+ for(let i=0;i<30 && /場上 0/.test(await page.getByTestId('math-wave-state').textContent());i++)await page.clock.runFor(500);
+ assert.doesNotMatch(await page.getByTestId('math-wave-state').textContent(),/場上 0/);
+ await page.getByRole('button',{name:/算數採能機/}).click();await page.getByTestId('math-question-panel').waitFor();await page.clock.runFor(300);const activeState=await page.getByTestId('math-wave-state').textContent(),activeHp=await page.getByTestId('math-castle-hp').textContent();
+ await page.clock.runFor(1000);await page.clock.fastForward(29000);assert.equal(await page.getByTestId('math-wave-state').textContent(),activeState);assert.equal(await page.getByTestId('math-castle-hp').textContent(),activeHp);assert.deepEqual(await page.evaluate(()=>window.finished),[]);
+ await page.screenshot({path:'.verification/math-reading-protection.png'});
+ await page.getByRole('button',{name:'稍後再解',exact:true}).click();await page.getByRole('button',{name:'敵人圖鑑與相剋',exact:true}).click();
+ assert.equal(await page.locator('.zombie-roster article').count(),6);await page.screenshot({path:'.verification/zombie-roster.png'});await page.getByRole('button',{name:'返回防線',exact:true}).click();
+ await page.evaluate(()=>window.showState('forge'));await page.getByRole('button',{name:'三路線升階',exact:true}).waitFor();
+ await page.getByRole('button',{name:'三路線升階',exact:true}).click();assert.equal(await page.locator('[data-ascension-path]').count(),3);await page.screenshot({path:'.verification/forge-evolution.png',fullPage:true});
+ await page.locator('[data-ascension-path="hero"] button').click();await page.waitForFunction(()=>window.liveSave.weapons[0].ascensionPath==='hero');
+ await page.getByRole('button',{name:'神兵融合爐',exact:true}).click();await page.getByRole('combobox').selectOption('fixture-partner');await page.getByRole('button',{name:/開始神兵融合/}).click();
+ await page.waitForFunction(()=>window.liveSave.weapons.some(w=>w.isFused));assert.equal(await page.evaluate(()=>window.liveSave.weapons.length),1);assert.ok(await page.locator('[data-weapon-family="4"]').count()>0);
+ await page.evaluate(()=>window.showState('growth'));await page.getByRole('button',{name:'進階・轉職・稱號',exact:true}).click();
+ await page.locator('[data-character-job="arcanist"] button').click();await page.waitForFunction(()=>window.liveSave.characterJob==='arcanist');await page.getByRole('button',{name:/四界精英先鋒/}).click();assert.equal(await page.evaluate(()=>window.liveSave.selectedTitle),'title_growth_15');await page.screenshot({path:'.verification/character-growth.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'.verification/character-growth-390.png',fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await page.evaluate(()=>window.showState('missions'));await page.getByRole('button',{name:'查看隨機任務',exact:true}).click();await page.waitForFunction(()=>window.liveSave.randomMissions?.missions.length===4);
+ const rolled=await page.evaluate(()=>window.liveSave.randomMissions);await page.evaluate(()=>window.completeMissions());
+ // Answer/skill, weapon and item tasks can all be completed through the real answer handler.
+ const claimButtons=page.getByRole('button',{name:'領取獎勵',exact:true});assert.ok(await claimButtons.count()>=3);
+ while(await claimButtons.count())await claimButtons.first().click();
+ assert.equal(await page.evaluate(()=>window.liveSave.unlockedSkills.length),1);assert.ok((await page.evaluate(()=>window.liveSave.randomMissions.missions.filter(m=>m.claimed).length))>=3);
+ assert.deepEqual(await page.evaluate(()=>window.liveSave.randomMissions.missions.map(m=>m.reward)),rolled.missions.map(m=>m.reward));await page.screenshot({path:'.verification/random-missions-390.png',fullPage:true});
+ assert.deepEqual(errors,[]);const report={beforeStart20SecondsSafe:true,firstQuestion30SecondsSafe:true,activeQuestion30SecondsFrozen:true,sixEnemyPortraits:true,ascensionPersists:true,fusionCreatesNewWeaponArt:true,jobAndTitlePersist:true,randomMissionRealAnswerProgressAndRewards:true,mobileNoOverflow:true,uncaughtErrors:errors};await writeFile('.verification/visual-defense-results.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+}finally{await browser.close();await server.close();}

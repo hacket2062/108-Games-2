@@ -1,4 +1,5 @@
 import { useLazyRef } from '../core/useLazyRef';
+import { drawArtCell } from '../canvas/spriteArt';
 import { useSessionScheduler } from '../core/useSessionScheduler';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Volume2, Pause, Sparkles, Rocket, Crosshair } from 'lucide-react';
@@ -86,6 +87,7 @@ interface LetterOrb {
 }
 
 export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
+  appearance,
   grade,
   semester,
   playMode,
@@ -94,12 +96,15 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   stageConfig,
   masteredQuestionIds,
   wrongQuestionIds,
+  recentQuestionIds,
   onAnswerResult,
   onFinish,
   onRestart,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const appearanceRef = useRef(appearance);
+  appearanceRef.current = appearance;
   const guardian = GUARDIANS[guardianId];
 
   const droneMgrRef = useLazyRef(() =>
@@ -111,6 +116,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       {
         masteredQuestionIds,
         wrongQuestionIds,
+        recentQuestionIds,
         focusTags: stageConfig?.focusTags,
       }
     )
@@ -119,6 +125,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
     new QuestionManager<EnglishQuestion>(getEnglishQuestions(grade, semester, 'spell'), {
       masteredQuestionIds,
       wrongQuestionIds,
+      recentQuestionIds,
       focusTags: stageConfig?.focusTags,
     })
   );
@@ -908,7 +915,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       for (const d of s.drones) {
         ctx.save();
         ctx.translate(d.x, d.y + Math.sin(d.wobble) * 5);
-
+        const illustrated=drawArtCell(ctx,'/art/allies-towers-enemies-v1.png',d.maxHp>playerStats.baseAttack*3?13:12,4,4,-70,-62,140,116);
+        if(!illustrated){
         // Drone metallic wings
         ctx.fillStyle = '#312E81';
         ctx.strokeStyle = d.shieldFlash > 0 ? '#FB923C' : '#22D3EE';
@@ -929,6 +937,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         ctx.beginPath();
         ctx.arc(0, 16, 6, 0, Math.PI * 2);
         ctx.fill();
+        }
 
         // Large glowing neon answer billboard (extra crisp & legible on mobile screens)
         const fontSize = W < 640 ? 20 : 21;
@@ -959,6 +968,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       if (s.bossMode) {
         ctx.save();
         ctx.translate(s.bossX, 128);
+        const illustratedBoss=drawArtCell(ctx,'/art/allies-towers-enemies-v1.png',stageConfig?.tier==='boss'?15:14,4,4,-145,-62,290,150);
+        if(!illustratedBoss){
         ctx.fillStyle = s.bossHitFlash > 0 ? '#FFFFFF' : '#1E1B4B';
         ctx.strokeStyle = '#EC4899';
         ctx.lineWidth = 3.5;
@@ -978,6 +989,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         ctx.beginPath();
         ctx.arc(0, -4, 20, 0, Math.PI * 2);
         ctx.fill();
+        }
         ctx.fillStyle = '#0F172A';
         ctx.font = '900 12px "Fredoka", sans-serif';
         ctx.textAlign = 'center';
@@ -1040,7 +1052,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         s.time,
         s.tilt,
         shieldTimerRef.current > 0,
-        s.shipHitFlash
+        s.shipHitFlash,
+        appearanceRef.current
       );
 
       s.particles.render(ctx);

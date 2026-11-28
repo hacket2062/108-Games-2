@@ -33,7 +33,6 @@ import {
   getEnhanceSuccessRate,
   WEAPON_CATALOG,
 } from '../data/itemsAndGems';
-import { GUARDIAN_SHOP_COSTS } from '../data/spiritsAndTitles';
 import { soundEngine } from '../audio/soundEngine';
 
 import { createInitialDailyQuests, todayKey } from './playerSave';
@@ -41,6 +40,8 @@ import { resolveWrongRecordOnce } from './saveIntegrity';
 import { usePlayerSave } from './usePlayerSave';
 import { getStageConfig } from '../data/campaignMap';
 import { recordsCampaignProgress } from './gameExperience';
+import { availableGrowthTitles, changeCharacterJob, creditBond, type CharacterJob } from './characterGrowth';
+import {claimRandomMission,createRandomMissions,type SpecialSkill} from './randomMissions';
 export { createInitialPlayerSave } from './playerSave';
 
 function extractRevengeOptions(q: AnyQuestion): string[] {
@@ -85,6 +86,9 @@ interface GameStateContextValue {
   toggleMute: () => void;
   selectGuardian: (id: GuardianId) => void;
   petGuardian: () => void;
+  changeJob: (job: CharacterJob) => void;
+  claimMission: (id:string) => void;
+  equipSpecialSkill: (id:SpecialSkill) => void;
   selectTitle: (titleId: string) => void;
   recordAnswer: (question: AnyQuestion, isCorrect: boolean, responseMs?: number) => void;
   resolveWrongRecord: (questionId: string) => void;
@@ -153,6 +157,11 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
 
   const combatStats = useMemo(() => computeSaveCombatStats(save), [save]);
+  useEffect(()=>{
+    if(ready && save.randomMissions?.day!==todayKey()) setSave(p=>p.randomMissions?.day===todayKey()?p:{...p,randomMissions:createRandomMissions(p,todayKey(),crypto.getRandomValues(new Uint32Array(1))[0])});
+  },[ready,save.randomMissions,save.lastPlayDate]);
+  const claimMission=useCallback((id:string)=>setSave(p=>claimRandomMission(p,id)),[]);
+  const equipSpecialSkill=useCallback((id:SpecialSkill)=>setSave(p=>p.unlockedSkills?.includes(id)?{...p,selectedSkill:id}:p),[]);
 
   const isRestReminderVisible =
     !restDismissed && save.dailyPlaySeconds >= save.parentSettings.dailyLimitMinutes * 60;
@@ -167,17 +176,13 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const petGuardian = useCallback(() => {
-    setSave((p) => ({
-      ...p,
-      guardianBonds: {
-        ...p.guardianBonds,
-        [p.selectedGuardian]: (p.guardianBonds[p.selectedGuardian] ?? 1) + 1,
-      },
-    }));
+    setSave((p) => creditBond(p,p.selectedGuardian,'pet',todayKey()));
   }, []);
 
+  const changeJob = useCallback((job: CharacterJob) => setSave(p=>changeCharacterJob(p,job)), []);
+
   const selectTitle = useCallback((titleId: string) => {
-    setSave((p) => (p.unlockedTitles.includes(titleId) ? { ...p, selectedTitle: titleId } : p));
+    setSave((p) => (availableGrowthTitles(p).includes(titleId) ? { ...p, selectedTitle: titleId, unlockedTitles:availableGrowthTitles(p) } : p));
   }, []);
 
   const recordAnswer = useCallback(
@@ -248,6 +253,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           wrongRecords: nextWrong,
           dailyQuests: nextQuests,
           masteredQuestionIds: Array.from(masteredSet).slice(-350),
+          recentQuestionIds: [...(prev.recentQuestionIds??[]).filter(id=>id!==question.id),question.id].slice(-120),
           knowledgeMastery: nextKnowledgeMastery,
           rapidGuessCount: (prev.rapidGuessCount ?? 0) + (isRapidGuess ? 1 : 0),
         };
@@ -773,25 +779,16 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const unlockOrBondGuardian = useCallback((guardianId: GuardianId): ActionFeedback => {
     const save = store.getSnapshot();
-    const cost = GUARDIAN_SHOP_COSTS[guardianId];
     const bondCost = 90;
+    if (save.guardianCare?.[guardianId]?.day===todayKey() && save.guardianCare[guardianId]?.fed) return {ok:false,message:'這位夥伴今天已吃過靈果；明天再來照顧牠吧！'};
     if (save.coins < bondCost) {
       return { ok: false, message: `金幣不足（餵食精靈靈果需要 ${bondCost} 金幣）。` };
     }
     soundEngine.playPetChime();
-    setSave((prev) => ({
-      ...prev,
-      coins: prev.coins - bondCost,
-      selectedGuardian: guardianId,
-      unlockedGuardians: Array.from(new Set([...prev.unlockedGuardians, guardianId])),
-      guardianBonds: {
-        ...prev.guardianBonds,
-        [guardianId]: (prev.guardianBonds[guardianId] ?? 1) + 2,
-      },
-    }));
+    setSave((prev) => creditBond({...prev,selectedGuardian:guardianId,unlockedGuardians:Array.from(new Set([...prev.unlockedGuardians,guardianId]))},guardianId,'feed',todayKey()));
     return {
       ok: true,
-      message: `餵食靈果成功！守護精靈羈絆 +2（原價 ${cost.coins} 免費覺醒）！`,
+      message: '靈果餵食成功！羈絆經驗 +8；累積足夠經驗才會升級。',
     };
   }, [save.coins]);
 
@@ -893,6 +890,9 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         toggleMute,
         selectGuardian,
         petGuardian,
+        changeJob,
+        claimMission,
+        equipSpecialSkill,
         selectTitle,
         recordAnswer,
         resolveWrongRecord,

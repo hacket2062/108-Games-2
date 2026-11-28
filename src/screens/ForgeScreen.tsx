@@ -20,6 +20,8 @@ import {
 } from '../data/itemsAndGems';
 import { computeWeaponPower } from '../core/combatMath';
 import { soundEngine } from '../audio/soundEngine';
+import { GearArt, HeroPortrait, WeaponArt } from '../components/EquipmentArt';
+import { PATH_ART } from '../core/equipmentAppearance';
 
 interface ForgeScreenProps {
   onExit: () => void;
@@ -40,7 +42,7 @@ const GEAR_SLOTS: {
 ];
 
 function getWeaponRarity(w: WeaponInstance): { label: 'R' | 'SR' | 'SSR' | 'UR'; color: string } {
-  if (w.templateId === 'fused_eternal_blade' || (w.ascensionPath !== 'base' && w.enhanceLevel >= 12)) {
+  if (w.isFused || w.templateId === 'wp_fused_aurora' || (w.ascensionPath !== 'base' && w.enhanceLevel >= 12)) {
     return { label: 'UR', color: '#F43F5E' };
   }
   if (w.ascensionPath !== 'base' || w.enhanceLevel >= 8) {
@@ -151,6 +153,7 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Left 5 cols: Weapon Showcase Aura Preview + Owned Inventory */}
           <div className="lg:col-span-5 flex flex-col gap-4">
+            <div className="forge-hero-showcase"><HeroPortrait appearance={{weapon: selectedWeapon, equipment: save.equipment}} /><div><span>穿戴預覽</span><strong>{PATH_ART[selectedWeapon.ascensionPath].name}</strong><p>切換武器與進階路線，立即查看角色、武器和護甲外觀。</p></div></div>
             {/* Live Visual Weapon Aura Pedestal */}
             <div
               className={`rounded-3xl bg-slate-900 border-2 p-5 transition-all ${
@@ -191,41 +194,7 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                 )}
               </div>
 
-              {/* Stylized SVG Ascended Blade & Aura Rings */}
-              <div className="my-4 flex items-center justify-center">
-                <svg viewBox="0 0 220 130" className="w-56 h-32" aria-label={selectedWeapon.name}>
-                  <defs>
-                    <radialGradient id="auraGrad" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stopColor={pathDef.auraPrimary} stopOpacity="0.55" />
-                      <stop offset="100%" stopColor={pathDef.auraPrimary} stopOpacity="0" />
-                    </radialGradient>
-                  </defs>
-                  <circle cx="110" cy="65" r="58" fill="url(#auraGrad)" />
-                  <ellipse
-                    cx="110"
-                    cy="65"
-                    rx="72"
-                    ry="24"
-                    fill="none"
-                    stroke={pathDef.auraPrimary}
-                    strokeWidth="2.5"
-                    strokeDasharray={selectedWeapon.ascensionPath === 'mythic' ? '8 5' : undefined}
-                  />
-                  {/* Diagonal Sword Silhouette */}
-                  <g transform="translate(110 65) rotate(-32)">
-                    <polygon
-                      points="0,-54 9,14 0,24 -9,14"
-                      fill={selectedWeapon.ascensionPath === 'base' ? '#E2E8F0' : pathDef.auraSecondary}
-                      stroke="#0F172A"
-                      strokeWidth="3"
-                    />
-                    <rect x="-18" y="14" width="36" height="8" rx="3" fill={pathDef.auraPrimary} stroke="#0F172A" strokeWidth="2.5" />
-                    <rect x="-4" y="22" width="8" height="22" rx="2" fill="#475569" stroke="#0F172A" strokeWidth="2" />
-                    <circle cx="0" cy="46" r="6" fill={pathDef.auraPrimary} stroke="#0F172A" strokeWidth="2" />
-                  </g>
-                </svg>
-              </div>
-
+              <div className="forge-weapon-stage"><WeaponArt weapon={selectedWeapon} /></div>
               <div className="text-center">
                 <div className="text-xl font-black text-white">
                   {selectedWeapon.name}{' '}
@@ -279,7 +248,9 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                           : 'bg-slate-950 hover:bg-slate-800/70 border-slate-800'
                       }`}
                     >
-                      <div>
+                      <div className="flex items-center gap-2">
+                        <WeaponArt weapon={w} className="inventory-weapon-art" />
+                        <div>
                         <div className="text-sm font-black text-white flex items-center gap-1.5">
                           <span
                             className="text-[10px] font-black px-1.5 py-0.5 rounded text-slate-950 font-mono-num"
@@ -294,6 +265,7 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                         </div>
                         <div className="text-[11px] text-slate-400">
                           {p.name} · 攻擊 {computeWeaponPower(w).attack}
+                        </div>
                         </div>
                       </div>
                       {save.equippedWeaponUid === w.uid && (
@@ -423,10 +395,12 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                   return (
                     <div
                       key={pathKey}
+                      data-ascension-path={pathKey}
                       className="rounded-3xl bg-slate-900 border-2 p-4 flex flex-col justify-between gap-3"
                       style={{ borderColor: isCurrent ? '#10B981' : def.auraPrimary }}
                     >
                       <div>
+                        <div className="ascension-art-preview"><HeroPortrait appearance={{weapon: selectedWeapon, equipment: save.equipment}} previewPath={pathKey} /><WeaponArt weapon={{...selectedWeapon, ascensionPath: pathKey}} /></div>
                         <div className="flex items-center gap-2">
                           <span
                             className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-950"
@@ -495,8 +469,10 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                     return (
                       <div
                         key={g.slot}
+                        data-gear-slot={g.slot}
                         className="rounded-2xl bg-slate-950 border-2 border-slate-800 p-3.5 flex flex-col justify-between gap-2.5"
                       >
+                        <GearArt slot={g.slot} level={lv} className="gear-slot-art" />
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <div className="text-sm font-black text-white flex items-center gap-1.5">
@@ -544,6 +520,7 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ onExit }) => {
                     <Swords className="w-5 h-5" /> 融合配方：{fusionRecipe.resultName}（基礎攻擊 {fusionRecipe.resultBaseAttack}）
                   </div>
                   <p className="text-xs text-slate-300 mt-1">{fusionRecipe.description}</p>
+                  <div className="fusion-art-preview"><WeaponArt weapon={selectedWeapon} /><span>＋</span><WeaponArt weapon={save.weapons.find(w=>w.uid===fusePartnerUid) ?? selectedWeapon} /><span>→</span><WeaponArt weapon={{...selectedWeapon,templateId:fusionRecipe.resultTemplateId,name:fusionRecipe.resultName,isFused:true}} /><p>融合後變為雙晶翼刃造型，保留繼承的覺醒路線。</p></div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

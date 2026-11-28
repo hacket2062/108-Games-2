@@ -38,6 +38,7 @@ import {
 type CookingStep = 'ingredients' | 'temperature' | 'ph' | 'serve' | 'serving';
 
 export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
+  appearance,
   grade,
   semester,
   playMode,
@@ -46,17 +47,21 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   stageConfig,
   masteredQuestionIds,
   wrongQuestionIds,
+  recentQuestionIds,
   onAnswerResult,
   onFinish,
   onRestart,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const appearanceRef = useRef(appearance);
+  appearanceRef.current = appearance;
   const guardian = GUARDIANS[guardianId];
   const dishMgrRef = useLazyRef(() =>
     new QuestionManager<ScienceQuestion>(getScienceQuestions(grade, semester), {
       masteredQuestionIds,
       wrongQuestionIds,
+      recentQuestionIds,
       focusTags: stageConfig?.focusTags,
     })
   );
@@ -637,7 +642,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       ctx.fill();
 
       // Active Q-Version Chef beside Cauldron
-      drawChefCharacter(ctx, chefRef.current, potX - 108, potY - 8, s.time, s.chefPulse);
+      drawChefCharacter(ctx, chefRef.current, potX - 108, potY - 8, s.time, s.chefPulse, appearanceRef.current);
 
       // Flying Served Element Dish Projectile!
       if (s.flyingDish) {

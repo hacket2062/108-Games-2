@@ -13,6 +13,9 @@ export interface TitleDef {
 }
 
 export const GAME_TITLES: TitleDef[] = [
+  {id:'title_growth_5',name:'初綻的冒險之星',category:'learning',unlockHint:'角色達到 Lv.5',badgeColor:'#f8d583'},
+  {id:'title_growth_15',name:'四界精英先鋒',category:'learning',unlockHint:'角色達到 Lv.15',badgeColor:'#b9a4ff'},
+  {id:'title_growth_30',name:'學園傳奇大師',category:'learning',unlockHint:'角色達到 Lv.30',badgeColor:'#ff8377'},
   {
     id: 'title_novice',
     name: '智光見習守護者',

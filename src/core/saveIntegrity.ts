@@ -54,6 +54,24 @@ export function assertPlayerSave(save: PlayerSaveData): void {
     requireValue(values.every((v) => text(v, 500)), key);
   }
   requireValue(text(save.selectedTitle, 160), 'selectedTitle');
+  requireValue(save.recentQuestionIds===undefined || Array.isArray(save.recentQuestionIds)&&save.recentQuestionIds.length<=120&&save.recentQuestionIds.every(id=>text(id,500)), 'recentQuestionIds');
+  const skills=['star_guard','flame_focus'];
+  requireValue(save.unlockedSkills===undefined || Array.isArray(save.unlockedSkills)&&save.unlockedSkills.length<=2&&save.unlockedSkills.every(id=>skills.includes(id)), 'unlockedSkills');
+  requireValue(save.selectedSkill===undefined || skills.includes(save.selectedSkill)&&Boolean(save.unlockedSkills?.includes(save.selectedSkill)), 'selectedSkill');
+  if(save.randomMissions!==undefined){
+    const board=save.randomMissions;requireValue(record(board)&&text(board.day,10)&&/^\d{4}-\d{2}-\d{2}$/.test(board.day)&&Array.isArray(board.missions)&&board.missions.length===4,'randomMissions');
+    const ids=new Set<string>();
+    for(const mission of board.missions){
+      requireValue(record(mission)&&text(mission.id,80)&&!ids.has(mission.id)&&['answered','correct','clears'].includes(mission.metric)&&[...subjects,'all'].includes(mission.subject)&&natural(mission.target,100)&&mission.target>0&&natural(mission.baseline)&&typeof mission.claimed==='boolean','randomMission');ids.add(mission.id);
+      const reward=mission.reward;requireValue(record(reward),'mission.reward');
+      requireValue(reward.kind==='skill'?skills.includes(reward.id):reward.kind==='gear'?['weapon','helm','armor','gloves','boots','amulet'].includes(reward.id):reward.kind==='item'?['wisdom_potion','combo_charm','shield_scroll','time_hourglass','forge_guard'].includes(reward.id)&&natural(reward.count,10)&&reward.count>0:reward.kind==='weapon'&&['wp_starter_pen','wp_star_lance','wp_golden_compass','wp_arena_scepter'].includes(reward.id),'mission.reward.type');
+    }
+  }
+  requireValue(save.characterJob === undefined || ['adventurer','sentinel','arcanist','ranger'].includes(save.characterJob), 'characterJob');
+  if (save.guardianCare !== undefined) {
+    requireValue(record(save.guardianCare) && Object.keys(save.guardianCare).every(k=>guardians.includes(k as typeof guardians[number])), 'guardianCare');
+    for (const care of Object.values(save.guardianCare)) requireValue(record(care) && text(care.day,10) && /^\d{4}-\d{2}-\d{2}$/.test(String(care.day)) && natural(care.points,1000000) && typeof care.petted==='boolean' && typeof care.fed==='boolean', 'guardianCare.entry');
+  }
   requireValue(record(save.guardianBonds) && guardians.every((g) => natural(save.guardianBonds[g])), 'guardianBonds');
   requireValue(record(save.equipment), 'equipment');
   for (const slot of ['weapon', 'helm', 'armor', 'gloves', 'boots', 'amulet'] as const) {

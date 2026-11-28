@@ -1,5 +1,6 @@
 import type { AnyQuestion } from '../types/game';
 import { shuffleArray } from '../data/questionBank';
+import { varyQuestionOptions } from './questionVariation';
 
 /**
  * Zero-Repeat QuestionManager
@@ -17,6 +18,7 @@ export class QuestionManager<T extends AnyQuestion> {
   private readonly wrongIdSet: Set<string>;
   private readonly masteredIdSet: Set<string>;
   private readonly focusTags: string[];
+  private readonly recentIds: Set<string>;
   private readonly usedInRun = new Set<string>();
   private queue: T[] = [];
   private lastServedId: string | null = null;
@@ -27,6 +29,7 @@ export class QuestionManager<T extends AnyQuestion> {
       wrongQuestionIds?: string[];
       masteredQuestionIds?: string[];
       focusTags?: string[];
+      recentQuestionIds?: string[];
     }
   ) {
     // Deduplicate input pool by id
@@ -39,6 +42,8 @@ export class QuestionManager<T extends AnyQuestion> {
     this.wrongIdSet = new Set(options?.wrongQuestionIds ?? []);
     this.masteredIdSet = new Set(options?.masteredQuestionIds ?? []);
     this.focusTags = options?.focusTags ?? [];
+    this.recentIds = new Set(options?.recentQuestionIds??[]);
+    this.lastServedId = options?.recentQuestionIds?.at(-1)??null;
     this.rebuildQueue(false);
   }
 
@@ -58,8 +63,10 @@ export class QuestionManager<T extends AnyQuestion> {
     const focusUnmastered: T[] = [];
     const generalUnmastered: T[] = [];
     const masteredBucket: T[] = [];
+    const recentBucket: T[] = [];
 
     for (const q of candidates) {
+      if(this.recentIds.has(q.id)){recentBucket.push(q);continue;}
       if (this.wrongIdSet.has(q.id)) {
         wrongBucket.push(q);
       } else if (!this.masteredIdSet.has(q.id)) {
@@ -75,6 +82,7 @@ export class QuestionManager<T extends AnyQuestion> {
       ...shuffleArray(focusUnmastered),
       ...shuffleArray(generalUnmastered),
       ...shuffleArray(masteredBucket),
+      ...shuffleArray(recentBucket),
     ];
 
     // Prevent back-to-back repetition across deck boundaries
@@ -124,7 +132,7 @@ export class QuestionManager<T extends AnyQuestion> {
     const [picked] = this.queue.splice(idx, 1);
     this.usedInRun.add(picked.id);
     this.lastServedId = picked.id;
-    return picked;
+    return varyQuestionOptions(picked);
   }
 
   public getRemainingFreshCount(): number {

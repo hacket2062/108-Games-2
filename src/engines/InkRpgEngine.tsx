@@ -63,6 +63,7 @@ interface MapChest {
 }
 
 export const InkRpgEngine: React.FC<EngineCommonProps> = ({
+  appearance,
   grade,
   semester,
   playMode,
@@ -71,12 +72,15 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
   stageConfig,
   masteredQuestionIds,
   wrongQuestionIds,
+  recentQuestionIds,
   onAnswerResult,
   onFinish,
   onRestart,
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const appearanceRef = useRef(appearance);
+  appearanceRef.current = appearance;
   const guardian = GUARDIANS[guardianId];
   const hpScale = stageConfig?.enemyHpScale ?? 1;
 
@@ -85,6 +89,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
     new QuestionManager<ChineseQuestion>(getChineseQuestions(grade, semester, 'slash'), {
       masteredQuestionIds,
       wrongQuestionIds,
+      recentQuestionIds,
       focusTags: stageConfig?.focusTags,
     })
   );
@@ -92,6 +97,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
     new QuestionManager<ChineseQuestion>(getChineseQuestions(grade, semester, 'radical'), {
       masteredQuestionIds,
       wrongQuestionIds,
+      recentQuestionIds,
       focusTags: stageConfig?.focusTags,
     })
   );
@@ -99,6 +105,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
     new QuestionManager<ChineseQuestion>(getChineseQuestions(grade, semester, 'typo'), {
       masteredQuestionIds,
       wrongQuestionIds,
+      recentQuestionIds,
       focusTags: stageConfig?.focusTags,
     })
   );
@@ -961,6 +968,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
           facing: w.facing,
           walkPhase: w.walkPhase,
           label: '墨劍士',
+          appearance: appearanceRef.current,
           scale: 1.0,
         });
 
@@ -1024,6 +1032,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
             attackProgress: w.heroAttackRole === 'swordsman' ? w.heroDash : 0,
             hitFlash: w.heroHitFlash,
             label: '墨劍士',
+            appearance: appearanceRef.current,
             scale: 1.28 * heroScaleMul,
           }
         );

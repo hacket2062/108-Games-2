@@ -1,10 +1,14 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ActiveScreen, CampaignStageConfig, SubjectId, WorldRunResult } from './types/game';
+import type { ActiveScreen, AnyQuestion, CampaignStageConfig, SubjectId, WorldRunResult } from './types/game';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { GameStateProvider, useGameState } from './core/GameStateContext';
 import { getStageConfig } from './data/campaignMap';
 import { canEnterStage, effectivePlayMode } from './core/gameExperience';
 import { AdventureIntro } from './components/AdventureIntro';
+import { readTutorialProgress, saveTutorialProgress, tutorialStorageKey } from './core/tutorialProgress';
+import type { TutorialProgress } from './core/tutorialProgress';
+import { createRunReview } from './core/runReview';
+import type { ReviewFocus, RunMistake } from './core/runReview';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { StageSelectScreen } from './screens/StageSelectScreen';
 import { ForgeScreen } from './screens/ForgeScreen';
@@ -69,9 +73,11 @@ function subjectToScreen(subject: SubjectId): ActiveScreen {
 }
 
 const AppShell: React.FC = () => {
+  const { user } = useAuth();
   const {
     save,
     combatStats,
+    equippedWeapon,
     isRestReminderVisible,
     dismissRestReminder,
     recordAnswer,
@@ -90,14 +96,21 @@ const AppShell: React.FC = () => {
   const [pendingResult, setPendingResult] = useState<WorldRunResult | null>(null);
   const [leveledUpBanner, setLeveledUpBanner] = useState(false);
   const [mistakesOpen, setMistakesOpen] = useState(false);
-  const [showIntro, setShowIntro] = useState(initial.screen.startsWith('world_'));
-  const seenGuides = useRef(new Set<SubjectId>());
+  const tutorialKey = tutorialStorageKey(user.provider, user.uid);
+  const [tutorialProgress, setTutorialProgress] = useState<TutorialProgress>(() => {
+    try { return readTutorialProgress(localStorage, tutorialKey); } catch { return {}; }
+  });
+  const [showIntro, setShowIntro] = useState(initial.screen.startsWith('world_') && !tutorialProgress[initial.worldSubject]);
+  const [runMistakes, setRunMistakes] = useState<RunMistake[]>([]);
+  const [reviewFocus, setReviewFocus] = useState<ReviewFocus | undefined>();
   const playMode = effectivePlayMode(save);
   const runIdentity = useMemo(() => crypto.randomUUID(), [runSeed, activeStage.stageKey]);
+  const runReview = useRef(createRunReview(runIdentity, activeStage.subject, activeStage.grade));
   const activeRun = useRef<string | null>(runIdentity);
   const settledRun = useRef<string | null>(null);
   const renderedRun = useRef(runIdentity);
   if (renderedRun.current !== runIdentity) {
+    runReview.current = createRunReview(runIdentity, activeStage.subject, activeStage.grade);
     renderedRun.current = runIdentity;
     activeRun.current = runIdentity;
   }
@@ -144,15 +157,23 @@ const AppShell: React.FC = () => {
     setSelectedSubject(stage.subject);
     setActiveStage(stage);
     setPendingResult(null);
-    setShowIntro(!seenGuides.current.has(stage.subject));
+    setRunMistakes([]);
+    setShowIntro(!tutorialProgress[stage.subject]);
     setRunSeed((n) => n + 1);
     setScreen(subjectToScreen(stage.subject));
   };
+
+  const handleAnswerResult = useCallback((question: AnyQuestion, correct: boolean, responseMs?: number) => {
+    if (activeRun.current !== runIdentity || settledRun.current === runIdentity) return;
+    if (!runReview.current.record(runIdentity, question, correct)) return;
+    recordAnswer(question, correct, responseMs);
+  }, [runIdentity, recordAnswer]);
 
   const handleFinishWorld = useCallback((result: WorldRunResult) => {
     if (activeRun.current !== runIdentity || settledRun.current === runIdentity) return;
     if (result.subject !== activeStage.subject || (result.stageKey && result.stageKey !== activeStage.stageKey)) return;
     settledRun.current = runIdentity;
+    setRunMistakes(runReview.current.finish(runIdentity) ?? []);
     const enriched: WorldRunResult = {
       ...result,
       playMode,
@@ -208,6 +229,7 @@ const AppShell: React.FC = () => {
   const masteredQuestionIds = save.masteredQuestionIds ?? [];
 
   const commonWorldProps = {
+    appearance: { weapon: equippedWeapon, equipment: save.equipment, characterJob: save.characterJob },
     grade: save.grade,
     semester: save.semester,
     playMode,
@@ -216,7 +238,8 @@ const AppShell: React.FC = () => {
     stageConfig: activeStage,
     masteredQuestionIds,
     wrongQuestionIds,
-    onAnswerResult: recordAnswer,
+    recentQuestionIds: save.recentQuestionIds,
+    onAnswerResult: handleAnswerResult,
     onFinish: handleFinishWorld,
     onRestart: handleReplayWorld,
     onExit: handleReturnStageSelect,
@@ -237,7 +260,7 @@ const AppShell: React.FC = () => {
           }}
           onOpenWorldMap={handleOpenWorldMap}
           onStartAdventure={handleStartStage}
-          onOpenMistakes={() => setMistakesOpen(true)}
+          onOpenMistakes={() => { setReviewFocus(undefined); setMistakesOpen(true); }}
         />
       )}
       {screen === 'stage_select' && (
@@ -248,9 +271,11 @@ const AppShell: React.FC = () => {
         />
       )}
       {screen.startsWith('world_') && showIntro && <AdventureIntro stage={activeStage} playMode={playMode}
-        onBack={handleReturnStageSelect} onReady={() => {
+        onBack={handleReturnStageSelect} onReady={(status) => {
           soundEngine.playClick();
-          seenGuides.current.add(activeStage.subject);
+          const next = { ...tutorialProgress, [activeStage.subject]: status };
+          setTutorialProgress(next);
+          try { saveTutorialProgress(localStorage, tutorialKey, next); } catch { /* Continue with in-memory preferences. */ }
           setShowIntro(false);
         }} />}
       {screen === 'world_chinese' && !showIntro && (
@@ -278,7 +303,11 @@ const AppShell: React.FC = () => {
         onNextStage={hasNextStage ? handleNextStage : undefined}
         onReturnLobby={handleReturnStageSelect}
         wrongRecordCount={save.wrongRecords.length}
-        onReviewMistakes={() => { handleReturnStageSelect(); setMistakesOpen(true); }}
+        runMistakes={runMistakes}
+        onReviewMistakes={() => {
+          setReviewFocus(runMistakes.length > 0 ? { subject: activeStage.subject, questionIds: runMistakes.map((wrong) => wrong.questionId) } : undefined);
+          handleReturnStageSelect(); setMistakesOpen(true);
+        }}
         onTryPractice={() => { setPlayMode('practice'); handleReplayWorld(); }}
       />
 
@@ -286,6 +315,7 @@ const AppShell: React.FC = () => {
         open={mistakesOpen}
         save={save}
         onClearMistake={resolveWrongRecord}
+        reviewFocus={reviewFocus}
         onClose={() => setMistakesOpen(false)}
       />
 
