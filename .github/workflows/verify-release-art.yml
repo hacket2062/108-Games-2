@@ -2,7 +2,7 @@ name: Verify release artwork
 on:
   workflow_dispatch:
   push:
-    branches: [codex/fix-lobby-ghost, codex/verify-lobby-ghost]
+    branches: [codex/early-grades, codex/verify-early-grades]
 permissions:
   contents: read
 jobs:
@@ -22,10 +22,7 @@ jobs:
       - name: Check types, startup and retained game logic
         run: |
           node node_modules/typescript/bin/tsc --noEmit
-          node --test scripts/procedural-startup.test.mjs
-          node node_modules/vite/bin/vite.js build --ssr src/core/campaignAndQuestions.test.ts --outDir .verification/test-campaign
-          node node_modules/vite/bin/vite.js build --ssr src/core/combatMath.test.ts --outDir .verification/test-combat
-          node --test .verification/test-campaign/campaignAndQuestions.test.js .verification/test-combat/combatMath.test.js
+          npm test
       - name: Build production site
         run: npm run build
       - name: Verify actual artwork, four worlds and retained features
