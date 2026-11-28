@@ -4,6 +4,8 @@ Checkpoint date: 2026-11-27. Resumed for Node/dependency validation and a child-
 
 ## Latest checkpoint (read this first)
 
+- **Cloudflare next stage:** `b3aaa79` / build `3407ea9a` passed clean npm install (375 installed, 382 audited, **0 vulnerabilities**) and Vite build. Preview deploy failed because Wrangler 4.169.0 needs `previews` block; added empty block. Actual first run still used bun; saved shared/production build command `npm run build` too (production branch main/deploy command unchanged; no production release). Preview-base UI displays stronger typecheck/test/build command but only actual next run logs can confirm usage. Continue until preview deploy succeeds.
+
 - **Cloudflare cause identified and repair prepared (2026-11-28):** actual dashboard log confirms `npm ci` rejects stale gRPC lock 1.9.16 vs override 1.13.6. Corrected lock with official registry metadata including ordered-map dependency, added explicit static `wrangler.jsonc`; saved preview build command as `npm run typecheck && npm test && npm run build`. Production branch/settings unchanged. See `docs/verification/2026-11-28-cloudflare-build.md`; follow the new remote build through full installation/build/preview success before closing the issue. Older "cause unknown" notes below are superseded.
 
 - **GitHub synchronized:** implementation commit `d998e723576d7f670d8eeece6bf7fe608ac90940`, local/remote tree `395ea7425f02a3d4d65d263ccc25f14c45fbed80`, exact ancestry preserved. Draft PR #1 updated. Local working tree was clean after sync.
