@@ -55,18 +55,20 @@ export interface ExplanationBannerProps {
     tag: string;
   } | null;
   onDismiss: () => void;
+  dismissLabel?: string;
 }
 
 export const ExplanationBanner: React.FC<ExplanationBannerProps> = ({
   message,
   onDismiss,
+  dismissLabel = '看懂了，繼續遊戲',
 }) => {
   if (!message) return null;
   return (
     <div
       role="status"
       aria-live="polite"
-      className="fixed top-16 left-1/2 -translate-x-1/2 z-40 w-[min(92vw,560px)] rounded-2xl bg-slate-900/95 border-2 border-amber-400/90 px-4 py-3 shadow-2xl pointer-events-auto"
+      className="fixed top-16 left-1/2 -translate-x-1/2 z-40 w-[min(92vw,560px)] max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-2xl bg-slate-900/95 border-2 border-amber-400/90 px-4 py-3 shadow-2xl pointer-events-auto"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2.5 min-w-0">
@@ -92,6 +94,9 @@ export const ExplanationBanner: React.FC<ExplanationBannerProps> = ({
           <X className="w-4 h-4" />
         </button>
       </div>
+      <button type="button" onClick={onDismiss} className="mt-3 w-full min-h-[48px] rounded-xl bg-amber-300 text-slate-950 font-black px-4 py-2">
+        {dismissLabel}
+      </button>
     </div>
   );
 };

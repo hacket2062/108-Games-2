@@ -1153,7 +1153,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
 
       {!battleStarted ? <section className="math-preparation" aria-label="首波準備區">
         {appearance && <HeroPortrait appearance={appearance} />}
-        <div><strong>先解題、再佈陣。準備好才開戰。</strong><p>完成第一題取得齒輪，可先自由建塔。尚未開始時沒有敵人攻擊。</p></div>
+        <div><strong>{firstAttemptDone ? '已完成首題！按「開始第一波」出戰。' : '先解題、再佈陣。準備好才開戰。'}</strong><p>{firstAttemptDone ? '安全佈陣中，敵人尚未入場；可先建塔，再開始防守。' : '完成第一題取得齒輪，可先自由建塔。尚未開始時沒有敵人攻擊。'}</p></div>
         <button type="button" onClick={openHarvestSolver}>{firstAttemptDone ? '再答一題補給' : '回答第一題'}</button>
         <button type="button" disabled={!firstAttemptDone || Boolean(solverState) || Boolean(banner)} onClick={() => { if (firstAttemptDone && !solverState && !banner) setBattleStarted(true); }}>開始第一波</button>
       </section> : null}
@@ -1328,7 +1328,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         </div>
       )}
 
-      <ExplanationBanner message={banner} onDismiss={() => setBanner(null)} />
+      <ExplanationBanner message={banner} dismissLabel={battleStarted ? '繼續防守' : '返回佈陣，準備開戰'} onDismiss={() => setBanner(null)} />
       <UltimateCutIn
         visible={cutIn}
         title="黃金比例・幾何軌道砲"

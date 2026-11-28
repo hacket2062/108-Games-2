@@ -215,7 +215,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 
   // Step 1: Pick scientific ingredients from Cold Storage
   const handlePickIngredient = (ing: ScienceIngredient) => {
-    if (step !== 'ingredients' || pickedIds.includes(ing.id)) return;
+    if (step !== 'ingredients' || pickedIds.includes(ing.id) || pausedRef.current || finishedRef.current) return;
     const s = simRef.current;
     const potX = s.width * 0.5;
     const potY = s.height * 0.78;
@@ -263,7 +263,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   };
 
   const handleLockTemperature = useCallback(() => {
-    if (stepRef.current !== 'temperature') return;
+    if (stepRef.current !== 'temperature' || pausedRef.current || finishedRef.current) return;
     const val = needleRef.current;
     const [minB, maxB] = getTempBounds(currentDish.payload.targetTempZone);
     const center = (minB + maxB) / 2;
@@ -296,7 +296,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 
   // Step 3: Acid / Neutral / Alkali Reagent Drop with Live Broth Color Change
   const handleDropReagent = (ph: PhType) => {
-    if (step !== 'ph') return;
+    if (step !== 'ph' || pausedRef.current || finishedRef.current) return;
     const s = simRef.current;
     const potX = s.width * 0.5;
     const potY = s.height * 0.78;
@@ -893,6 +893,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
                 {/* Moving Needle mutated via ref */}
                 <div
                   ref={needleBarRef}
+                  data-testid="cooking-temperature-needle"
                   className="absolute top-0 bottom-0 w-2.5 -ml-1 bg-slate-950 border-x border-white shadow-lg"
                   style={{ left: '50%' }}
                 />

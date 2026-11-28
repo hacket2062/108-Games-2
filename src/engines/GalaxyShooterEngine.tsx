@@ -12,6 +12,7 @@ import type {
 } from '../types/game';
 import { getEnglishQuestions, shuffleArray } from '../data/questionBank';
 import { QuestionManager } from '../core/questionManager';
+import {spreadShooterTargets,shooterLetterBounds} from '../core/shooterLayout';
 import { GUARDIANS } from '../data/guardians';
 import {
   calculateCombatDamage,
@@ -300,12 +301,13 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       ...payload.word.split(''),
       ...payload.distractorLetters.slice(0, 2),
     ]);
-    const W = Math.max(800, s.width);
+    const positions = spreadShooterTargets(s.width, allLetters.length, 120);
+    const [top, bottom] = shooterLetterBounds(s.height);
     s.letterOrbs = allLetters.map((letter, idx) => ({
       id: `orb-${idx}-${Date.now()}`,
       letter,
-      x: 120 + ((W - 240) / Math.max(1, allLetters.length - 1)) * idx,
-      y: 265 + (idx % 2) * 75,
+      x: positions[idx],
+      y: top + (idx % 2) * Math.min(75, bottom - top),
       vx: (Math.random() > 0.5 ? 1 : -1) * (35 + Math.random() * 30),
       vy: (Math.random() > 0.5 ? 1 : -1) * 18,
       r: 28,
@@ -343,8 +345,8 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       s.waveStartTime = Date.now();
       s.bossMode = false;
 
-      const W = Math.max(800, s.width);
       const count = payload.choices.length;
+      const positions = spreadShooterTargets(s.width, count);
       const indexed = shuffleArray(
         payload.choices.map((label, idx) => ({ label, isCorrect: idx === payload.correctIndex }))
       );
@@ -353,7 +355,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         id: `d-${waveNum}-${i}`,
         label: item.label,
         isCorrect: item.isCorrect,
-        x: 140 + ((W - 280) / Math.max(1, count - 1)) * i,
+        x: positions[i],
         y: -40 - i * 25,
         targetY: 175 + (i % 2) * 58,
         vx: (i % 2 === 0 ? 1 : -1) * (32 + waveNum * 8),
@@ -774,7 +776,9 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           if (!frozen) {
             d.y += (d.targetY - d.y) * Math.min(1, dt * 3.5);
             d.x += d.vx * dt;
-            if (d.x < 95 || d.x > W - 95) d.vx *= -1;
+            const edge = Math.min(95, W * .18);
+            if (d.x < edge) { d.x = edge; d.vx = Math.abs(d.vx); }
+            else if (d.x > W - edge) { d.x = W - edge; d.vx = -Math.abs(d.vx); }
             // Enemy firing in Adventure mode
             if (playMode === 'adventure') {
               d.fireCd -= dt;
@@ -801,8 +805,12 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
             if (!orb.collected && !frozen) {
               orb.x += orb.vx * dt;
               orb.y += orb.vy * dt;
-              if (orb.x < 70 || orb.x > W - 70) orb.vx *= -1;
-              if (orb.y < 210 || orb.y > H * 0.62) orb.vy *= -1;
+              const edge = Math.min(70, W * .18);
+              if (orb.x < edge) { orb.x = edge; orb.vx = Math.abs(orb.vx); }
+              else if (orb.x > W - edge) { orb.x = W - edge; orb.vx = -Math.abs(orb.vx); }
+              const [top, bottom] = shooterLetterBounds(H);
+              if (orb.y < top) { orb.y = top; orb.vy = Math.abs(orb.vy); }
+              else if (orb.y > bottom) { orb.y = bottom; orb.vy = -Math.abs(orb.vy); }
             }
           }
           if (playMode === 'adventure' && !frozen) {
