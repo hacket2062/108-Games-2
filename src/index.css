@@ -1,4 +1,50 @@
 @import "tailwindcss";
+
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+.game-layout{min-width:0}.game-controls{min-width:0}.game-stage{min-width:0}
+.explanation-panel{flex:0 0 auto;max-height:min(34dvh,230px);overflow:auto;z-index:40;background:#142039;color:#f8fafc;border-top:2px solid #e7bb56;padding:12px 16px;box-shadow:0 -6px 18px #0005}
+.explanation-content{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;max-width:1100px;margin:auto}.explanation-answer{font-size:16px;line-height:1.5;font-weight:900;color:#ffe4a1;margin:5px 0}.explanation-dismiss{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;flex-shrink:0;border:1px solid #e7bb56;border-radius:10px;background:#f5cd6c;color:#13213b;padding:8px 12px;font-size:14px;font-weight:800}
+@media(max-width:639px) and (orientation:portrait){
+ .game-hud{height:auto;min-height:46px;padding:5px 8px;gap:4px;flex-wrap:wrap;overflow:visible;white-space:normal}
+ .game-hud>div{gap:4px;min-width:0}.game-hud>div:first-child{flex:1 1 auto;flex-wrap:wrap;row-gap:2px}.game-hud>div:last-child{margin-left:auto;flex-shrink:0}
+ .game-hud button{min-height:36px}.game-hud span{max-width:100%}.game-hud>div:first-child>span:first-child{max-width:66px;flex-shrink:0}
+ .game-screen-science .game-hud>div:first-child{flex-basis:45%}.game-screen-science .game-hud>div:last-child{flex-basis:51%;justify-content:flex-end}
+ .game-stage{flex-shrink:1}
+ .game-screen-math .game-stage{height:40dvh;max-height:265px;min-height:170px}
+ .game-screen-math .game-controls{padding:8px;gap:6px;justify-content:flex-start}
+ .game-screen-math .game-controls>div{flex-shrink:0}.game-screen-math .game-controls>div.space-y-2{flex:0 0 auto;gap:6px}
+ .game-screen-math .game-controls button{min-height:44px}.game-screen-math .game-controls button div{white-space:normal}
+ .game-screen-english .game-stage{height:auto;flex:1 1 0;min-height:180px}
+ .game-screen-english .game-controls{flex:0 0 auto;padding:8px;gap:7px;overflow:visible}
+ .game-screen-english .game-controls>div:first-child{padding:8px;gap:8px}.game-screen-english .game-controls>div:first-child>div>div:first-child{font-size:14px;line-height:1.4;display:block;overflow:visible}
+ .game-screen-english .game-controls button{min-height:44px}.game-screen-english [data-testid=manual-fire-button]{min-height:48px;font-size:15px}
+ .game-screen-chinese .game-stage{height:38dvh;min-height:155px}.game-screen-chinese .game-controls{padding:8px;gap:6px}
+ .game-screen-science .game-stage{height:clamp(90px,18dvh,145px);flex-shrink:0}
+ .game-screen-science .science-workbench{padding:8px;gap:7px;overflow-y:auto}
+ .game-screen-science .science-ticket{padding:8px 10px;border-radius:12px}.game-screen-science .science-ticket h2{font-size:14px;margin:0;line-height:1.3}.game-screen-science .science-ticket small{font-size:11px}
+ .game-screen-science .science-order-requirement{margin-top:5px;font-size:16px;line-height:1.45}.game-screen-science .science-speak{min-height:44px;padding:6px 10px;font-size:13px}
+ .game-screen-science .science-next-order{display:none}.game-screen-science .science-step-list{gap:5px}.game-screen-science .science-step-list li{padding:5px 2px;min-height:28px;border-radius:9px}
+ .game-screen-science .science-active-station{padding:10px;border-radius:14px;flex:1 0 auto}.game-screen-science .science-active-station h3{font-size:16px;line-height:1.4;margin-bottom:8px}.game-screen-science .science-instruction{display:none}
+ .game-screen-science .science-ingredient-grid{gap:7px}.game-screen-science .science-ingredient-option{min-height:66px;padding:8px;gap:4px 6px;border-radius:12px}.game-screen-science .science-ingredient-option small{display:none}.game-screen-science .science-ingredient-name{font-size:15px;line-height:1.4}
+ .game-screen-science .science-workbench-footer{gap:8px}.game-screen-science .science-ultimate{min-height:44px;padding:7px 10px;font-size:12px}.game-screen-science .science-primary-action{min-height:48px;font-size:17px;padding:10px}
+ .game-screen-science .science-recipe-summary{font-size:15px;line-height:1.6;margin:10px 0 14px}
+ .game-screen-science .science-primary-action small{display:none}
+ .explanation-panel{padding:10px;max-height:35dvh}.explanation-content{display:block}.explanation-content>div{gap:6px}.explanation-content>div>svg{display:none}.explanation-dismiss{width:100%;margin-top:8px}
+}
+@media(orientation:landscape) and (max-height:480px){.game-hud{min-height:42px;height:42px}.game-controls{padding:8px;gap:6px}.explanation-panel{max-height:38dvh;padding:8px 12px}}
+@media(orientation:landscape) and (max-height:480px){
+ .game-screen-science .science-workbench{padding:6px;gap:6px}
+ .game-screen-science .science-ticket{position:relative;min-height:50px;padding:8px 60px 8px 10px;border-radius:12px}
+ .game-screen-science .science-ticket-heading{position:absolute;right:6px;top:6px}.game-screen-science .science-ticket-heading>div{display:none}
+ .game-screen-science .science-speak{min-height:36px;padding:6px 10px;font-size:12px}.game-screen-science .science-order-requirement{font-size:14px;line-height:1.4;margin:0}
+ .game-screen-science .science-next-order,.game-screen-science .science-instruction{display:none}
+ .game-screen-science .science-step-list li{padding:4px 2px;font-size:11px;min-height:26px}
+ .game-screen-science .science-active-station{padding:8px;flex:1 0 auto;border-radius:12px}.game-screen-science .science-active-station h3{font-size:16px;line-height:1.4;margin-bottom:6px}
+ .game-screen-science .science-ingredient-grid{gap:6px}.game-screen-science .science-ingredient-option{min-height:56px;padding:8px;gap:4px 6px;grid-template-columns:18px minmax(0,1fr);border-radius:10px}
+ .game-screen-science .science-ingredient-name{font-size:14px;line-height:1.4}.game-screen-science .science-ingredient-swatch{width:18px;height:18px}.game-screen-science .science-ingredient-option small{display:none}
+ .game-screen-science .science-ultimate{padding:6px 10px;font-size:12px;min-height:40px}.game-screen-science .science-workbench-footer{font-size:11px;gap:6px}
+ .game-screen-science .science-primary-action{min-height:44px;padding:8px;font-size:16px}.game-screen-science .science-primary-action small{display:none}.game-screen-science .science-recipe-summary{font-size:14px;margin:8px 0 12px}
+}
 .science-workbench{display:flex;flex-direction:column;min-height:0;height:100%;background:#101a2d;color:#f4f7fc;overflow-y:auto;overscroll-behavior:contain;padding:16px;gap:14px}
 .science-ticket{padding:16px;border:1px solid #e6b760;border-radius:18px;background:#fff5dc;color:#17233b;flex-shrink:0}
 .science-ticket-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.science-ticket small{font-size:12px;color:#805715;font-weight:700}.science-ticket h2{font-size:22px;line-height:1.35;font-weight:900;margin:3px 0}

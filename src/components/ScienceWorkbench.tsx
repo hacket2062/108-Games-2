@@ -9,7 +9,7 @@ interface Props {
 }
 const STEPS:[Step,string][]=[['ingredients','選食材'],['temperature','控火候'],['ph','調酸鹼'],['serve','出餐']];
 export function ScienceWorkbench(p:Props){
- const early=p.dish.grade<=2; const visibleSteps=early?STEPS.filter(([id])=>id==='ingredients'||id==='serve'):STEPS; const index=visibleSteps.findIndex(([id])=>id===p.step);
+ const early=p.dish.grade<=2; const visibleSteps=early?([['ingredients','選答案'],['serve','確認']] as [Step,string][]):STEPS; const index=visibleSteps.findIndex(([id])=>id===p.step);
  return <section className="science-workbench" data-testid="science-workbench" data-step={p.step}>
   <header className="science-ticket" data-testid="science-order-queue">
    <div className="science-ticket-heading"><div><small>{p.dish.knowledgeTag}</small><h2>{p.dish.payload.dishName}</h2></div>
@@ -20,13 +20,13 @@ export function ScienceWorkbench(p:Props){
   <ol className="science-step-list" aria-label="料理步驟" style={{gridTemplateColumns:early?'repeat(2,minmax(0,1fr))':undefined}}>{visibleSteps.map(([id,label],i)=><li key={id} aria-current={id===p.step?'step':undefined} data-complete={i<index}><span>{i<index?'✓':i+1}</span>{label}</li>)}</ol>
   <div className="science-active-station">
    {p.step==='ingredients'&&<section aria-labelledby="science-ingredient-heading">
-    <h3 id="science-ingredient-heading">{early?'生活觀察：選出答案':'挑選食材'} <span>{p.pickedIds.length}／{p.dish.payload.neededCount}</span></h3>
-    <p className="science-instruction">閱讀完整選項，選出符合訂單的 {p.dish.payload.neededCount} 項。</p>
+    <h3 id="science-ingredient-heading">{early?'請選出答案':'挑選食材'} <span>{p.pickedIds.length}／{p.dish.payload.neededCount}</span></h3>
+    <p className="science-instruction">{early?'讀一讀題目，選出正確答案。':<>選出符合訂單的 {p.dish.payload.neededCount} 項。</>}</p>
     <div className="science-ingredient-grid">{p.dish.payload.ingredients.map(ing=>{
      const picked=p.pickedIds.includes(ing.id);
      return <button key={ing.id} type="button" className="science-ingredient-option" data-testid="science-ingredient-option" aria-pressed={picked} disabled={p.paused||picked} onClick={()=>p.onPick(ing)}>
       <span className="science-ingredient-swatch" style={{backgroundColor:ing.color}} aria-hidden="true">{picked?'✓':''}</span>
-      <strong className="science-ingredient-name">{ing.name}</strong><small>{picked?'已投入 · '+ing.categoryTag:'選擇這個答案'}</small>
+      <strong className="science-ingredient-name">{ing.name}</strong><small>{picked?(early?'已選擇':'已投入')+' · '+ing.categoryTag:'選擇這個答案'}</small>
      </button>;
     })}</div>
    </section>}
@@ -43,7 +43,7 @@ export function ScienceWorkbench(p:Props){
    </section>}
    {p.step==='serve'&&<section aria-labelledby="science-serve-heading">
     <h3 id="science-serve-heading">{early?'觀察完成，準備確認答案！':'料理完成，準備出餐！'}</h3>
-    <ul className="science-recipe-summary"><li>食材：{p.dish.payload.ingredients.filter(i=>p.pickedIds.includes(i.id)).map(i=>i.name).join('、')}</li>{!early&&<><li>火候：{p.dish.payload.targetTempLabel}（{p.tempResult}）</li><li>酸鹼：{p.dish.payload.targetPhLabel}</li></>}</ul>
+    <ul className="science-recipe-summary"><li>{early?'答案':'食材'}：{p.dish.payload.ingredients.filter(i=>p.pickedIds.includes(i.id)).map(i=>i.name).join('、')}</li>{!early&&<><li>火候：{p.dish.payload.targetTempLabel}（{p.tempResult}）</li><li>酸鹼：{p.dish.payload.targetPhLabel}</li></>}</ul>
     <button type="button" className="science-primary-action" disabled={p.paused||p.serving} onClick={p.onServe}>{p.serving?'料理送出中…':early?'確認答案！':'搖鈴出餐！'}</button>
    </section>}
   </div>

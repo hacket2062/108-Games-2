@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import {lawnUnitLayout} from '../core/renderLayout';
 import { Pause, Sparkles, Cog, Zap, Volume2, Crosshair } from 'lucide-react';
 import {
   EngineCommonProps,
@@ -264,9 +265,9 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
   });
 
   useEffect(() => {
-    pausedRef.current = paused;
-    document.body.dataset.state = paused ? 'paused' : 'playing';
-  }, [paused]);
+    pausedRef.current = paused || Boolean(banner) || relicModalOpen;
+    document.body.dataset.state = paused ? 'paused' : banner ? 'reading' : relicModalOpen ? 'choosing' : 'playing';
+  }, [paused,banner,relicModalOpen]);
 
   useEffect(() => {
     selectedTowerRef.current = selectedTower;
@@ -585,6 +586,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       const availH = Math.max(150, rect.height - td.gridTop - 14);
       td.cellW = availW / COLS;
       td.cellH = availH / LANES;
+      Object.assign(canvas.dataset,{gridLeft:String(td.gridLeft),gridTop:String(td.gridTop),cellWidth:String(td.cellW),cellHeight:String(td.cellH)});
     };
     resize();
     const ro = new ResizeObserver(resize);
@@ -720,7 +722,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
               t.cooldown = 5.5;
               gearsRef.current += 25;
               setGears(gearsRef.current);
-              td.floats.spawn(tx, ty - 24, '+25 齒輪', 'perfect');
+              td.floats.spawn(tx, ty - td.cellH*.3, '⚙ +25', 'perfect');
               td.particles.burst(tx, ty - 10, 6, ['#FACC15', '#FEF08A'], 30, 90, 4);
             } else {
               const laneHasZombie = td.zombies.some((z) => z.lane === t.lane && z.x > t.col / COLS);
@@ -1032,7 +1034,10 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       for (const t of td.towers) {
         const tx = td.gridLeft + (t.col + 0.5) * td.cellW;
         const ty = td.gridTop + (t.lane + 0.5) * td.cellH;
-        drawMathTower(ctx, t.kind, tx, ty, td.time, t.overclockTimer > 0, t.overheatTimer > 0, t.recoil);
+        const unit=lawnUnitLayout(td.cellW,td.cellH);
+        ctx.save();ctx.translate(tx,ty+unit.yOffset);ctx.scale(unit.scale,unit.scale);
+        drawMathTower(ctx, t.kind, 0, 0, td.time, t.overclockTimer > 0, t.overheatTimer > 0, t.recoil);
+        ctx.restore();
       }
 
       // Projectiles
@@ -1063,7 +1068,9 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       for (const z of sortedZ) {
         const zx = td.gridLeft + z.x * (td.cellW * COLS);
         const zy = td.gridTop + (z.lane + 0.5) * td.cellH;
-        drawMathZombie(ctx, z.kind, zx, zy, td.time, {
+        const unit=lawnUnitLayout(td.cellW,td.cellH,z.kind==='fusion'?1.55:z.kind==='boss'?1.48:1);
+        ctx.save();ctx.translate(zx,zy+unit.yOffset);ctx.scale(unit.scale,unit.scale);
+        drawMathZombie(ctx, z.kind, 0, 0, td.time, {
           chapter: stageConfig?.chapterIndex,
           supreme: stageConfig?.stageNumber===10,
           hpRatio: z.hp / z.maxHp,
@@ -1072,8 +1079,16 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
           jumpOffset: z.jumpTimer > 0 ? Math.sin(z.jumpTimer * Math.PI) * 34 : 0,
           chilled: z.chillTimer > 0,
           hitFlash: z.hitFlash,
-          formulaShield: z.formulaQuestion ? z.formulaQuestion.payload.formulaShield : null,
+          formulaShield: null,
         });
+        ctx.restore();
+        if(z.formulaQuestion&&sortedZ.find(other=>other.lane===z.lane&&other.formulaQuestion)===z){
+          const label=z.formulaQuestion.payload.formulaShield;
+          ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+          const labelW=Math.min(104,Math.max(46,ctx.measureText(label).width+12));
+          const lx=Math.max(td.gridLeft+labelW/2,Math.min(td.width-labelW/2-4,zx)),ly=Math.max(12,zy-td.cellH*.46);
+          ctx.fillStyle='#0b1934';ctx.fillRect(lx-labelW/2,ly-9,labelW,18);ctx.fillStyle='#ffe39b';ctx.fillText(label,lx,ly,labelW-8);
+        }
       }
 
       // Parabolic Flying Detached Iron Buckets!
@@ -1124,7 +1139,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       }
 
       td.particles.render(ctx);
-      td.floats.render(ctx);
+      td.floats.render(ctx,Math.min(1,td.cellW/75));
 
       if (td.feel.flashAlpha > 0.01) {
         ctx.fillStyle = td.feel.flashColor;
@@ -1206,7 +1221,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       if (!z.formulaQuestion) continue;
       const zx = td.gridLeft + z.x * (td.cellW * COLS);
       const zy = td.gridTop + (z.lane + 0.5) * td.cellH;
-      if (Math.abs(cx - zx) < 56 && Math.abs(cy - (zy - 22)) < 62) {
+      if (Math.abs(cx - zx) < td.cellW*.5 && Math.abs(cy - zy) < td.cellH*.5) {
         soundEngine.playClick();
         soundEngine.hapticPulse(16);
         setRadialPicker(null);
@@ -1262,11 +1277,11 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
 
   return (
     <div
-      className="w-screen h-[100dvh] flex flex-col overflow-hidden bg-slate-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      className="game-screen game-screen-math w-screen h-[100dvh] flex flex-col overflow-hidden bg-slate-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       data-testid="math-td-engine"
     >
       {/* Tier 1: Single-Row Compact HUD (h-12 shrink-0, zero overlap!) */}
-      <header className="h-12 shrink-0 px-2.5 bg-slate-900/95 border-b border-blue-500/35 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
+      <header className="game-hud h-12 shrink-0 px-2.5 bg-slate-900/95 border-b border-blue-500/35 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-black text-sky-300 truncate max-w-[115px] sm:max-w-none">
             {stageConfig
@@ -1308,9 +1323,9 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
       </header>
 
       {/* Main Split: Portrait Top Canvas / Bottom Dock | Landscape 54% Left Canvas / 46% Right Dock */}
-      <div className="flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden">
+      <div className="game-layout flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden" inert={Boolean(banner)}>
         {/* Tier 2: Pure Unobstructed 5x8 Lawn Canvas */}
-        <div className="relative h-[42dvh] shrink-0 landscape:h-full landscape:w-[54%] bg-slate-950 border-b landscape:border-b-0 landscape:border-r border-blue-500/25 overflow-hidden">
+        <div className="game-stage relative h-[42dvh] shrink-0 landscape:h-full landscape:w-[54%] bg-slate-950 border-b landscape:border-b-0 landscape:border-r border-blue-500/25 overflow-hidden">
           <canvas
             ref={canvasRef}
             onClick={handleGridClick}
@@ -1329,34 +1344,28 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
               data-testid="math-td-radial-wheel"
               className="absolute z-30 pointer-events-auto"
               style={{
-                left: Math.max(96, Math.min((canvasRef.current?.clientWidth ?? 360) - 96, radialPicker.x)),
-                top: Math.max(96, Math.min((canvasRef.current?.clientHeight ?? 260) - 96, radialPicker.y)),
+                left: Math.max(122, Math.min((canvasRef.current?.clientWidth ?? 360) - 122, radialPicker.x)),
+                top: Math.max(78, Math.min((canvasRef.current?.clientHeight ?? 260) - 78, radialPicker.y)),
                 transform: 'translate(-50%, -50%)',
               }}
             >
-              <div className="relative w-44 h-44 rounded-full bg-slate-950/88 border-2 border-amber-400/80 shadow-2xl flex items-center justify-center">
+              <div className="grid w-[236px] grid-cols-2 gap-1.5 rounded-2xl bg-slate-950 border-2 border-amber-400/80 shadow-2xl p-2">
                 <button
                   type="button"
                   onClick={() => setRadialPicker(null)}
                   aria-label="取消建塔"
-                  className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-500 text-slate-200 font-black text-[11px]"
+                  className="col-span-2 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-500 text-slate-200 font-black text-[11px]"
                 >
                   取消
                 </button>
-                {TOWER_SHOP.map((t, idx) => {
-                  const positions = [
-                    'top-1 left-1/2 -translate-x-1/2',
-                    'right-1 top-1/2 -translate-y-1/2',
-                    'bottom-1 left-1/2 -translate-x-1/2',
-                    'left-1 top-1/2 -translate-y-1/2',
-                  ];
+                {TOWER_SHOP.map((t) => {
                   const affordable = gears >= t.cost;
                   return (
                     <button
                       key={t.kind}
                       type="button"
                       onClick={() => placeTowerAt(radialPicker.lane, radialPicker.col, t.kind)}
-                      className={`absolute ${positions[idx]} min-w-[68px] px-2 py-1 rounded-xl border text-center shadow-lg transition-transform active:scale-90 ${
+                      className={`min-h-[44px] px-2 py-1 rounded-xl border text-center shadow-lg transition-transform active:scale-90 ${
                         affordable
                           ? `bg-slate-900 ${t.accent} text-white hover:bg-slate-800`
                           : 'bg-slate-900/85 border-slate-700 text-slate-400'
@@ -1373,7 +1382,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         </div>
 
         {/* Tier 3: Independent Controls + Inline Math Blueprint Solver (NEVER blocks the 5x8 lawn!) */}
-        <div className="flex-1 min-h-0 landscape:w-[46%] overflow-y-auto p-2.5 bg-slate-900/95 flex flex-col justify-between gap-2">
+        <div className="game-controls flex-1 min-h-0 landscape:w-[46%] overflow-y-auto p-2.5 bg-slate-900/95 flex flex-col justify-between gap-2">
           {/* Primary Math Power Triggers */}
           <div className="grid grid-cols-3 gap-1.5 shrink-0">
             <button
@@ -1411,7 +1420,7 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
 
           {/* Inline Math Solver OR Tower Blueprint + Tactical Items */}
           {solverState ? (
-            <div className="rounded-2xl bg-slate-950/95 border-2 border-amber-400 p-3 space-y-2 flex-1 flex flex-col justify-center">
+            <div data-testid="math-td-inline-solver" className="rounded-2xl bg-slate-950/95 border-2 border-amber-400 p-3 space-y-2 flex-1 flex flex-col justify-center">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-black text-amber-300 truncate">
                   {solverState.purpose === 'snipe'
