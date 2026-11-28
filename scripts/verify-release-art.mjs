@@ -24,12 +24,18 @@ for(const file of files){
 const browser=await chromium.launch({headless:true});
 const reports=[];
 try{
- for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
+ for(const viewport of [{width:1894,height:823},{width:1440,height:1000},{width:390,height:844},{width:844,height:390}]){
   const context=await browser.newContext({viewport,reducedMotion:'reduce'});
   await context.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());
   await context.addInitScript(()=>{
    localStorage.setItem('release-save-sentinel','keep-this');
    window.__artDraws=[];
+   window.__lobbyBackgroundEllipses=0;
+   const ellipse=CanvasRenderingContext2D.prototype.ellipse;
+   CanvasRenderingContext2D.prototype.ellipse=function(...args){
+    if(this.canvas.getAttribute('data-testid')==='lobby-canvas')window.__lobbyBackgroundEllipses++;
+    return ellipse.apply(this,args);
+   };
    const draw=CanvasRenderingContext2D.prototype.drawImage;
    CanvasRenderingContext2D.prototype.drawImage=function(image,...args){
     if(image instanceof HTMLImageElement && image.src.includes('/art/')&&!window.__artDraws.includes(image.src))window.__artDraws.push(image.src);
@@ -44,6 +50,12 @@ try{
   await page.getByRole('button',{name:'查看角色與武器',exact:true}).waitFor();
   await page.evaluate(async()=>{for(const url of ['/art/hero-motion-v1.png','/art/equipment-atlas-v1.png']){const image=new Image();image.src=url;await image.decode();}});
   assert.match(await page.locator('.hero-portrait-sprite').first().evaluate(e=>getComputedStyle(e).backgroundImage),/hero-motion-v1/);
+  assert.equal(await page.evaluate(()=>window.__lobbyBackgroundEllipses),0,'No old guardian or pedestal may render behind the hero card');
+  assert.equal(await page.locator('.release-character-card .hero-portrait').count(),1,'One hero showcase only');
+  assert.equal(await page.getByTestId('guardian-mini').count(),1,'Guardian renders in its own interaction area');
+  const heroBox=await page.locator('.release-character-card').boundingBox(),guardianBox=await page.getByTestId('guardian-mini').boundingBox();
+  assert.ok(heroBox&&guardianBox);
+  assert.ok(heroBox.x+heroBox.width<=guardianBox.x || guardianBox.x+guardianBox.width<=heroBox.x || heroBox.y+heroBox.height<=guardianBox.y || guardianBox.y+guardianBox.height<=heroBox.y,'Hero and guardian areas must not overlap');
   await page.screenshot({path:out+'/lobby-'+viewport.width+'.png',fullPage:true});
   for(let i=0;i<3;i++){await page.reload({waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();}
   await page.getByRole('button',{name:'查看角色與武器',exact:true}).click();
@@ -74,7 +86,7 @@ try{
   assert.deepEqual(after.heroProgression,before.heroProgression,'existing class progression preserved');
   assert.equal(await page.evaluate(()=>localStorage.getItem('release-save-sentinel')),'keep-this');
   assert.deepEqual(errors,[]);
-  reports.push({viewport,newLobbyArt:true,newForgeArt:true,reloads:3,trialTowerPreserved:true,bestiaryPreserved:true,worlds,inventoryAndClassPreserved:true,errors});
+  reports.push({viewport,newLobbyArt:true,newForgeArt:true,noBackgroundGuardianOrPedestal:true,singleHeroShowcase:true,reloads:3,trialTowerPreserved:true,bestiaryPreserved:true,worlds,inventoryAndClassPreserved:true,errors});
   await context.close();
  }
  await writeFile(out+'/results.json',JSON.stringify({origin,assets:assetEvidence,reports},null,2));
