@@ -41,6 +41,7 @@ import { gamepadManager } from '../core/gamepadManager';
 type CookingStep = 'ingredients' | 'temperature' | 'ph' | 'serve';
 
 export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
+  appearance,
   grade,
   semester,
   playMode,
@@ -56,6 +57,8 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const appearanceRef = useRef(appearance);
+  appearanceRef.current = appearance;
   const guardian = GUARDIANS[guardianId];
   const dishMgrRef = useRef(
     new QuestionManager<ScienceQuestion>(getScienceQuestions(grade, semester), {
@@ -681,12 +684,12 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 
       // Hero Class Aura + 1P..4P Co-op Anime Chefs beside Cauldron
       drawHeroClassAura(ctx, potX - 108, potY - 8, s.time, playerStats.heroClassBranch, playerStats.heroTier);
-      drawChefCharacter(ctx, chefRef.current, potX - 108, potY - 8, s.time, s.chefPulse);
+      drawChefCharacter(ctx, chefRef.current, potX - 108, potY - 8, s.time, s.chefPulse, null, appearanceRef.current);
       if (playerCount >= 2) {
-        drawChefCharacter(ctx, 'penguin', potX + 106, potY - 8, s.time + 0.7, s.chefPulse * 0.7);
+        drawChefCharacter(ctx, 'penguin', potX + 106, potY - 8, s.time + 0.7, s.chefPulse * 0.7, null, appearanceRef.current);
       }
       if (playerCount >= 3) {
-        drawChefCharacter(ctx, 'mantis', potX - 165, potY + 2, s.time + 1.4, s.chefPulse * 0.6);
+        drawChefCharacter(ctx, 'mantis', potX - 165, potY + 2, s.time + 1.4, s.chefPulse * 0.6, null, appearanceRef.current);
       }
       if (playerCount >= 4) {
         drawChefCharacter(ctx, 'fox', potX + 165, potY + 2, s.time + 2.1, s.chefPulse * 0.6);

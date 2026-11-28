@@ -15,6 +15,7 @@ import { useGameState } from '../core/GameStateContext';
 import { BATTLE_ITEMS, GEM_ELEMENTS, WEAPON_CATALOG } from '../data/itemsAndGems';
 import { GUARDIAN_LIST } from '../data/spiritsAndTitles';
 import { soundEngine } from '../audio/soundEngine';
+import {BattleItemArt,WeaponArt} from '../components/EquipmentArt';
 
 interface ShopScreenProps {
   onExit: () => void;
@@ -175,6 +176,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({ onExit }) => {
                   className="rounded-3xl bg-slate-900 border-2 border-slate-700 p-4 flex flex-col justify-between gap-3"
                 >
                   <div>
+                    <WeaponArt weapon={{...w,uid:w.templateId,enhanceLevel:0,ascensionPath:'base',socketedGems:[null,null,null]}} className="shop-item-art"/>
                     <div className="text-xs font-black text-amber-300 uppercase">{w.rarity} · 基礎攻擊 {w.baseAttack}</div>
                     <div className="text-lg font-black text-white mt-1">{w.name}</div>
                     <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">{w.description}</p>
@@ -242,6 +244,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({ onExit }) => {
                       className="rounded-2xl bg-slate-900 border-2 border-slate-700 p-4 flex flex-col justify-between gap-3"
                     >
                       <div>
+                        <BattleItemArt id={id} className="shop-item-art"/>
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-black" style={{ color: item.color }}>
                             {item.shortTag}

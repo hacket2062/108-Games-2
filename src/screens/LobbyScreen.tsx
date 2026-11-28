@@ -50,6 +50,7 @@ import { getWorldTotalStars } from '../data/campaignMap';
 import { gamepadManager, useGamepadStatus } from '../core/gamepadManager';
 import { ClassAdvancementModal } from '../components/ClassAdvancementModal';
 import { HERO_CLASSES } from '../data/heroProgression';
+import {HeroPortrait} from '../components/EquipmentArt';
 
 interface LobbyScreenProps {
   onNavigate: (screen: ActiveScreen) => void;
@@ -547,6 +548,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     <div
       className="relative w-full h-full overflow-hidden bg-slate-950 flex flex-col"
       data-testid="lobby-hub"
+      data-art-version="motion-v1"
       data-orientation={isLandscape ? 'landscape' : 'portrait'}
     >
       {/* Full-bleed Live Starry & Rune Backdrop Canvas */}
@@ -776,7 +778,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               </div>
 
               {/* Open transparent window revealing the animated 60FPS Guardian Spirit on the background canvas */}
-              <div className="flex-1 min-h-[28px] pointer-events-none" />
+              <button type="button" className="release-character-card" aria-label="查看角色與武器" onClick={()=>onNavigate('forge')}><HeroPortrait appearance={{weapon:equippedWeapon,equipment:save.equipment,heroClassBranch:combatStats.heroClassBranch}}/><span><strong>{currentHeroClass.name}</strong><small>{equippedWeapon.name} +{equippedWeapon.enhanceLevel}</small></span></button>
 
               {/* Compact 1P-4P + Switch Gamepad Bar */}
               <div className={`flex items-center justify-between gap-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 px-1.5 py-1 ${isCompactLandscape ? 'mb-1' : 'mb-1.5 max-w-sm'}`}>
@@ -1144,6 +1146,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               </span>
             </div>
 
+            <button type="button" className="release-character-card" aria-label="查看角色與武器" onClick={()=>onNavigate('forge')}><HeroPortrait appearance={{weapon:equippedWeapon,equipment:save.equipment,heroClassBranch:combatStats.heroClassBranch}}/><span><strong>{currentHeroClass.name}</strong><small>{equippedWeapon.name} +{equippedWeapon.enhanceLevel}</small></span></button>
             {/* Compact Horizontal Guardian Card (~100px tall) */}
             <div className="rounded-2xl bg-slate-900/92 backdrop-blur-sm border-2 border-amber-400/75 p-2 shadow-xl flex items-center gap-2.5">
               <GuardianMiniCanvas

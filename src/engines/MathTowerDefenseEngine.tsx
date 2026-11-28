@@ -1064,6 +1064,8 @@ export const MathTowerDefenseEngine: React.FC<EngineCommonProps> = ({
         const zx = td.gridLeft + z.x * (td.cellW * COLS);
         const zy = td.gridTop + (z.lane + 0.5) * td.cellH;
         drawMathZombie(ctx, z.kind, zx, zy, td.time, {
+          chapter: stageConfig?.chapterIndex,
+          supreme: stageConfig?.stageNumber===10,
           hpRatio: z.hp / z.maxHp,
           armorRatio: z.maxArmor > 0 ? z.armor / z.maxArmor : 0,
           hasBucket: z.hasBucket,
