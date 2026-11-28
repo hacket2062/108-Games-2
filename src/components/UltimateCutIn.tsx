@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect,useRef} from 'react';
 import { Play, RotateCcw, Home, Lightbulb, X } from 'lucide-react';
 
 export interface UltimateCutInProps {
@@ -59,20 +59,29 @@ export const ExplanationBanner: React.FC<ExplanationBannerProps> = ({
   message,
   onDismiss,
 }) => {
+  const closeRef=useRef<HTMLButtonElement>(null);
+  useEffect(()=>{
+    if(!message)return;
+    const previous=document.activeElement as HTMLElement|null;
+    closeRef.current?.focus({preventScroll:true});
+    return()=>{if(previous?.isConnected)previous.focus({preventScroll:true});};
+  },[message]);
   if (!message) return null;
   return (
     <div
       role="status"
       aria-live="polite"
-      className="fixed top-16 left-1/2 -translate-x-1/2 z-40 w-[min(92vw,560px)] rounded-2xl bg-slate-900/95 border-2 border-amber-400/90 px-4 py-3 shadow-2xl pointer-events-auto"
+      className="explanation-panel"
+      data-testid="answer-explanation"
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="explanation-content">
         <div className="flex items-start gap-2.5 min-w-0">
           <Lightbulb className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
           <div className="min-w-0">
             <div className="text-sm font-black text-amber-300">
-              {message.title} · 正解：{message.answer}
+              {message.title}
             </div>
+            <p className="explanation-answer">正確答案：{message.answer}</p>
             <p className="text-xs sm:text-sm text-slate-100 mt-0.5 leading-snug">
               {message.explanation}
             </p>
@@ -82,12 +91,13 @@ export const ExplanationBanner: React.FC<ExplanationBannerProps> = ({
           </div>
         </div>
         <button
+          ref={closeRef}
           type="button"
           onClick={onDismiss}
           aria-label="關閉解析提示"
-          className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 shrink-0"
+          className="explanation-dismiss"
         >
-          <X className="w-4 h-4" />
+          看懂了，繼續 <X className="w-4 h-4" />
         </button>
       </div>
     </div>

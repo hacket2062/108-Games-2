@@ -1,3 +1,4 @@
+import {kitchenSceneScale} from '../core/renderLayout';
 import {ScienceWorkbench} from '../components/ScienceWorkbench';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Bell, Flame, Pause, Sparkles, Volume2, FlaskConical, CheckCircle2 } from 'lucide-react';
@@ -164,9 +165,9 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   });
 
   useEffect(() => {
-    pausedRef.current = paused;
-    document.body.dataset.state = paused ? 'paused' : 'playing';
-  }, [paused]);
+    pausedRef.current = paused || Boolean(banner) || relicModalOpen;
+    document.body.dataset.state = paused ? 'paused' : banner ? 'reading' : relicModalOpen ? 'choosing' : 'playing';
+  }, [paused,banner,relicModalOpen]);
 
   useEffect(() => {
     chefRef.current = chef;
@@ -644,61 +645,27 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
         ctx.fillRect(x, H * 0.52, tileW, 24);
       }
 
-      // Banquet Dining Counter for Dark Glutton Boss
-      ctx.fillStyle = '#92400E';
-      ctx.strokeStyle = '#451A03';
-      ctx.lineWidth = 3;
-      drawRoundedRect(ctx, W * 0.16, H * 0.44, W * 0.68, 28, 10);
-      ctx.fill();
-      ctx.stroke();
-
-      // Dark Glutton Boss behind banquet table
-      drawDarkGluttonBoss(
-        ctx,
-        W * 0.5,
-        H * 0.36,
-        s.time,
-        bossHpRef.current / bossMaxHp,
-        s.bossHitFlash,
-        s.bossMood
-      );
-
-      // Glowing Magic Element Cauldron in foreground center
-      const potX = W * 0.5;
-      const potY = H * 0.77;
-      ctx.fillStyle = '#1E293B';
-      ctx.strokeStyle = '#0F172A';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.ellipse(potX, potY, 64, 34, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // Broth surface (reacts to Acid/Neutral/Alkali color!)
-      ctx.fillStyle = s.potColor;
-      ctx.beginPath();
-      ctx.ellipse(potX, potY - 12, 54, 16, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Highlight bubbles
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.beginPath();
-      ctx.arc(potX - 18, potY - 13 + Math.sin(s.time * 6) * 2, 6, 0, Math.PI * 2);
-      ctx.arc(potX + 14, potY - 10 + Math.cos(s.time * 5) * 2, 4.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Hero Class Aura + 1P..4P Co-op Anime Chefs beside Cauldron
-      drawHeroClassAura(ctx, potX - 108, potY - 8, s.time, playerStats.heroClassBranch, playerStats.heroTier);
-      drawChefCharacter(ctx, chefRef.current, potX - 108, potY - 8, s.time, s.chefPulse, null, appearanceRef.current);
-      if (playerCount >= 2) {
-        drawChefCharacter(ctx, 'penguin', potX + 106, potY - 8, s.time + 0.7, s.chefPulse * 0.7, null, appearanceRef.current);
-      }
-      if (playerCount >= 3) {
-        drawChefCharacter(ctx, 'mantis', potX - 165, potY + 2, s.time + 1.4, s.chefPulse * 0.6, null, appearanceRef.current);
-      }
-      if (playerCount >= 4) {
-        drawChefCharacter(ctx, 'fox', potX + 165, potY + 2, s.time + 2.1, s.chefPulse * 0.6);
-      }
+      // Short phone stages use a horizontal composition with uniform actor scales.
+      const compact=H<260;
+      const bossScale=compact?Math.min(.65,(H-12)/190,W/440):kitchenSceneScale(W,H);
+      const bossX=W*(compact?.73:.5),bossY=H*(compact?.53:.36);
+      ctx.fillStyle='#92400E';ctx.strokeStyle='#451A03';ctx.lineWidth=2;
+      drawRoundedRect(ctx,W*(compact?.53:.16),H*(compact?.82:.44),W*(compact?.40:.68),compact?10:28,6);ctx.fill();ctx.stroke();
+      ctx.save();ctx.translate(bossX,bossY);ctx.scale(bossScale,bossScale);
+      drawDarkGluttonBoss(ctx,0,0,s.time,bossHpRef.current/bossMaxHp,s.bossHitFlash,s.bossMood);ctx.restore();
+      const potX=W*(compact?.37:.5),potY=H*.77;
+      const propScale=compact?Math.min(.65,(H-12)/150):Math.min(1,W/440,H/430);
+      ctx.save();ctx.translate(potX,potY);ctx.scale(propScale,propScale);
+      ctx.fillStyle='#1E293B';ctx.strokeStyle='#0F172A';ctx.lineWidth=3.5;
+      ctx.beginPath();ctx.ellipse(0,0,64,34,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+      ctx.fillStyle=s.potColor;ctx.beginPath();ctx.ellipse(0,-12,54,16,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.45)';ctx.beginPath();ctx.arc(-18,-13+Math.sin(s.time*6)*2,6,0,Math.PI*2);ctx.arc(14,-10+Math.cos(s.time*5)*2,4.5,0,Math.PI*2);ctx.fill();
+      drawHeroClassAura(ctx,-108,-8,s.time,playerStats.heroClassBranch,playerStats.heroTier);
+      drawChefCharacter(ctx,chefRef.current,-108,-8,s.time,s.chefPulse,null,appearanceRef.current);
+      if(playerCount>=2)drawChefCharacter(ctx,'penguin',106,-8,s.time+.7,s.chefPulse*.7,null,appearanceRef.current);
+      if(playerCount>=3)drawChefCharacter(ctx,'mantis',-165,2,s.time+1.4,s.chefPulse*.6,null,appearanceRef.current);
+      if(playerCount>=4)drawChefCharacter(ctx,'fox',165,2,s.time+2.1,s.chefPulse*.6);
+      ctx.restore();
 
       // Dragon Lord Charge-Up Warning Aura (< 8s left in adventure)
       if (playMode === 'adventure' && orderTimeRef.current <= 8 && freezeRef.current <= 0) {
@@ -707,7 +674,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
         ctx.strokeStyle = `rgba(239, 68, 68, ${0.4 + warnPulse * 0.5})`;
         ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.arc(W * 0.5, H * 0.36, 62 + warnPulse * 10, 0, Math.PI * 2);
+        ctx.arc(bossX,bossY,(62 + warnPulse * 10)*bossScale, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
@@ -716,8 +683,8 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       if (s.bossFireBreath > 0.02) {
         ctx.save();
         const alpha = Math.min(1, s.bossFireBreath * 1.4);
-        const mawX = W * 0.5;
-        const mawY = H * 0.4;
+        const mawX = bossX;
+        const mawY = bossY+15*bossScale;
         const flameGrad = ctx.createLinearGradient(mawX, mawY, potX, potY + 18);
         flameGrad.addColorStop(0, `rgba(254, 240, 138, ${alpha})`);
         flameGrad.addColorStop(0.45, `rgba(249, 115, 22, ${alpha * 0.9})`);
@@ -736,8 +703,8 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       // Elemental Dish Explosion VFX on Dragon Lord (Fire Tornado / Absolute Zero / Prism Wave)
       if (s.dishExplosion) {
         const p = s.dishExplosion.progress;
-        const ex = W * 0.5;
-        const ey = H * 0.35;
+        const ex = bossX;
+        const ey = bossY;
         const fade = Math.max(0, 1 - p);
         ctx.save();
         ctx.globalAlpha = fade;
@@ -777,7 +744,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       // Flying Served Element Dish Projectile!
       if (s.flyingDish) {
         const t = s.flyingDish.progress;
-        const fx = potX;
+        const fx = potX+(bossX-potX)*t;
         const fy = potY - 24 - (potY - H * 0.36) * t - Math.sin(t * Math.PI) * 55;
         ctx.save();
         ctx.translate(fx, fy);
@@ -871,11 +838,11 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 
   return (
     <div
-      className="w-screen h-[100dvh] flex flex-col overflow-hidden bg-orange-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      className="game-screen game-screen-science w-screen h-[100dvh] flex flex-col overflow-hidden bg-orange-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       data-testid="science-cooking-engine"
     >
       {/* Tier 1: Single-Row Compact Kitchen HUD (h-12 shrink-0, zero overlap!) */}
-      <header className="h-12 shrink-0 px-2.5 bg-slate-950/95 border-b border-orange-500/45 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
+      <header className="game-hud h-12 shrink-0 px-2.5 bg-slate-950/95 border-b border-orange-500/45 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-black text-orange-300 truncate max-w-[115px] sm:max-w-none">
             {stageConfig
@@ -944,9 +911,9 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       </header>
 
       {/* Main Split: Portrait Top Canvas / Bottom Workbench | Landscape 54% Left Canvas / 46% Right Workbench */}
-      <div className="flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden">
+      <div className="game-layout flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden" inert={Boolean(banner)}>
         {/* Tier 2: Pure Unobstructed Dragon Lord & Cauldron Canvas */}
-        <div className="relative h-[30dvh] shrink-0 landscape:h-full landscape:w-[45%] border-b landscape:border-b-0 landscape:border-r border-orange-500/35 overflow-hidden">
+        <div className="game-stage relative h-[30dvh] shrink-0 landscape:h-full landscape:w-[45%] border-b landscape:border-b-0 landscape:border-r border-orange-500/35 overflow-hidden">
           <canvas
             ref={canvasRef}
             className="block w-full h-full"
@@ -959,7 +926,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
           )}
         </div>
 
-        <div className="flex-1 min-h-0 landscape:w-[55%] flex flex-col overflow-hidden">
+        <div className="game-controls flex-1 min-h-0 landscape:w-[55%] flex flex-col overflow-hidden">
           <ScienceWorkbench dish={currentDish} nextDish={nextDish} step={step} pickedIds={pickedIds} tempResult={tempResult} selectedPh={selectedPh} needleRef={needleBarRef} tMin={tMin} tMax={tMax} ultCharge={ultCharge} paused={paused||Boolean(banner)||relicModalOpen} serving={servingRef.current} onPick={handlePickIngredient} onLock={handleLockTemperature} onPh={handleDropReagent} onServe={handleRingServeBell} onUltimate={triggerElementFeastUltimate}/>
         </div>
       </div>

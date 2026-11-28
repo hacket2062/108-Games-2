@@ -408,9 +408,9 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
   }, [phase]);
 
   useEffect(() => {
-    pausedRef.current = paused;
-    document.body.dataset.state = paused ? 'paused' : 'playing';
-  }, [paused]);
+    pausedRef.current = paused || Boolean(banner) || relicModalOpen;
+    document.body.dataset.state = paused ? 'paused' : banner ? 'reading' : relicModalOpen ? 'choosing' : 'playing';
+  }, [paused,banner,relicModalOpen]);
 
   useEffect(() => {
     activeSkillRef.current = activeSkill;
@@ -1686,11 +1686,11 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
 
   return (
     <div
-      className="w-screen h-[100dvh] flex flex-col overflow-hidden bg-emerald-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      className="game-screen game-screen-chinese w-screen h-[100dvh] flex flex-col overflow-hidden bg-emerald-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       data-testid="ink-rpg-engine"
     >
       {/* Tier 1: Single-Row Compact HUD (h-12 shrink-0, zero overlap!) */}
-      <header className="h-12 shrink-0 px-2.5 bg-slate-900/95 border-b border-amber-400/35 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
+      <header className="game-hud h-12 shrink-0 px-2.5 bg-slate-900/95 border-b border-amber-400/35 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-black text-amber-300 truncate max-w-[110px] sm:max-w-none">
             {stageConfig
@@ -1732,9 +1732,9 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       </header>
 
       {/* Main Split: Portrait Top Canvas / Bottom Dock | Landscape 54% Left Canvas / 46% Right Dock */}
-      <div className="flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden">
+      <div className="game-layout flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden" inert={Boolean(banner)}>
         {/* Tier 2: Pure Unobstructed Ink RPG Canvas Stage */}
-        <div className="relative h-[44dvh] shrink-0 landscape:h-full landscape:w-[54%] bg-emerald-950 border-b landscape:border-b-0 landscape:border-r border-amber-400/25 overflow-hidden">
+        <div className="game-stage relative h-[44dvh] shrink-0 landscape:h-full landscape:w-[54%] bg-emerald-950 border-b landscape:border-b-0 landscape:border-r border-amber-400/25 overflow-hidden">
           <canvas
             ref={canvasRef}
             onClick={handleCanvasClick}
@@ -1749,7 +1749,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         </div>
 
         {/* Tier 3: Independent Explore Joystick OR Battle ATB Skills & 3-Mode Chinese Answer Dock */}
-        <div className="flex-1 min-h-0 landscape:w-[46%] overflow-y-auto p-2.5 sm:p-3 bg-slate-900/95 flex flex-col justify-between gap-2">
+        <div className="game-controls flex-1 min-h-0 landscape:w-[46%] overflow-y-auto p-2.5 sm:p-3 bg-slate-900/95 flex flex-col justify-between gap-2">
           {/* Explore Phase Controls */}
           {phase === 'explore' && (
             <div className="flex-1 flex flex-col justify-between gap-3">
