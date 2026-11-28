@@ -4,6 +4,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { GameStateProvider, useGameState } from './core/GameStateContext';
 import { getStageConfig } from './data/campaignMap';
 import { LobbyScreen } from './screens/LobbyScreen';
+import { SubjectHubScreen } from './screens/SubjectHubScreen';
 import { StageSelectScreen } from './screens/StageSelectScreen';
 import { ForgeScreen } from './screens/ForgeScreen';
 import { SocketingScreen } from './screens/SocketingScreen';
@@ -19,6 +20,7 @@ import { PvPArenaEngine } from './engines/PvPArenaEngine';
 import { BattleEndModal } from './components/BattleEndModal';
 import { MistakeNotebookModal } from './components/MistakeNotebookModal';
 import { soundEngine } from './audio/soundEngine';
+import { computeSubjectCombatStats } from './core/combatMath';
 
 function resolveInitialNav(): {
   screen: ActiveScreen;
@@ -38,6 +40,7 @@ function resolveInitialNav(): {
   const chapterNum: 1 | 2 | 3 = rawCh === 2 ? 2 : rawCh === 3 ? 3 : 1;
 
   const screenParam = params.get('screen');
+  if (screenParam === 'subject_hub') return { screen: 'subject_hub', worldSubject, stageNum, chapterNum };
   if (screenParam === 'stage_select') return { screen: 'stage_select', worldSubject, stageNum, chapterNum };
   if (screenParam === 'forge') return { screen: 'forge', worldSubject, stageNum, chapterNum };
   if (screenParam === 'socketing') return { screen: 'socketing', worldSubject, stageNum, chapterNum };
@@ -95,7 +98,7 @@ const AppShell: React.FC = () => {
 
   // Keep activeStage synchronized with grade changes when on menus
   useEffect(() => {
-    if (screen === 'lobby' || screen === 'stage_select') {
+    if (screen === 'lobby' || screen === 'subject_hub' || screen === 'stage_select') {
       setActiveStage((prev) =>
         getStageConfig(selectedSubject, save.grade, prev.chapterIndex, prev.stageNumber)
       );
@@ -115,6 +118,12 @@ const AppShell: React.FC = () => {
         : 'menu';
   }, [screen, pendingResult]);
 
+  const handleOpenSubjectHub = (subject: SubjectId) => {
+    setSelectedSubject(subject);
+    setActiveStage(getStageConfig(subject, save.grade, 1, 1));
+    setScreen('subject_hub');
+  };
+
   const handleOpenWorldMap = (subject: SubjectId) => {
     setSelectedSubject(subject);
     setActiveStage(getStageConfig(subject, save.grade, 1, 1));
@@ -122,8 +131,17 @@ const AppShell: React.FC = () => {
   };
 
   const handleStartStage = (stage: CampaignStageConfig) => {
+    // Prioritize parent-assigned Today Practice Queue tags for this subject
+    const queuedTags = (save.todayPracticeQueue ?? [])
+      .filter((item) => !item.completed && item.subject === stage.subject)
+      .map((item) => item.knowledgeTag);
+    const enrichedStage: CampaignStageConfig =
+      queuedTags.length > 0
+        ? { ...stage, focusTags: Array.from(new Set([...queuedTags, ...stage.focusTags])) }
+        : stage;
+
     setSelectedSubject(stage.subject);
-    setActiveStage(stage);
+    setActiveStage(enrichedStage);
     setPendingResult(null);
     setRunSeed((n) => n + 1);
     setScreen(subjectToScreen(stage.subject));
@@ -179,6 +197,7 @@ const AppShell: React.FC = () => {
   const effectivePlayMode = save.parentSettings.forcePracticeMode ? 'practice' : save.playMode;
   const wrongQuestionIds = save.wrongRecords.map((w) => w.questionId);
   const masteredQuestionIds = save.masteredQuestionIds ?? [];
+  const activeSubjectStats = computeSubjectCombatStats(save, activeStage.subject);
 
   const commonWorldProps = {
     appearance: {weapon: equippedWeapon, equipment: save.equipment, heroClassBranch: combatStats.heroClassBranch},
@@ -186,7 +205,7 @@ const AppShell: React.FC = () => {
     semester: save.semester,
     playMode: effectivePlayMode,
     guardianId: save.selectedGuardian,
-    playerStats: combatStats,
+    playerStats: activeSubjectStats,
     playerCount: save.playerCount ?? 1,
     stageConfig: activeStage,
     masteredQuestionIds,
@@ -206,14 +225,23 @@ const AppShell: React.FC = () => {
       {screen === 'lobby' && (
         <LobbyScreen
           onNavigate={setScreen}
-          onOpenWorldMap={handleOpenWorldMap}
+          onOpenWorldMap={handleOpenSubjectHub}
           onOpenMistakes={() => setMistakesOpen(true)}
+        />
+      )}
+      {screen === 'subject_hub' && (
+        <SubjectHubScreen
+          subject={selectedSubject}
+          onChangeSubject={(subj) => setSelectedSubject(subj)}
+          onEnterStageMap={handleOpenWorldMap}
+          onExit={handleReturnLobby}
         />
       )}
       {screen === 'stage_select' && (
         <StageSelectScreen
           subject={selectedSubject}
           onStartStage={handleStartStage}
+          onOpenHub={() => setScreen('subject_hub')}
           onExit={handleReturnLobby}
         />
       )}

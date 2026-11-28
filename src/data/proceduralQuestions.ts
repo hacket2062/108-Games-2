@@ -7,7 +7,6 @@ import {
   ScienceQuestion,
   SemesterId,
 } from '../types/game';
-import {generateEarlyMath} from './questions/earlyGrades';
 
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -91,7 +90,6 @@ export function generateProceduralMathQuestions(
   stageNumber = 1,
   count = 16
 ): MathQuestion[] {
-  if (grade <= 2) return generateEarlyMath(grade as 1|2, semester, stageNumber, count);
   const diff = stageToDifficulty(stageNumber);
   const out: MathQuestion[] = [];
   const usedFormulas = new Set<string>();
@@ -111,7 +109,121 @@ export function generateProceduralMathQuestions(
 
     const pattern = (i + randInt(0, 5)) % 5;
 
-    if (grade === 3) {
+    if (grade === 1) {
+      if (pattern === 0) {
+        const a = diff === 1 ? randInt(3, 12) : randInt(10, 35);
+        const b = diff === 1 ? randInt(2, 9) : randInt(5, 25);
+        const ans = a + b;
+        formulaShield = `${a} + ${b} = ?`;
+        prompt = `加法練習：${a} + ${b} = ?`;
+        answer = String(ans);
+        explanation = `把 ${a} 和 ${b} 合起來，一共有 ${ans}。`;
+        hint = '可以先湊成 10，再把剩下的加上去！';
+        knowledgeTag = '100以內加法';
+        optPack = buildNumericOptions(ans, '', 3);
+      } else if (pattern === 1) {
+        const a = diff === 1 ? randInt(10, 20) : randInt(25, 68);
+        const b = randInt(3, Math.min(a - 1, diff === 1 ? 9 : 22));
+        const ans = a - b;
+        formulaShield = `${a} - ${b} = ?`;
+        prompt = `減法練習：${a} - ${b} = ?`;
+        answer = String(ans);
+        explanation = `從 ${a} 拿走 ${b}，還剩下 ${ans}。`;
+        hint = '先算個位，不夠減時向十位借 10。';
+        knowledgeTag = '100以內減法';
+        optPack = buildNumericOptions(ans, '', 3);
+      } else if (pattern === 2) {
+        const tens = randInt(2, 8);
+        const ones = randInt(1, 9);
+        const ans = tens * 10 + ones;
+        formulaShield = `${tens}個十和${ones}個一`;
+        prompt = `${tens} 個十和 ${ones} 個一合起來是多少？`;
+        answer = String(ans);
+        explanation = `${tens} 個十是 ${tens * 10}，加上 ${ones} 個一是 ${ans}。`;
+        hint = '十位放前面，個位放後面！';
+        knowledgeTag = '認識兩位數';
+        optPack = buildNumericOptions(ans, '', 10);
+      } else if (pattern === 3) {
+        qType = 'geometry';
+        const hour = randInt(1, 12);
+        const nextHour = hour === 12 ? 1 : hour + 1;
+        formulaShield = `${hour}點過1小時`;
+        prompt = `時鐘現在指在 ${hour} 點鐘，再過 1 小時是幾點鐘？`;
+        answer = `${nextHour}點`;
+        explanation = `${hour} 點往後走 1 小時是 ${nextHour} 點鐘。`;
+        hint = '看時鐘短針順時針往下走一格！';
+        knowledgeTag = '認識時鐘整點';
+        optPack = buildNumericOptions(nextHour, '點', 2);
+      } else {
+        const coins = randInt(3, 9);
+        const ans = coins * 5;
+        formulaShield = `${coins}個5元=?元`;
+        prompt = `存錢筒裡有 ${coins} 個 5 元硬幣，一共是多少元？`;
+        answer = `${ans}元`;
+        explanation = `五個五個數 ${coins} 次：5 × ${coins} = ${ans} 元。`;
+        hint = '用 5、10、15、20 的方式數數看！';
+        knowledgeTag = '錢幣數數';
+        optPack = buildNumericOptions(ans, '元', 5);
+      }
+    } else if (grade === 2) {
+      if (pattern === 0) {
+        const a = randInt(2, 9);
+        const b = randInt(2, 9);
+        const ans = a * b;
+        formulaShield = `${a} × ${b} = ?`;
+        prompt = `九九乘法挑戰：${a} × ${b} = ?`;
+        answer = String(ans);
+        explanation = `背誦乘法口訣：${a} × ${b} = ${ans}。`;
+        hint = `把 ${a} 連加 ${b} 次想想看！`;
+        knowledgeTag = '九九乘法';
+        optPack = buildNumericOptions(ans, '', a);
+      } else if (pattern === 1) {
+        const a = randInt(28, 76);
+        const b = randInt(15, 58);
+        const ans = a + b;
+        formulaShield = `${a} + ${b} = ?`;
+        prompt = `二位數進位加法：${a} + ${b} = ?`;
+        answer = String(ans);
+        explanation = `個位相加滿 10 進 1 到十位：${a} + ${b} = ${ans}。`;
+        hint = '個位先加，滿 10 記得進位到十位喔！';
+        knowledgeTag = '二位數加減';
+        optPack = buildNumericOptions(ans, '', 8);
+      } else if (pattern === 2) {
+        const a = randInt(42, 95);
+        const b = randInt(14, a - 10);
+        const ans = a - b;
+        formulaShield = `${a} - ${b} = ?`;
+        prompt = `二位數退位減法：${a} - ${b} = ?`;
+        answer = String(ans);
+        explanation = `直式退位計算：${a} - ${b} = ${ans}。`;
+        hint = '個位不夠減就向十位借 1 個十來減。';
+        knowledgeTag = '二位數加減';
+        optPack = buildNumericOptions(ans, '', 6);
+      } else if (pattern === 3) {
+        qType = 'geometry';
+        const m = randInt(1, 5);
+        const cm = randInt(10, 80);
+        const total = m * 100 + cm;
+        formulaShield = `${m}公尺${cm}公分`;
+        prompt = `一條彩帶長 ${m} 公尺 ${cm} 公分，合起來是多少公分？`;
+        answer = `${total}公分`;
+        explanation = `1 公尺 = 100 公分，所以 ${m} 公尺 ${cm} 公分 = ${total} 公分。`;
+        hint = '記住 1 公尺等於 100 公分！';
+        knowledgeTag = '長度單位';
+        optPack = buildNumericOptions(total, '公分', 20);
+      } else {
+        qType = 'geometry';
+        const sides = [3, 4, 5, 6][randInt(0, 3)];
+        const names: Record<number, string> = { 3: '三角形', 4: '長方形', 5: '五邊形', 6: '六邊形' };
+        formulaShield = `${names[sides]}有幾條邊`;
+        prompt = `幾何圖形小測驗：一個「${names[sides]}」共有幾條邊？`;
+        answer = `${sides}條`;
+        explanation = `${names[sides]}由 ${sides} 條直邊圍成。`;
+        hint = '從圖形名稱就可以看出邊的數量喔！';
+        knowledgeTag = '平面圖形與邊角';
+        optPack = buildNumericOptions(sides, '條', 1);
+      }
+    } else if (grade === 3) {
       if (pattern === 0) {
         const a = diff === 1 ? randInt(120, 450) : randInt(280, 760);
         const b = diff === 1 ? randInt(80, 320) : randInt(150, 490);
@@ -424,6 +536,20 @@ interface RawChineseSlash {
 }
 
 const EXTRA_CHINESE_SLASH: RawChineseSlash[] = [
+  // Grade 1
+  { grade: 1, semester: 'upper', diff: 1, prompt: '「一（ ）大樹」括號裡最適合填入哪個量詞？', options: ['棵', '隻', '本', '條'], correctIndex: 0, tag: '基礎量詞', explanation: '形容樹木常用量詞「棵」，例如一棵大樹。' },
+  { grade: 1, semester: 'upper', diff: 1, prompt: '下列哪個字和「太陽」有關，是「日部」？', options: ['明', '江', '林', '花'], correctIndex: 0, tag: '部首辨識', explanation: '「明」由日和月組成，與光明太陽有關。' },
+  { grade: 1, semester: 'upper', diff: 1, prompt: '「早上」的反義詞是哪一個？', options: ['晚上', '明天', '昨天', '中午'], correctIndex: 0, tag: '反義詞', explanation: '「早上」對應的反義詞是「晚上」。' },
+  { grade: 1, semester: 'lower', diff: 1, prompt: '「一（ ）小鳥在天空飛」應該填哪個量詞？', options: ['隻', '張', '把', '朵'], correctIndex: 0, tag: '基礎量詞', explanation: '形容小動物常用量詞「隻」。' },
+  { grade: 1, semester: 'lower', diff: 1, prompt: '下列哪個字和「樹木」有關，是「木部」？', options: ['林', '河', '草', '星'], correctIndex: 0, tag: '部首辨識', explanation: '兩個木合起來成「林」，表示很多樹木。' },
+  { grade: 1, semester: 'lower', diff: 2, prompt: '「太陽公公對我們笑咪咪」把太陽當作人來寫，感覺很親切。這句話主要寫什麼天氣？', options: ['晴天出太陽', '下大雨打雷', '颳大颱風', '下大雪'], correctIndex: 0, tag: '句子理解', explanation: '太陽笑咪咪形容陽光溫暖的晴朗好天氣。' },
+  // Grade 2
+  { grade: 2, semester: 'upper', diff: 1, prompt: '「高高興興」和下列哪個詞語意思最相近？', options: ['開開心心', '傷傷心心', '安安靜靜', '慢吞吞'], correctIndex: 0, tag: '近義詞', explanation: '「高高興興」與「開開心心」都形容非常快樂。' },
+  { grade: 2, semester: 'upper', diff: 1, prompt: '請問句子結束時要使用哪一種標點符號？', options: ['句號（。）', '問號（？）', '頓號（、）', '冒號（：）'], correctIndex: 0, tag: '標點符號', explanation: '一般陳述句說完一個完整意思時使用句號「。」。' },
+  { grade: 2, semester: 'upper', diff: 2, prompt: '「請、清、晴」三個字都帶有「青」，哪一個跟「天氣」有關？', options: ['晴', '清', '請', '情'], correctIndex: 0, tag: '形近字辨析', explanation: '「晴」是日部，代表太陽出來、天氣晴朗。' },
+  { grade: 2, semester: 'lower', diff: 1, prompt: '「一心一意」用來形容做事的態度是怎樣的？', options: ['非常專心一致', '常常分心忘記', '動作非常慢', '喜歡到處玩'], correctIndex: 0, tag: '成語典故', explanation: '一心一意形容心思專注、毫不分心。' },
+  { grade: 2, semester: 'lower', diff: 2, prompt: '「白雲像棉花糖一樣軟綿綿的」用了哪一種修辭法？', options: ['譬喻法', '設問法', '誇飾法', '排比法'], correctIndex: 0, tag: '譬喻修辭', explanation: '用「像」把白雲比喻成棉花糖，屬於譬喻法。' },
+  { grade: 2, semester: 'lower', diff: 2, prompt: '「小花在風裡跳舞」把小花寫得像人一樣，這是什麼修辭？', options: ['擬人法', '對偶法', '引用法', '倒反法'], correctIndex: 0, tag: '修辭辨析', explanation: '賦予小花人類「跳舞」的動作，是擬人法。' },
   // Grade 3
   { grade: 3, semester: 'upper', diff: 1, prompt: '「畫蛇添足」這個成語用來比喻什麼行為？', options: ['多此一舉反把事弄糟', '畫畫非常有天分', '動作快如閃電', '非常珍惜時間'], correctIndex: 0, tag: '成語典故', explanation: '畫蛇添足比喻做了多餘的事，反而弄巧成拙。' },
   { grade: 3, semester: 'upper', diff: 1, prompt: '下列哪個字是「水部（氵）」且與液體流動有關？', options: ['江', '紅', '林', '晴'], correctIndex: 0, tag: '部首辨識', explanation: '「江」從水部（氵），指大河川。' },
@@ -463,6 +589,10 @@ interface RawChineseRadical {
 }
 
 const EXTRA_CHINESE_RADICALS: RawChineseRadical[] = [
+  { grade: 1, semester: 'upper', diff: 1, partA: '日', partB: '月', targetChar: '明', meaning: '太陽月亮一起亮起來', pool: ['日', '月', '木', '水', '口', '火'] },
+  { grade: 1, semester: 'lower', diff: 1, partA: '木', partB: '木', targetChar: '林', meaning: '很多樹木聚成樹林', pool: ['木', '木', '日', '水', '土', '石'] },
+  { grade: 2, semester: 'upper', diff: 1, partA: '女', partB: '子', targetChar: '好', meaning: '美好良善（會意字）', pool: ['女', '子', '口', '日', '木', '心'] },
+  { grade: 2, semester: 'lower', diff: 1, partA: '日', partB: '青', targetChar: '晴', meaning: '天氣晴朗（形聲字）', pool: ['日', '青', '氵', '言', '心', '木'] },
   { grade: 3, semester: 'upper', diff: 1, partA: '女', partB: '子', targetChar: '好', meaning: '美好、良善（會意字）', pool: ['女', '子', '口', '木', '日', '水'] },
   { grade: 3, semester: 'upper', diff: 1, partA: '日', partB: '月', targetChar: '明', meaning: '光明、明亮（會意字）', pool: ['日', '月', '火', '土', '人', '心'] },
   { grade: 3, semester: 'lower', diff: 2, partA: '人', partB: '木', targetChar: '休', meaning: '倚樹休息（會意字）', pool: ['人', '木', '口', '目', '手', '山'] },
@@ -485,6 +615,20 @@ interface RawEnglishWord {
 }
 
 const EXTRA_ENGLISH_WORDS: RawEnglishWord[] = [
+  // Grade 1
+  { grade: 1, semester: 'upper', diff: 1, word: 'Apple', zh: '蘋果', distractors: ['Ant', 'Ball', 'Cat'], tag: '水果單字' },
+  { grade: 1, semester: 'upper', diff: 1, word: 'Cat', zh: '貓咪', distractors: ['Hat', 'Bat', 'Dog'], tag: '動物世界' },
+  { grade: 1, semester: 'upper', diff: 1, word: 'Dog', zh: '小狗', distractors: ['Pig', 'Frog', 'Cat'], tag: '動物世界' },
+  { grade: 1, semester: 'lower', diff: 1, word: 'Red', zh: '紅色', distractors: ['Bed', 'Blue', 'Green'], tag: '顏色單字' },
+  { grade: 1, semester: 'lower', diff: 1, word: 'Book', zh: '書本', distractors: ['Look', 'Pen', 'Bag'], tag: '文具用品' },
+  { grade: 1, semester: 'lower', diff: 1, word: 'Sun', zh: '太陽', distractors: ['Run', 'Star', 'Moon'], tag: '自然基礎' },
+  // Grade 2
+  { grade: 2, semester: 'upper', diff: 1, word: 'Banana', zh: '香蕉', distractors: ['Orange', 'Mango', 'Apple'], tag: '水果單字' },
+  { grade: 2, semester: 'upper', diff: 1, word: 'Pencil', zh: '鉛筆', distractors: ['Ruler', 'Eraser', 'Paper'], tag: '文具用品' },
+  { grade: 2, semester: 'upper', diff: 1, word: 'Happy', zh: '開心的', distractors: ['Angry', 'Sleepy', 'Hungry'], tag: '情緒形容' },
+  { grade: 2, semester: 'lower', diff: 1, word: 'Water', zh: '水', distractors: ['Milk', 'Juice', 'Bread'], tag: '飲食單字' },
+  { grade: 2, semester: 'lower', diff: 1, word: 'Tiger', zh: '老虎', distractors: ['Lion', 'Panda', 'Zebra'], tag: '動物世界' },
+  { grade: 2, semester: 'lower', diff: 2, word: 'School', zh: '學校', distractors: ['Park', 'Home', 'Zoo'], tag: '校園地點' },
   // Grade 3
   { grade: 3, semester: 'upper', diff: 1, word: 'Sandwich', zh: '三明治', distractors: ['Sandwitch', 'Sausage', 'Salad'], tag: '飲食單字' },
   { grade: 3, semester: 'upper', diff: 1, word: 'Teacher', zh: '老師', distractors: ['Techer', 'Trainer', 'Toaster'], tag: '校園人物' },
@@ -557,6 +701,44 @@ export function buildExpandedChineseQuestions(): ChineseQuestion[] {
     });
   });
 
+  // Grade 1-2 Chinese typo questions so InkRpgEngine always has typo mode available
+  const lowerGradeTypos: Array<{
+    grade: 1 | 2;
+    semester: SemesterId;
+    sentence: string;
+    typoIndex: number;
+    wrongChar: string;
+    correctChar: string;
+    tag: string;
+  }> = [
+    { grade: 1, semester: 'upper', sentence: '今天天汽真好', typoIndex: 3, wrongChar: '汽', correctChar: '氣', tag: '形近字辨析' },
+    { grade: 1, semester: 'lower', sentence: '小狗在草地跑部', typoIndex: 6, wrongChar: '部', correctChar: '步', tag: '同音字辨析' },
+    { grade: 2, semester: 'upper', sentence: '我們一起去公園玩耍八', typoIndex: 9, wrongChar: '八', correctChar: '吧', tag: '語氣詞辨析' },
+    { grade: 2, semester: 'lower', sentence: '清早起來做早超', typoIndex: 6, wrongChar: '超', correctChar: '操', tag: '形近字辨析' },
+  ];
+  lowerGradeTypos.forEach((t, idx) => {
+    res.push({
+      id: `exp_zh_typo_low_${idx}`,
+      grade: t.grade,
+      semester: t.semester,
+      subject: 'chinese',
+      type: 'typo',
+      prompt: `火眼金睛抓錯字：請點出句子中寫錯的字！`,
+      answer: t.correctChar,
+      explanation: `句中的「${t.wrongChar}」應改為「${t.correctChar}」。`,
+      hint: `仔細讀一次「${t.sentence}」，找出讀音相同但字形不對的字！`,
+      knowledgeTag: t.tag,
+      difficulty: 1,
+      payload: {
+        mode: 'typo',
+        sentence: t.sentence,
+        typoIndex: t.typoIndex,
+        wrongChar: t.wrongChar,
+        correctChar: t.correctChar,
+      },
+    });
+  });
+
   return res;
 }
 
@@ -584,6 +766,28 @@ export function buildExpandedEnglishQuestions(): EnglishQuestion[] {
         correctIndex: pack.correctIndex,
       },
     });
+    if (item.grade <= 2 && item.word.length <= 6) {
+      res.push({
+        id: `exp_en_spell_low_${idx}`,
+        grade: item.grade,
+        semester: item.semester,
+        subject: 'english',
+        type: 'spell',
+        prompt: `母艦拼字任務：拼出「${item.zh}」的英文單字！`,
+        answer: item.word.toUpperCase(),
+        explanation: `${item.word} 的意思是「${item.zh}」。`,
+        hint: `第一個字母是 ${item.word[0].toUpperCase()}！`,
+        knowledgeTag: item.tag,
+        difficulty: 1,
+        payload: {
+          mode: 'spell',
+          speakText: item.word,
+          zhMeaning: item.zh,
+          word: item.word.toUpperCase(),
+          distractorLetters: ['Z', 'Q', 'X'],
+        },
+      });
+    }
   });
   return res;
 }

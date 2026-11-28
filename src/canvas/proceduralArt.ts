@@ -257,7 +257,7 @@ export class FloatingTextPool {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, fontScale=1) {
+  render(ctx: CanvasRenderingContext2D) {
     for (let i = 0; i < this.pool.length; i++) {
       const f = this.pool[i];
       if (!f.active) continue;
@@ -268,7 +268,7 @@ export class FloatingTextPool {
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
       ctx.translate(f.x, f.y);
-      ctx.scale(f.scale * pop * fontScale, f.scale * pop * fontScale);
+      ctx.scale(f.scale * pop, f.scale * pop);
       ctx.font = '900 22px "Fredoka", "Noto Sans TC", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -349,7 +349,6 @@ export function updateGameFeel(
   feel: GameFeelState,
   rawDt: number
 ): { dt: number; simDt: number; shakeX: number; shakeY: number } {
-  if(!(rawDt>0))return {dt:0,simDt:0,shakeX:0,shakeY:0};
   if (feel.flashAlpha > 0) {
     feel.flashAlpha = Math.max(0, feel.flashAlpha - rawDt * 2.6);
   }

@@ -143,6 +143,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
   const [atbValues, setAtbValues] = useState<[number, number, number]>([100, 65, 45]);
   const [activeSkill, setActiveSkill] = useState<SkillMode | null>(null);
   const [currentQ, setCurrentQ] = useState<ChineseQuestion | null>(null);
+  const [hintUsedForQ, setHintUsedForQ] = useState(false);
   const [qStartTime, setQStartTime] = useState(0);
   const [selectedRadicals, setSelectedRadicals] = useState<string[]>([]);
   const [battleEnemyUi, setBattleEnemyUi] = useState<{
@@ -408,9 +409,9 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
   }, [phase]);
 
   useEffect(() => {
-    pausedRef.current = paused || Boolean(banner) || relicModalOpen;
-    document.body.dataset.state = paused ? 'paused' : banner ? 'reading' : relicModalOpen ? 'choosing' : 'playing';
-  }, [paused,banner,relicModalOpen]);
+    pausedRef.current = paused;
+    document.body.dataset.state = paused ? 'paused' : 'playing';
+  }, [paused]);
 
   useEffect(() => {
     activeSkillRef.current = activeSkill;
@@ -487,6 +488,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       soundEngine.playClick();
       const q = pullQuestion(mode);
       setCurrentQ(q);
+      setHintUsedForQ(false);
       setActiveSkill(mode);
       setSelectedRadicals([]);
       setQStartTime(Date.now());
@@ -508,7 +510,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       if (!enemy) return;
 
       totalAttemptsRef.current += 1;
-      onAnswerResult(q, isCorrect);
+      onAnswerResult(q, isCorrect, qStartTime > 0 ? Date.now() - qStartTime : undefined, hintUsedForQ);
 
       const enemyX = w.width * 0.72;
       const enemyY = w.height * 0.48;
@@ -728,6 +730,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       doubleNext,
       guardianId,
       onAnswerResult,
+      hintUsedForQ,
       playMode,
       playerStats.baseAttack,
       playerStats.maxHp,
@@ -1686,11 +1689,11 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
 
   return (
     <div
-      className="game-screen game-screen-chinese w-screen h-[100dvh] flex flex-col overflow-hidden bg-emerald-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      className="w-screen h-[100dvh] flex flex-col overflow-hidden bg-emerald-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       data-testid="ink-rpg-engine"
     >
       {/* Tier 1: Single-Row Compact HUD (h-12 shrink-0, zero overlap!) */}
-      <header className="game-hud h-12 shrink-0 px-2.5 bg-slate-900/95 border-b border-amber-400/35 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
+      <header className="h-12 shrink-0 px-2.5 bg-slate-900/95 border-b border-amber-400/35 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-black text-amber-300 truncate max-w-[110px] sm:max-w-none">
             {stageConfig
@@ -1732,9 +1735,9 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
       </header>
 
       {/* Main Split: Portrait Top Canvas / Bottom Dock | Landscape 54% Left Canvas / 46% Right Dock */}
-      <div className="game-layout flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden" inert={Boolean(banner)}>
+      <div className="flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden">
         {/* Tier 2: Pure Unobstructed Ink RPG Canvas Stage */}
-        <div className="game-stage relative h-[44dvh] shrink-0 landscape:h-full landscape:w-[54%] bg-emerald-950 border-b landscape:border-b-0 landscape:border-r border-amber-400/25 overflow-hidden">
+        <div className="relative h-[44dvh] shrink-0 landscape:h-full landscape:w-[54%] bg-emerald-950 border-b landscape:border-b-0 landscape:border-r border-amber-400/25 overflow-hidden">
           <canvas
             ref={canvasRef}
             onClick={handleCanvasClick}
@@ -1749,7 +1752,7 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
         </div>
 
         {/* Tier 3: Independent Explore Joystick OR Battle ATB Skills & 3-Mode Chinese Answer Dock */}
-        <div className="game-controls flex-1 min-h-0 landscape:w-[46%] overflow-y-auto p-2.5 sm:p-3 bg-slate-900/95 flex flex-col justify-between gap-2">
+        <div className="flex-1 min-h-0 landscape:w-[46%] overflow-y-auto p-2.5 sm:p-3 bg-slate-900/95 flex flex-col justify-between gap-2">
           {/* Explore Phase Controls */}
           {phase === 'explore' && (
             <div className="flex-1 flex flex-col justify-between gap-3">
@@ -1945,19 +1948,36 @@ export const InkRpgEngine: React.FC<EngineCommonProps> = ({
                   {activeSkill === 'radical' && '【部件拼字】點選 2 個部首組成漢字'}
                   {activeSkill === 'typo' && '【破邪斬句】點擊石碑中的錯別字！'}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => soundEngine.speakText(currentQ.prompt, 'zh-TW')}
-                  aria-label="朗讀題目"
-                  className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-200 text-[11px] font-bold flex items-center gap-1 shrink-0"
-                >
-                  <Volume2 className="w-3.5 h-3.5" /> 朗讀
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playClick();
+                      setHintUsedForQ(true);
+                    }}
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 text-[11px] font-bold shrink-0"
+                  >
+                    靈感提示
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => soundEngine.speakText(currentQ.prompt, 'zh-TW')}
+                    aria-label="朗讀題目"
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-200 text-[11px] font-bold flex items-center gap-1 shrink-0"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" /> 朗讀
+                  </button>
+                </div>
               </div>
 
               <div className="text-sm sm:text-base font-black text-white leading-snug">
                 {currentQ.prompt}
               </div>
+              {hintUsedForQ && currentQ.hint && (
+                <div className="rounded-lg bg-amber-950/70 border border-amber-500/50 px-2.5 py-1.5 text-[11px] font-bold text-amber-200">
+                  💡 提示：{currentQ.hint}
+                </div>
+              )}
 
               {currentQ.payload.mode === 'slash' && (
                 <div className="grid grid-cols-2 gap-2">

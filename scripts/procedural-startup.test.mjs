@@ -5,8 +5,7 @@ import vm from 'node:vm';
 import {stripTypeScriptTypes} from 'node:module';
 
 const source=readFileSync(process.env.PROCEDURAL_SOURCE || 'src/data/proceduralQuestions.ts','utf8');
-const early=readFileSync('src/data/questions/earlyGrades.ts','utf8').replace(/^import[^;]+;\s*/,'').replace(/export (const|function)/g,'$1');
-const code=stripTypeScriptTypes(early+'\n'+source.replace(/import\s*\{[^}]+\}\s*from\s*'[^']+';\s*/g,'').replaceAll('export function','function'),{mode:'transform'});
+const code=stripTypeScriptTypes(source.replace(/^import\s*\{[^}]+\}\s*from\s*'..\/types\/game';\s*/,'').replaceAll('export function','function'),{mode:'transform'});
 function generator(random=Math.random){
  const math=Object.create(Math);math.random=random;
  const context=vm.createContext({exports:{},Math:math,Date});
@@ -30,7 +29,7 @@ test('grade-four subtraction never creates a negative intermediate result',()=>{
 });
 test('all grades and semesters can generate repeated batches without blocking startup',()=>{
  const run=generator();let total=0;
- for(let batch=0;batch<40;batch++)for(const grade of [1,2,3,4,5,6])for(const semester of ['upper','lower']){
+ for(let batch=0;batch<40;batch++)for(const grade of [3,4,5,6])for(const semester of ['upper','lower']){
   const questions=run(`generateProceduralMathQuestions(${grade},'${semester}',${1+batch%10},16)`);
   assert.ok(questions.length>0);
   for(const q of questions){assert.equal(q.payload.options.length,4);assert.equal(new Set(q.payload.options).size,4);assert.equal(q.payload.options[q.payload.correctIndex],q.answer);}

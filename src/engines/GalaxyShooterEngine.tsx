@@ -273,9 +273,9 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
   });
 
   useEffect(() => {
-    pausedRef.current = paused || Boolean(banner) || relicModalOpen;
-    document.body.dataset.state = paused ? 'paused' : banner ? 'reading' : relicModalOpen ? 'choosing' : 'playing';
-  }, [paused,banner,relicModalOpen]);
+    pausedRef.current = paused;
+    document.body.dataset.state = paused ? 'paused' : 'playing';
+  }, [paused]);
 
   useEffect(() => {
     shipVariantRef.current = shipVariant;
@@ -931,12 +931,6 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         // Update player lasers (supports homing onto locked target!) & check collisions
         for (let i = s.lasers.length - 1; i >= 0; i--) {
           const b = s.lasers[i];
-          const locked=b.targetId?(s.bossMode?s.letterOrbs.find(o=>o.id===b.targetId&&!o.collected):s.drones.find(d=>d.id===b.targetId)):null;
-          if(b.targetId&&!locked){s.lasers.splice(i,1);continue;}
-          if(locked&&dt>0){
-            const dx=locked.x-b.x,dy=locked.y-b.y,distance=Math.hypot(dx,dy),speed=Math.hypot(b.vx,b.vy);
-            if(distance>0){b.vx=dx/distance*speed;b.vy=dy/distance*speed;}
-          }
           b.x += b.vx * dt;
           b.y += b.vy * dt;
           if (b.y < -30 || b.x < -30 || b.x > W + 30) {
@@ -947,7 +941,6 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
           let hit = false;
           if (!s.bossMode) {
             for (const d of s.drones) {
-              if(b.targetId&&d.id!==b.targetId)continue;
               if (Math.abs(b.x - d.x) < 58 && Math.abs(b.y - d.y) < 30) {
                 hit = true;
                 d.hitFlash = 0.7;
@@ -962,7 +955,6 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
             }
           } else {
             for (const orb of s.letterOrbs) {
-              if(b.targetId&&orb.id!==b.targetId)continue;
               if (!orb.collected && Math.hypot(b.x - orb.x, b.y - orb.y) < orb.r + 8) {
                 hit = true;
                 handleLetterHit(orb);
@@ -1513,11 +1505,11 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
 
   return (
     <div
-      className="game-screen game-screen-english w-screen h-[100dvh] flex flex-col overflow-hidden bg-slate-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      className="w-screen h-[100dvh] flex flex-col overflow-hidden bg-slate-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       data-testid="galaxy-shooter-engine"
     >
       {/* Tier 1: Single-Row Compact HUD (h-12 shrink-0, zero overlap!) */}
-      <header className="game-hud h-12 shrink-0 px-2.5 bg-slate-900/95 border-b border-cyan-500/35 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
+      <header className="h-12 shrink-0 px-2.5 bg-slate-900/95 border-b border-cyan-500/35 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-black text-cyan-300 truncate max-w-[130px] sm:max-w-none">
             {stageConfig
@@ -1559,9 +1551,9 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
       </header>
 
       {/* Main Split: Portrait Top Canvas / Bottom Controls | Landscape 54% Canvas / 46% Controls */}
-      <div className="game-layout flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden" inert={Boolean(banner)}>
+      <div className="flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden">
         {/* Tier 2: Pure Unobstructed Space Shooter Canvas */}
-        <div className="game-stage relative h-[54dvh] shrink-0 landscape:h-full landscape:w-[54%] bg-slate-950 border-b landscape:border-b-0 landscape:border-r border-cyan-500/25 overflow-hidden">
+        <div className="relative h-[54dvh] shrink-0 landscape:h-full landscape:w-[54%] bg-slate-950 border-b landscape:border-b-0 landscape:border-r border-cyan-500/25 overflow-hidden">
           <canvas
             ref={canvasRef}
             onPointerDown={handlePointerDown}
@@ -1579,7 +1571,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
         </div>
 
         {/* Tier 3: Independent Mission Prompt, TTS, Ship Switch & Manual Fire Dock */}
-        <div className="game-controls flex-1 min-h-0 landscape:w-[46%] overflow-y-auto p-2.5 sm:p-3 bg-slate-900/95 flex flex-col justify-between gap-2">
+        <div className="flex-1 min-h-0 landscape:w-[46%] overflow-y-auto p-2.5 sm:p-3 bg-slate-900/95 flex flex-col justify-between gap-2">
           {/* Holographic Mission Prompt + TTS */}
           <div className="rounded-2xl bg-indigo-950/95 border border-pink-400/70 px-3 py-2 flex items-center gap-2.5">
             <button
@@ -1671,7 +1663,7 @@ export const GalaxyShooterEngine: React.FC<EngineCommonProps> = ({
                 : 'bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-400 hover:to-orange-400 border-amber-200 text-white'
             }`}
           >
-            <Crosshair className="w-4 h-4 shrink-0" /> 鎖定開火 <small className="hidden sm:inline">（空白鍵 / 搖桿 A・ZR）</small>
+            <Crosshair className="w-4 h-4 shrink-0" /> 🔥 鎖定開火（空白鍵 / 搖桿 A・ZR）
           </button>
         </div>
       </div>

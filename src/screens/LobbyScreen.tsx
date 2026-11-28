@@ -50,6 +50,11 @@ import { gamepadManager, useGamepadStatus } from '../core/gamepadManager';
 import { ClassAdvancementModal } from '../components/ClassAdvancementModal';
 import { HERO_CLASSES } from '../data/heroProgression';
 import {HeroPortrait} from '../components/EquipmentArt';
+import {
+  ENGLISH_JETS,
+  isScienceUnlockedForGrade,
+  SUBJECT_HUB_ART,
+} from '../data/subjectProgressionData';
 
 interface LobbyScreenProps {
   onNavigate: (screen: ActiveScreen) => void;
@@ -239,6 +244,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     save,
     equippedWeapon,
     combatStats,
+    subjectProfiles,
     setGrade,
     setSemester,
     setPlayMode,
@@ -248,6 +254,42 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     petGuardian,
     claimDailyQuest,
   } = useGameState();
+
+  const pendingPracticeCount = (save.todayPracticeQueue ?? []).filter((i) => !i.completed).length;
+
+  const getSubjectHubMeta = (subject: SubjectId) => {
+    if (subject === 'chinese') {
+      return {
+        hubTitle: SUBJECT_HUB_ART.chinese.title,
+        statusLine: `${subjectProfiles.chinese.characterTitle} · 文心點 ${subjectProfiles.chinese.skillPoints}`,
+        locked: false,
+      };
+    }
+    if (subject === 'english') {
+      const jet =
+        ENGLISH_JETS.find((j) => j.id === subjectProfiles.english.activeJetId) ?? ENGLISH_JETS[0];
+      return {
+        hubTitle: SUBJECT_HUB_ART.english.title,
+        statusLine: `${jet.name} · 核心 ${subjectProfiles.english.hangarCores}`,
+        locked: false,
+      };
+    }
+    if (subject === 'math') {
+      return {
+        hubTitle: SUBJECT_HUB_ART.math.title,
+        statusLine: `${subjectProfiles.math.commanderRank} · 齒輪 ${subjectProfiles.math.techGears}`,
+        locked: false,
+      };
+    }
+    const unlocked = isScienceUnlockedForGrade(save.grade);
+    return {
+      hubTitle: SUBJECT_HUB_ART.science.title,
+      statusLine: unlocked
+        ? `${subjectProfiles.science.chefTitle} · 結晶 ${subjectProfiles.science.labCrystals}`
+        : '升上三年級解鎖自然實驗廚房 ✨',
+      locked: !unlocked,
+    };
+  };
 
   const padStatus = useGamepadStatus();
   const [classModalOpen, setClassModalOpen] = useState(false);
@@ -656,13 +698,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 soundEngine.playClick();
                 onNavigate('parent_dashboard');
               }}
-              aria-label="家長專區"
-              title="家長專區"
-              className={`rounded-full bg-slate-900/95 hover:bg-slate-800 border border-sky-400/70 text-sky-300 flex items-center justify-center transition-transform active:scale-90 shrink-0 ${
-                isCompactLandscape ? 'w-8 h-8' : 'w-8 h-8 sm:w-10 sm:h-10'
+              aria-label="家長學習歷程"
+              title="家長學習歷程"
+              className={`rounded-full bg-slate-900/95 hover:bg-slate-800 border border-sky-400/70 text-sky-200 flex items-center justify-center gap-1.5 transition-transform active:scale-95 shrink-0 font-black text-xs whitespace-nowrap ${
+                isCompactLandscape ? 'h-8 px-2.5' : 'h-8 sm:h-10 px-2.5 sm:px-3.5'
               }`}
             >
-              <Lock className="w-4 h-4" />
+              <Lock className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+              <span className="hidden sm:inline">家長歷程</span>
             </button>
 
             <button
@@ -745,7 +788,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
               {/* Compact 1P-4P + Switch Gamepad Bar */}
               <div className={`flex items-center justify-between gap-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 px-1.5 py-1 ${isCompactLandscape ? 'mb-1' : 'mb-1.5 max-w-sm'}`}>
-                <div className="flex flex-wrap items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
                   {([1, 2, 3, 4] as PlayerCount[]).map((cnt) => (
                     <button
                       key={cnt}
@@ -883,11 +926,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             <div className={`w-[62%] h-full flex flex-col justify-between min-w-0 ${isCompactLandscape ? 'gap-1.5' : 'gap-3'}`}>
               {/* Single-Row Segmented Controls */}
               <div
-                className={`rounded-2xl bg-slate-900/92 backdrop-blur-sm border border-slate-700/90 shadow-xl flex flex-wrap items-center justify-between gap-1.5 ${
+                className={`rounded-2xl bg-slate-900/92 backdrop-blur-sm border border-slate-700/90 shadow-xl flex items-center justify-between gap-1.5 ${
                   isCompactLandscape ? 'p-1' : 'p-2'
                 }`}
               >
-                <div className="flex flex-wrap items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
+                <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
                   {([1, 2, 3, 4, 5, 6] as GradeLevel[]).map((g) => (
                     <button
                       key={g}
@@ -896,8 +939,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                         soundEngine.playClick();
                         setGrade(g);
                       }}
-                      className={`rounded-lg font-black whitespace-nowrap transition-colors ${
-                        isCompactLandscape ? 'h-7 px-2 text-[11px]' : 'min-h-[38px] px-3 text-xs'
+                      className={`rounded-lg font-black whitespace-nowrap shrink-0 transition-colors ${
+                        isCompactLandscape ? 'h-7 px-1.5 text-[11px]' : 'min-h-[38px] px-2.5 text-xs'
                       } ${
                         save.grade === g
                           ? 'bg-amber-400 text-slate-950 shadow'
@@ -910,7 +953,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <div className="flex flex-wrap items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
                     {(['upper', 'lower'] as SemesterId[]).map((sem) => (
                       <button
                         key={sem}
@@ -932,7 +975,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     ))}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
                     <button
                       type="button"
                       disabled={save.parentSettings.forcePracticeMode}
@@ -970,10 +1013,18 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 </div>
               </div>
 
-              {/* 2x2 High-Contrast Neon Glass Subject World Cards */}
+              {/* 2x2 Subject-Specific Immersive Hub Portal Cards */}
+              {pendingPracticeCount > 0 && !isCompactLandscape && (
+                <div className="rounded-xl bg-indigo-950/85 border border-indigo-400/50 px-3 py-1.5 text-xs font-bold text-indigo-100 flex items-center justify-between gap-2 shrink-0">
+                  <span className="truncate">
+                    家長已為你安排 {pendingPracticeCount} 項今日重點練習，點擊科目進入整備即可開始！
+                  </span>
+                </div>
+              )}
               <div className={`grid grid-cols-2 flex-1 min-h-0 ${isCompactLandscape ? 'gap-1.5' : 'gap-3'}`}>
                 {PLANET_PORTALS.map((planet) => {
                   const worldStats = getWorldTotalStars(planet.id, save.grade, save.stageProgress);
+                  const hubMeta = getSubjectHubMeta(planet.id);
                   return (
                     <button
                       key={planet.id}
@@ -985,7 +1036,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                         onOpenWorldMap(planet.id);
                       }}
                       data-start={planet.id === 'chinese' ? 'true' : undefined}
-                      className={`group rounded-2xl bg-gradient-to-br ${planet.glowBg} backdrop-blur-md border-2 ${planet.accentBorder} text-left shadow-xl transition-transform hover:-translate-y-0.5 active:scale-[0.98] flex items-center ${
+                      className={`group rounded-2xl bg-gradient-to-br ${planet.glowBg} backdrop-blur-md border-2 ${
+                        hubMeta.locked ? 'border-slate-700/90 opacity-85' : planet.accentBorder
+                      } text-left shadow-xl transition-transform hover:-translate-y-0.5 active:scale-[0.98] flex items-center ${
                         isCompactLandscape ? 'px-2.5 py-1.5 gap-2' : 'p-3.5 gap-3'
                       }`}
                     >
@@ -999,7 +1052,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                             isCompactLandscape ? 'w-9 h-9 text-sm' : 'w-12 h-12 text-xl'
                           }`}
                         >
-                          {planet.emblem}
+                          {hubMeta.locked ? <Lock className="w-5 h-5" /> : planet.emblem}
                         </div>
                         <div
                           className={`absolute inset-x-[-4px] top-1/2 -translate-y-1/2 rounded-full border-2 ${planet.ringColor} -rotate-12 pointer-events-none ${
@@ -1011,22 +1064,28 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
                           <span className="text-[10px] sm:text-[11px] font-bold text-slate-300 truncate">
-                            {save.grade <= 2 && planet.id === 'science' ? '生活觀察' : save.grade <= 2 && planet.id === 'english' ? '英語啟蒙（選修）' : planet.subjectLabel}
+                            {planet.subjectLabel} · {planet.worldTitle}
                           </span>
-                          <span className="inline-flex items-center gap-0.5 text-[10px] sm:text-[11px] font-black text-amber-300 font-mono-num shrink-0">
-                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                            {worldStats.earned}/90
-                          </span>
+                          {!hubMeta.locked && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] sm:text-[11px] font-black text-amber-300 font-mono-num shrink-0">
+                              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                              {worldStats.earned}/90
+                            </span>
+                          )}
                         </div>
                         <div
                           className={`font-black text-white leading-tight truncate ${
                             isCompactLandscape ? 'text-sm mt-0.5' : 'text-lg mt-0.5'
                           }`}
                         >
-                          {planet.worldTitle}
+                          {hubMeta.hubTitle}
                         </div>
-                        <div className="text-[10px] sm:text-[11px] text-slate-300 truncate mt-0.5">
-                          {planet.genreTag}
+                        <div
+                          className={`text-[10px] sm:text-[11px] truncate mt-0.5 ${
+                            hubMeta.locked ? 'text-emerald-300 font-bold' : 'text-slate-300'
+                          }`}
+                        >
+                          {hubMeta.statusLine}
                         </div>
                       </div>
                       {!isCompactLandscape && (
@@ -1247,7 +1306,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
             {/* Compact Segmented Bar: Grade (1~6) | Semester (上/下) | Mode (計時/練習) */}
             <div className="rounded-2xl bg-slate-900/92 backdrop-blur-sm border border-slate-700/90 p-1.5 shadow-xl flex flex-col gap-1.5">
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <div className="grid grid-cols-6 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
                 {([1, 2, 3, 4, 5, 6] as GradeLevel[]).map((g) => (
                   <button
                     key={g}
@@ -1256,13 +1315,13 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       soundEngine.playClick();
                       setGrade(g);
                     }}
-                    className={`min-h-[34px] rounded-lg text-xs font-black whitespace-nowrap transition-colors ${
+                    className={`min-h-[34px] rounded-lg text-[11px] font-black whitespace-nowrap transition-colors ${
                       save.grade === g
                         ? 'bg-amber-400 text-slate-950 shadow'
                         : 'text-slate-300 hover:text-white'
                     }`}
                   >
-                    {g}年級
+                    {g}年
                   </button>
                 ))}
               </div>
@@ -1320,10 +1379,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               </div>
             </div>
 
-            {/* 2x2 HIGH-CONTRAST NEON GLASS SUBJECT WORLD CARDS (Visible simultaneously without scrolling!) */}
+            {/* 2x2 Subject-Specific Hub Cards (Portrait) */}
             <div className="grid grid-cols-2 gap-2.5">
               {PLANET_PORTALS.map((planet) => {
                 const worldStats = getWorldTotalStars(planet.id, save.grade, save.stageProgress);
+                const hubMeta = getSubjectHubMeta(planet.id);
                 return (
                   <button
                     key={planet.id}
@@ -1334,30 +1394,41 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       onOpenWorldMap(planet.id);
                     }}
                     data-start={planet.id === 'chinese' ? 'true' : undefined}
-                    className={`group rounded-2xl bg-gradient-to-br ${planet.glowBg} backdrop-blur-md border-2 ${planet.accentBorder} p-2.5 text-left shadow-xl transition-transform active:scale-[0.97] flex flex-col justify-between gap-2 min-h-[112px]`}
+                    className={`group rounded-2xl bg-gradient-to-br ${planet.glowBg} backdrop-blur-md border-2 ${
+                      hubMeta.locked ? 'border-slate-700/90 opacity-85' : planet.accentBorder
+                    } p-2.5 text-left shadow-xl transition-transform active:scale-[0.97] flex flex-col justify-between gap-2 min-h-[118px]`}
                   >
                     <div className="flex items-start justify-between gap-1.5">
                       <div className="relative w-11 h-11 shrink-0 flex items-center justify-center">
                         <div
                           className={`w-10 h-10 rounded-full bg-gradient-to-br ${planet.planetGrad} border-2 border-white/80 shadow-lg flex items-center justify-center text-base font-black text-white`}
                         >
-                          {planet.emblem}
+                          {hubMeta.locked ? <Lock className="w-4 h-4" /> : planet.emblem}
                         </div>
                         <div
                           className={`absolute inset-x-[-4px] top-1/2 -translate-y-1/2 h-2.5 rounded-full border-2 ${planet.ringColor} -rotate-12 pointer-events-none`}
                         />
                       </div>
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-black text-amber-300 bg-slate-950/75 border border-amber-400/40 rounded-lg px-1.5 py-0.5 font-mono-num">
-                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        {worldStats.earned}/90
-                      </span>
+                      {!hubMeta.locked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-black text-amber-300 font-mono-num">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          {worldStats.earned}/90
+                        </span>
+                      )}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[10px] font-bold text-slate-300">
-                        {save.grade <= 2 && planet.id === 'science' ? '生活觀察' : save.grade <= 2 && planet.id === 'english' ? '英語啟蒙（選修）' : planet.subjectLabel} · {planet.shortTag}
+                      <div className="text-[10px] font-bold text-slate-300 truncate">
+                        {planet.subjectLabel} · {planet.shortTag}
                       </div>
                       <div className="text-[15px] font-black text-white leading-tight truncate mt-0.5">
-                        {planet.worldTitle}
+                        {hubMeta.hubTitle}
+                      </div>
+                      <div
+                        className={`text-[10px] truncate mt-0.5 ${
+                          hubMeta.locked ? 'text-emerald-300 font-bold' : 'text-slate-300'
+                        }`}
+                      >
+                        {hubMeta.statusLine}
                       </div>
                     </div>
                   </button>

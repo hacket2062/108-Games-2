@@ -22,10 +22,12 @@ import {
   isStageUnlocked,
 } from '../data/campaignMap';
 import { soundEngine } from '../audio/soundEngine';
+import { isScienceUnlockedForGrade, SUBJECT_HUB_ART } from '../data/subjectProgressionData';
 
 interface StageSelectScreenProps {
   subject: SubjectId;
   onStartStage: (stage: CampaignStageConfig) => void;
+  onOpenHub?: () => void;
   onExit: () => void;
 }
 
@@ -82,11 +84,12 @@ const WORLD_THEMES: Record<
 export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
   subject,
   onStartStage,
+  onOpenHub,
   onExit,
 }) => {
   const { save } = useGameState();
-  const baseTheme = WORLD_THEMES[subject];
-  const theme = save.grade<=2 ? {...baseTheme,subjectLabel:subject==='science'?'生活觀察':subject==='english'?'英語啟蒙（選修）':baseTheme.subjectLabel} : baseTheme;
+  const theme = WORLD_THEMES[subject];
+  const scienceLocked = subject === 'science' && !isScienceUnlockedForGrade(save.grade);
   const chapters = useMemo(
     () => getChaptersForWorld(subject, save.grade),
     [subject, save.grade]
@@ -114,7 +117,7 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
 
   const isPracticeFreeUnlock = save.playMode === 'practice';
   const selectedUnlocked =
-    isPracticeFreeUnlock || isStageUnlocked(selectedStage, save.stageProgress);
+    !scienceLocked && (isPracticeFreeUnlock || isStageUnlocked(selectedStage, save.stageProgress));
   const selectedRec = save.stageProgress?.[selectedStage.stageKey];
 
   const handleSwitchChapter = (idx: 0 | 1 | 2) => {
@@ -142,11 +145,12 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
             type="button"
             onClick={() => {
               soundEngine.playClick();
-              onExit();
+              if (onOpenHub) onOpenHub();
+              else onExit();
             }}
             className="h-8 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-black text-xs inline-flex items-center gap-1 shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" /> 返回
+            <ArrowLeft className="w-4 h-4" /> {onOpenHub ? SUBJECT_HUB_ART[subject].title : '返回'}
           </button>
           <div className="w-8 h-8 rounded-xl bg-slate-950 border border-white/30 flex items-center justify-center font-black text-sm text-amber-300 shrink-0">
             {theme.emblem}
@@ -165,6 +169,18 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
             {worldStars.earned}/{worldStars.max}
           </span>
           <span className="hidden sm:inline text-emerald-300">通關 {worldStars.clearedStages}/30</span>
+          {onOpenHub && (
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playClick();
+                onExit();
+              }}
+              className="h-8 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-black text-[11px] shrink-0"
+            >
+              大廳
+            </button>
+          )}
         </div>
       </div>
 
@@ -475,7 +491,11 @@ export const StageSelectScreen: React.FC<StageSelectScreenProps> = ({
             ) : (
               <>
                 <Lock className="w-4 h-4 shrink-0" />
-                <span className="truncate">請先通關前一關（或切換練習模式）</span>
+                <span className="truncate">
+                  {scienceLocked
+                    ? '升上三年級解鎖自然實驗廚房 ✨'
+                    : '請先通關前一關（或切換練習模式）'}
+                </span>
               </>
             )}
           </button>

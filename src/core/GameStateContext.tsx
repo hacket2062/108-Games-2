@@ -46,6 +46,31 @@ import {
   HERO_CLASSES,
 } from '../data/heroProgression';
 import { soundEngine } from '../audio/soundEngine';
+import {
+  clampElementaryGrade,
+  createInitialSubjectProfiles,
+  LearningMilestoneLog,
+  migrateLegacySaveToSubjectProfiles,
+  semesterToNumber,
+  SubjectProfiles,
+  TagMasteryRecord,
+  TodayPracticeItem,
+} from '../types/progression';
+import {
+  computeEnglishPilotRank,
+  computeMandarinTitle,
+  computeMathCommanderRank,
+  computeScienceChefTitle,
+  ENGLISH_JETS,
+  ENGLISH_MODULES,
+  MANDARIN_ARMORS,
+  MANDARIN_GROWTH_TREE,
+  MANDARIN_WEAPONS,
+  MATH_GROWTH_TREE,
+  MATH_TURRET_ARSENAL,
+  SCIENCE_COOKWARE,
+  SCIENCE_GROWTH_TREE,
+} from '../data/subjectProgressionData';
 
 const SAVE_PREFIX = 'zhiguang_108_save_v2_';
 
@@ -179,6 +204,10 @@ export function createInitialPlayerSave(): PlayerSaveData {
     heroProgression: createInitialHeroProgression(),
     towerBestFloor: 0,
     discoveredBestiary: ['bst_chi_moth', 'bst_eng_drone', 'bst_math_zero', 'bst_sci_glutton'],
+    subjectProfiles: createInitialSubjectProfiles(),
+    learningMilestones: [],
+    tagMastery: {},
+    todayPracticeQueue: [],
   };
 }
 
@@ -225,6 +254,11 @@ function hydrateSave(raw: Partial<PlayerSaveData> | null | undefined): PlayerSav
       Array.isArray(raw.discoveredBestiary) && raw.discoveredBestiary.length > 0
         ? Array.from(new Set(raw.discoveredBestiary))
         : base.discoveredBestiary,
+    grade: clampElementaryGrade(raw.grade ?? base.grade),
+    subjectProfiles: migrateLegacySaveToSubjectProfiles(raw),
+    learningMilestones: Array.isArray(raw.learningMilestones) ? raw.learningMilestones : [],
+    tagMastery: raw.tagMastery && typeof raw.tagMastery === 'object' ? raw.tagMastery : {},
+    todayPracticeQueue: Array.isArray(raw.todayPracticeQueue) ? raw.todayPracticeQueue : [],
   };
   if (merged.lastPlayDate !== todayKey()) {
     merged.lastPlayDate = todayKey();
@@ -274,7 +308,12 @@ interface GameStateContextValue {
   selectGuardian: (id: GuardianId) => void;
   petGuardian: () => void;
   selectTitle: (titleId: string) => void;
-  recordAnswer: (question: AnyQuestion, isCorrect: boolean, responseMs?: number) => void;
+  recordAnswer: (
+    question: AnyQuestion,
+    isCorrect: boolean,
+    responseMs?: number,
+    usedHint?: boolean
+  ) => void;
   resolveWrongRecord: (questionId: string) => void;
   applyWorldResult: (result: WorldRunResult) => { leveledUp: boolean; chestDropped?: string };
   applyPvPResult: (result: PvPRunResult) => { leveledUp: boolean };
@@ -310,8 +349,32 @@ interface GameStateContextValue {
     badgesEarned: number;
     crystalsEarned: number;
   }) => { leveledUp: boolean; isNewRecord: boolean };
-  // Parent
+  // Subject-Specific Independent Hubs & Progression
+  subjectProfiles: SubjectProfiles;
+  upgradeSubjectTreeNode: (subject: 'chinese' | 'math' | 'science', nodeId: string) => ActionFeedback;
+  equipOrUnlockMandarinGear: (slot: 'weapon' | 'armor', itemId: string) => ActionFeedback;
+  selectMandarinSpirit: (spiritId: string) => void;
+  unlockOrSelectEnglishJet: (jetId: string) => ActionFeedback;
+  unlockOrEquipEnglishModule: (moduleId: string) => ActionFeedback;
+  selectEnglishCopilot: (spiritId: string) => void;
+  upgradeMathTurret: (turretId: string) => ActionFeedback;
+  toggleMathDeckTurret: (turretId: string) => ActionFeedback;
+  selectMathSpirit: (spiritId: string) => void;
+  equipOrUnlockScienceCookware: (cookwareId: string) => ActionFeedback;
+  selectScienceSpirit: (spiritId: string) => void;
+  buySubjectConsumable: (
+    subject: SubjectId,
+    itemId: string,
+    costCoins: number,
+    itemName: string
+  ) => ActionFeedback;
+  // Parent Learning Trajectory & Practice Queue
   updateParentSettings: (patch: Partial<ParentSettings>) => void;
+  addToTodayPracticeQueue: (
+    item: Omit<TodayPracticeItem, 'id' | 'addedAt' | 'completed'>
+  ) => ActionFeedback;
+  removeFromTodayPracticeQueue: (id: string) => void;
+  completeTodayPracticeItem: (id: string) => void;
   buildLearningCsv: () => string;
 }
 
@@ -427,6 +490,10 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           heroProgression: save.heroProgression ?? createInitialHeroProgression(),
           towerBestFloor: save.towerBestFloor ?? 0,
           discoveredBestiary: (save.discoveredBestiary ?? []).slice(0, 32),
+          subjectProfiles: save.subjectProfiles ?? createInitialSubjectProfiles(),
+          learningMilestones: (save.learningMilestones ?? []).slice(0, 40),
+          tagMastery: save.tagMastery ?? {},
+          todayPracticeQueue: (save.todayPracticeQueue ?? []).slice(0, 20),
         };
         const payload = {
           uid: user.uid,
@@ -503,7 +570,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const recordAnswer = useCallback(
-    (question: AnyQuestion, isCorrect: boolean, responseMs?: number) => {
+    (question: AnyQuestion, isCorrect: boolean, responseMs?: number, usedHint = false) => {
       setSave((prev) => {
         const curr = prev.subjectStats[question.subject];
         const nextStats = {
@@ -536,10 +603,10 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         // Track mastered question IDs for zero-repeat prioritization
         const masteredSet = new Set(prev.masteredQuestionIds ?? []);
-        if (isCorrect) masteredSet.add(question.id);
-        else masteredSet.delete(question.id);
+        if (isCorrect && !usedHint) masteredSet.add(question.id);
+        else if (!isCorrect) masteredSet.delete(question.id);
 
-        // Track per-knowledgeTag mastery for Parent Heatmap
+        // Legacy per-knowledgeTag mastery
         const tagKey = `${question.subject}:${question.knowledgeTag}`;
         const prevMap = prev.knowledgeMastery ?? {};
         const prevEntry = prevMap[tagKey] ?? {
@@ -557,6 +624,64 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           },
         };
 
+        // Honest TagMasteryRecord separating unassisted vs hinted answers
+        const qSemNum = semesterToNumber(question.semester);
+        const detailedKey = `${question.subject}:g${question.grade}:${question.knowledgeTag}`;
+        const prevTagMap = prev.tagMastery ?? {};
+        const prevTag: TagMasteryRecord = prevTagMap[detailedKey] ?? {
+          subject: question.subject,
+          grade: clampElementaryGrade(question.grade),
+          semester: qSemNum,
+          tag: question.knowledgeTag,
+          attempts: 0,
+          unassistedCorrect: 0,
+          hintedCorrect: 0,
+          wrongCount: 0,
+          lastPracticedAt: new Date().toISOString(),
+        };
+        const nextUnassisted = prevTag.unassistedCorrect + (isCorrect && !usedHint ? 1 : 0);
+        const nextHinted = prevTag.hintedCorrect + (isCorrect && usedHint ? 1 : 0);
+        const nextTagMastery: Record<string, TagMasteryRecord> = {
+          ...prevTagMap,
+          [detailedKey]: {
+            ...prevTag,
+            semester: qSemNum,
+            attempts: prevTag.attempts + 1,
+            unassistedCorrect: nextUnassisted,
+            hintedCorrect: nextHinted,
+            wrongCount: prevTag.wrongCount + (isCorrect ? 0 : 1),
+            lastPracticedAt: new Date().toISOString(),
+          },
+        };
+
+        // Automatically record milestone when a tag reaches independent mastery (unassisted >= 2)
+        let nextMilestones = prev.learningMilestones ?? [];
+        if (prevTag.unassistedCorrect < 2 && nextUnassisted >= 2) {
+          const semText = qSemNum === 1 ? '上學期' : '下學期';
+          const milestone: LearningMilestoneLog = {
+            id: `ms-tag-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+            timestamp: new Date().toISOString(),
+            subject: question.subject,
+            grade: clampElementaryGrade(question.grade),
+            semester: qSemNum,
+            eventType: 'tag_mastered',
+            title: `獨立掌握「${question.knowledgeTag}」`,
+            curriculumEvidence: `於${question.grade}年級${semText}完成「${question.knowledgeTag}」無提示連續正確掌握（累計無提示答對 ${nextUnassisted} 題）`,
+          };
+          nextMilestones = [milestone, ...nextMilestones].slice(0, 80);
+        }
+
+        // Complete matching items in Parent Today Practice Queue on unassisted correct answer
+        const nextPracticeQueue = (prev.todayPracticeQueue ?? []).map((item) =>
+          !item.completed &&
+          isCorrect &&
+          !usedHint &&
+          item.subject === question.subject &&
+          (item.knowledgeTag === question.knowledgeTag || item.questionId === question.id)
+            ? { ...item, completed: true }
+            : item
+        );
+
         // Detect rapid random guessing (<1.8s and wrong)
         const isRapidGuess = !isCorrect && typeof responseMs === 'number' && responseMs < 1800;
 
@@ -571,6 +696,9 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           dailyQuests: nextQuests,
           masteredQuestionIds: Array.from(masteredSet).slice(-350),
           knowledgeMastery: nextKnowledgeMastery,
+          tagMastery: nextTagMastery,
+          learningMilestones: nextMilestones,
+          todayPracticeQueue: nextPracticeQueue,
           rapidGuessCount: (prev.rapidGuessCount ?? 0) + (isRapidGuess ? 1 : 0),
         };
       });
@@ -579,11 +707,35 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
 
   const resolveWrongRecord = useCallback((questionId: string) => {
-    setSave((prev) => ({
-      ...prev,
-      wrongRecords: prev.wrongRecords.filter((w) => w.questionId !== questionId),
-      coins: prev.coins + 25,
-    }));
+    setSave((prev) => {
+      const target = prev.wrongRecords.find((w) => w.questionId === questionId);
+      const nextMilestones = [...(prev.learningMilestones ?? [])];
+      if (target) {
+        const semNum = semesterToNumber(prev.semester);
+        nextMilestones.unshift({
+          id: `ms-wrong-${Date.now().toString(36)}`,
+          timestamp: new Date().toISOString(),
+          subject: target.subject,
+          grade: clampElementaryGrade(target.grade),
+          semester: semNum,
+          eventType: 'mistake_overcome',
+          title: `克服錯題本「${target.knowledgeTag}」`,
+          curriculumEvidence: `於錯題本成功複習並答對 ${target.grade} 年級「${target.knowledgeTag}」薄弱題型`,
+        });
+      }
+      const nextPracticeQueue = (prev.todayPracticeQueue ?? []).map((item) =>
+        item.questionId === questionId || (target && item.knowledgeTag === target.knowledgeTag && item.subject === target.subject)
+          ? { ...item, completed: true }
+          : item
+      );
+      return {
+        ...prev,
+        wrongRecords: prev.wrongRecords.filter((w) => w.questionId !== questionId),
+        learningMilestones: nextMilestones.slice(0, 80),
+        todayPracticeQueue: nextPracticeQueue,
+        coins: prev.coins + 25,
+      };
+    });
   }, []);
 
   const applyWorldResult = useCallback(
@@ -706,6 +858,65 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             : 0;
         const prevProg = prev.heroProgression ?? createInitialHeroProgression();
 
+        // Any-Grade Entry proportional subject-specific growth rewards (never reset across grades!)
+        const currProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+        const gradeScale = 1 + (prev.grade - 1) * 0.18;
+        const nextProfiles: SubjectProfiles = {
+          chinese: { ...currProfiles.chinese },
+          english: { ...currProfiles.english },
+          math: { ...currProfiles.math },
+          science: { ...currProfiles.science },
+        };
+        if (result.subject === 'chinese') {
+          const pts = Math.max(
+            1,
+            Math.round((result.correctCount * 0.35 + (result.victory ? 1.5 : 0.5)) * gradeScale)
+          );
+          const nextExp = currProfiles.chinese.exp + result.xpEarned;
+          const levelUps = Math.floor(nextExp / 100);
+          nextProfiles.chinese = {
+            ...currProfiles.chinese,
+            skillPoints: currProfiles.chinese.skillPoints + pts,
+            rpgLevel: Math.min(60, currProfiles.chinese.rpgLevel + levelUps),
+            exp: nextExp % 100,
+          };
+        } else if (result.subject === 'english') {
+          const cores = Math.max(
+            15,
+            Math.round((result.correctCount * 7 + (result.victory ? 25 : 8)) * gradeScale)
+          );
+          const miles = Math.round((result.correctCount * 95 + (result.victory ? 320 : 80)) * gradeScale);
+          const updatedEng = {
+            ...currProfiles.english,
+            hangarCores: currProfiles.english.hangarCores + cores,
+            flightMiles: currProfiles.english.flightMiles + miles,
+          };
+          updatedEng.pilotRank = computeEnglishPilotRank(updatedEng);
+          nextProfiles.english = updatedEng;
+        } else if (result.subject === 'math') {
+          const gears = Math.max(
+            1,
+            Math.round((result.correctCount * 0.35 + (result.victory ? 1.5 : 0.5)) * gradeScale)
+          );
+          const updatedMath = {
+            ...currProfiles.math,
+            techGears: currProfiles.math.techGears + gears,
+          };
+          updatedMath.commanderRank = computeMathCommanderRank(updatedMath);
+          nextProfiles.math = updatedMath;
+        } else if (result.subject === 'science') {
+          const crystals = Math.max(
+            1,
+            Math.round((result.correctCount * 0.35 + (result.victory ? 1.5 : 0.5)) * gradeScale)
+          );
+          const updatedSci = {
+            ...currProfiles.science,
+            labCrystals: currProfiles.science.labCrystals + crystals,
+          };
+          updatedSci.chefTitle = computeScienceChefTitle(updatedSci);
+          nextProfiles.science = updatedSci;
+        }
+
         return {
           ...prev,
           level: Math.min(60, xpOutcome.level),
@@ -725,6 +936,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             ...prevProg,
             badges: prevProg.badges + earnedBadges,
           },
+          subjectProfiles: nextProfiles,
         };
       });
       return { leveledUp: didLevel, chestDropped };
@@ -1305,6 +1517,577 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     []
   );
 
+  // ==================== SUBJECT-SPECIFIC INDEPENDENT PROGRESSION ====================
+  const subjectProfiles = useMemo(
+    () => save.subjectProfiles ?? createInitialSubjectProfiles(),
+    [save.subjectProfiles]
+  );
+
+  const collectEvidenceTags = useCallback(
+    (subject: SubjectId, fallbackTags: string[]) => {
+      const practiced = Object.values(save.tagMastery ?? {})
+        .filter((t) => t.subject === subject && (t.unassistedCorrect > 0 || t.attempts > 0))
+        .sort((a, b) => b.unassistedCorrect - a.unassistedCorrect || b.attempts - a.attempts)
+        .slice(0, 3)
+        .map((t) => t.tag);
+      return practiced.length > 0 ? practiced : fallbackTags.slice(0, 2);
+    },
+    [save.tagMastery]
+  );
+
+  const upgradeSubjectTreeNode = useCallback(
+    (subject: 'chinese' | 'math' | 'science', nodeId: string): ActionFeedback => {
+      const profiles = save.subjectProfiles ?? createInitialSubjectProfiles();
+      const catalog =
+        subject === 'chinese'
+          ? MANDARIN_GROWTH_TREE
+          : subject === 'math'
+            ? MATH_GROWTH_TREE
+            : SCIENCE_GROWTH_TREE;
+      const item = catalog.find((c) => c.nodeId === nodeId);
+      if (!item) return { ok: false, message: '找不到該成長樹節點。' };
+
+      const currentTree =
+        subject === 'chinese'
+          ? profiles.chinese.growthTree
+          : subject === 'math'
+            ? profiles.math.growthTree
+            : profiles.science.growthTree;
+      const node = currentTree[nodeId];
+      if (!node) return { ok: false, message: '找不到節點資料。' };
+      if (node.level >= item.maxLevel) return { ok: false, message: `【${item.name}】已達最高階 Lv.${item.maxLevel}！` };
+
+      const currencyName =
+        subject === 'chinese' ? '文心點數' : subject === 'math' ? '算力齒輪' : '實驗結晶';
+      const available =
+        subject === 'chinese'
+          ? profiles.chinese.skillPoints
+          : subject === 'math'
+            ? profiles.math.techGears
+            : profiles.science.labCrystals;
+      if (available < item.costPerLevel) {
+        return { ok: false, message: `${currencyName}不足（需要 ${item.costPerLevel}，目前 ${available}）。通關任意年級關卡即可獲得！` };
+      }
+
+      const nextLevel = node.level + 1;
+      const semNum = semesterToNumber(save.semester);
+      const semLabel = semNum === 1 ? '上學期' : '下學期';
+      const evidenceTags = collectEvidenceTags(subject, item.sampleTags);
+      const nowIso = new Date().toISOString();
+
+      soundEngine.playPerfectBell();
+      setSave((prev) => {
+        const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+        const updatedNode = {
+          ...node,
+          level: nextLevel,
+          unlockedAt: nowIso,
+          unlockedInGrade: clampElementaryGrade(prev.grade),
+          unlockedInSemester: semNum,
+          contributingTags: Array.from(new Set([...node.contributingTags, ...evidenceTags])),
+        };
+
+        const nextProfiles: SubjectProfiles = { ...prevProfiles };
+        if (subject === 'chinese') {
+          const nextChi = {
+            ...prevProfiles.chinese,
+            skillPoints: prevProfiles.chinese.skillPoints - item.costPerLevel,
+            growthTree: { ...prevProfiles.chinese.growthTree, [nodeId]: updatedNode },
+          };
+          nextChi.characterTitle = computeMandarinTitle(nextChi);
+          nextProfiles.chinese = nextChi;
+        } else if (subject === 'math') {
+          const nextMath = {
+            ...prevProfiles.math,
+            techGears: prevProfiles.math.techGears - item.costPerLevel,
+            growthTree: { ...prevProfiles.math.growthTree, [nodeId]: updatedNode },
+          };
+          nextMath.commanderRank = computeMathCommanderRank(nextMath);
+          nextProfiles.math = nextMath;
+        } else {
+          const nextSci = {
+            ...prevProfiles.science,
+            labCrystals: prevProfiles.science.labCrystals - item.costPerLevel,
+            growthTree: { ...prevProfiles.science.growthTree, [nodeId]: updatedNode },
+          };
+          nextSci.chefTitle = computeScienceChefTitle(nextSci);
+          nextProfiles.science = nextSci;
+        }
+
+        const subjectLabel = subject === 'chinese' ? '國語文心道場' : subject === 'math' ? '數學算力防線' : '自然實驗廚房';
+        const milestone: LearningMilestoneLog = {
+          id: `ms-tree-${Date.now().toString(36)}`,
+          timestamp: nowIso,
+          subject,
+          grade: clampElementaryGrade(prev.grade),
+          semester: semNum,
+          eventType: 'tree_unlock',
+          title: `升級${subjectLabel}「${item.name}」Lv.${nextLevel}`,
+          curriculumEvidence: `於${prev.grade}年級${semLabel}累積成長點亮「${item.branch}」分支（對應課綱：${evidenceTags.join('、')}）`,
+        };
+
+        return {
+          ...prev,
+          subjectProfiles: nextProfiles,
+          learningMilestones: [milestone, ...(prev.learningMilestones ?? [])].slice(0, 80),
+        };
+      });
+
+      return { ok: true, message: `已點亮【${item.name}】至 Lv.${nextLevel}（${item.effectSummary(nextLevel)}）！` };
+    },
+    [collectEvidenceTags, save.grade, save.semester, save.subjectProfiles]
+  );
+
+  const equipOrUnlockMandarinGear = useCallback(
+    (slot: 'weapon' | 'armor', itemId: string): ActionFeedback => {
+      const profiles = save.subjectProfiles ?? createInitialSubjectProfiles();
+      const list = slot === 'weapon' ? MANDARIN_WEAPONS : MANDARIN_ARMORS;
+      const item = list.find((x) => x.id === itemId);
+      if (!item) return { ok: false, message: '找不到該道場裝備。' };
+
+      const ownedList =
+        slot === 'weapon' ? profiles.chinese.unlockedWeaponIds : profiles.chinese.unlockedArmorIds;
+      const alreadyOwned = ownedList.includes(itemId);
+
+      if (!alreadyOwned && profiles.chinese.skillPoints < item.unlockCostPoints) {
+        return {
+          ok: false,
+          message: `文心點數不足（解鎖【${item.name}】需要 ${item.unlockCostPoints} 點）。`,
+        };
+      }
+
+      soundEngine.playPerfectBell();
+      setSave((prev) => {
+        const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+        const chi = prevProfiles.chinese;
+        const nextChi = {
+          ...chi,
+          skillPoints: alreadyOwned ? chi.skillPoints : chi.skillPoints - item.unlockCostPoints,
+          equippedWeaponId: slot === 'weapon' ? itemId : chi.equippedWeaponId,
+          unlockedWeaponIds:
+            slot === 'weapon' ? Array.from(new Set([...chi.unlockedWeaponIds, itemId])) : chi.unlockedWeaponIds,
+          equippedArmorId: slot === 'armor' ? itemId : chi.equippedArmorId,
+          unlockedArmorIds:
+            slot === 'armor' ? Array.from(new Set([...chi.unlockedArmorIds, itemId])) : chi.unlockedArmorIds,
+        };
+        const nextMilestones = [...(prev.learningMilestones ?? [])];
+        if (!alreadyOwned) {
+          const semNum = semesterToNumber(prev.semester);
+          nextMilestones.unshift({
+            id: `ms-chi-gear-${Date.now().toString(36)}`,
+            timestamp: new Date().toISOString(),
+            subject: 'chinese',
+            grade: clampElementaryGrade(prev.grade),
+            semester: semNum,
+            eventType: 'tree_unlock',
+            title: `解鎖國語道場「${item.name}」`,
+            curriculumEvidence: `於${prev.grade}年級${semNum === 1 ? '上' : '下'}學期累積國語文心點數解鎖專屬${item.typeLabel}`,
+          });
+        }
+        return {
+          ...prev,
+          subjectProfiles: { ...prevProfiles, chinese: nextChi },
+          learningMilestones: nextMilestones.slice(0, 80),
+        };
+      });
+
+      return {
+        ok: true,
+        message: alreadyOwned ? `已裝備【${item.name}】！` : `成功解鎖並裝備【${item.name}】！`,
+      };
+    },
+    [save.subjectProfiles]
+  );
+
+  const selectMandarinSpirit = useCallback((spiritId: string) => {
+    soundEngine.playPetChime();
+    setSave((prev) => {
+      const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+      return {
+        ...prev,
+        subjectProfiles: {
+          ...prevProfiles,
+          chinese: { ...prevProfiles.chinese, guardianSpiritId: spiritId },
+        },
+      };
+    });
+  }, []);
+
+  const unlockOrSelectEnglishJet = useCallback(
+    (jetId: string): ActionFeedback => {
+      const profiles = save.subjectProfiles ?? createInitialSubjectProfiles();
+      const jet = ENGLISH_JETS.find((j) => j.id === jetId);
+      if (!jet) return { ok: false, message: '找不到該戰機藍圖。' };
+      const owned = profiles.english.unlockedJetIds.includes(jetId);
+      if (!owned && profiles.english.hangarCores < jet.unlockCores) {
+        return {
+          ok: false,
+          message: `航電核心不足（解鎖【${jet.name}】需要 ${jet.unlockCores} 核心）。`,
+        };
+      }
+      soundEngine.playPerfectBell();
+      const evidenceTags = collectEvidenceTags('english', ['聽力辨字', '高頻拼字']);
+      setSave((prev) => {
+        const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+        const eng = prevProfiles.english;
+        const nextEng = {
+          ...eng,
+          hangarCores: owned ? eng.hangarCores : eng.hangarCores - jet.unlockCores,
+          activeJetId: jetId,
+          unlockedJetIds: Array.from(new Set([...eng.unlockedJetIds, jetId])),
+        };
+        nextEng.pilotRank = computeEnglishPilotRank(nextEng);
+        const nextMilestones = [...(prev.learningMilestones ?? [])];
+        if (!owned) {
+          const semNum = semesterToNumber(prev.semester);
+          nextMilestones.unshift({
+            id: `ms-jet-${Date.now().toString(36)}`,
+            timestamp: new Date().toISOString(),
+            subject: 'english',
+            grade: clampElementaryGrade(prev.grade),
+            semester: semNum,
+            eventType: 'blueprint_unlock',
+            title: `解鎖航電機庫戰機藍圖「${jet.name}」`,
+            curriculumEvidence: `於${prev.grade}年級${semNum === 1 ? '上' : '下'}學期累積航電核心解鎖機體（相關英語能力：${evidenceTags.join('、')}）`,
+          });
+        }
+        return {
+          ...prev,
+          subjectProfiles: { ...prevProfiles, english: nextEng },
+          learningMilestones: nextMilestones.slice(0, 80),
+        };
+      });
+      return {
+        ok: true,
+        message: owned ? `已切換出擊機體【${jet.name}】！` : `藍圖解鎖成功！【${jet.name}】已進駐機庫並設為出擊戰機！`,
+      };
+    },
+    [collectEvidenceTags, save.subjectProfiles]
+  );
+
+  const unlockOrEquipEnglishModule = useCallback(
+    (moduleId: string): ActionFeedback => {
+      const profiles = save.subjectProfiles ?? createInitialSubjectProfiles();
+      const mod = ENGLISH_MODULES.find((m) => m.id === moduleId);
+      if (!mod) return { ok: false, message: '找不到該航電模組。' };
+      const owned = profiles.english.unlockedModuleIds.includes(moduleId);
+      if (!owned && profiles.english.hangarCores < mod.unlockCores) {
+        return {
+          ok: false,
+          message: `航電核心不足（解鎖【${mod.name}】需要 ${mod.unlockCores} 核心）。`,
+        };
+      }
+      soundEngine.playGemSynth();
+      const evidenceTags = collectEvidenceTags('english', ['生活單字', '自然發音']);
+      setSave((prev) => {
+        const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+        const eng = prevProfiles.english;
+        const nextLoadout = {
+          ...eng.loadout,
+          ...(mod.slot === 'wing'
+            ? { wingModuleId: moduleId }
+            : mod.slot === 'weaponPod'
+              ? { weaponPodId: moduleId }
+              : { avionicsChipId: moduleId }),
+        };
+        const nextEng = {
+          ...eng,
+          hangarCores: owned ? eng.hangarCores : eng.hangarCores - mod.unlockCores,
+          unlockedModuleIds: Array.from(new Set([...eng.unlockedModuleIds, moduleId])),
+          loadout: nextLoadout,
+        };
+        nextEng.pilotRank = computeEnglishPilotRank(nextEng);
+        const nextMilestones = [...(prev.learningMilestones ?? [])];
+        if (!owned) {
+          const semNum = semesterToNumber(prev.semester);
+          nextMilestones.unshift({
+            id: `ms-mod-${Date.now().toString(36)}`,
+            timestamp: new Date().toISOString(),
+            subject: 'english',
+            grade: clampElementaryGrade(prev.grade),
+            semester: semNum,
+            eventType: 'blueprint_unlock',
+            title: `解鎖航電改裝模組「${mod.name}」`,
+            curriculumEvidence: `於${prev.grade}年級${semNum === 1 ? '上' : '下'}學期完成機庫改裝（相關英語能力：${evidenceTags.join('、')}）`,
+          });
+        }
+        return {
+          ...prev,
+          subjectProfiles: { ...prevProfiles, english: nextEng },
+          learningMilestones: nextMilestones.slice(0, 80),
+        };
+      });
+      return {
+        ok: true,
+        message: owned ? `已裝配模組【${mod.name}】！` : `已研發並裝配【${mod.name}】！戰機雷達數值已更新。`,
+      };
+    },
+    [collectEvidenceTags, save.subjectProfiles]
+  );
+
+  const selectEnglishCopilot = useCallback((spiritId: string) => {
+    soundEngine.playClick();
+    setSave((prev) => {
+      const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+      return {
+        ...prev,
+        subjectProfiles: {
+          ...prevProfiles,
+          english: { ...prevProfiles.english, copilotSpiritId: spiritId },
+        },
+      };
+    });
+  }, []);
+
+  const upgradeMathTurret = useCallback(
+    (turretId: string): ActionFeedback => {
+      const profiles = save.subjectProfiles ?? createInitialSubjectProfiles();
+      const spec = MATH_TURRET_ARSENAL.find((t) => t.id === turretId);
+      if (!spec) return { ok: false, message: '找不到該砲台藍圖。' };
+      const currLv = profiles.math.turretUpgrades[turretId] ?? 1;
+      if (currLv >= 8) return { ok: false, message: `【${spec.name}】已達滿階 Lv.8！` };
+      if (profiles.math.techGears < spec.upgradeCostPerLv) {
+        return {
+          ok: false,
+          message: `算力齒輪不足（升級需要 ${spec.upgradeCostPerLv} 顆齒輪）。`,
+        };
+      }
+      soundEngine.playForgeHammer();
+      const evidenceTags = collectEvidenceTags('math', ['四則運算', '幾何與空間']);
+      setSave((prev) => {
+        const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+        const nextMath = {
+          ...prevProfiles.math,
+          techGears: prevProfiles.math.techGears - spec.upgradeCostPerLv,
+          turretUpgrades: {
+            ...prevProfiles.math.turretUpgrades,
+            [turretId]: currLv + 1,
+          },
+        };
+        nextMath.commanderRank = computeMathCommanderRank(nextMath);
+        const semNum = semesterToNumber(prev.semester);
+        const milestone: LearningMilestoneLog = {
+          id: `ms-turret-${Date.now().toString(36)}`,
+          timestamp: new Date().toISOString(),
+          subject: 'math',
+          grade: clampElementaryGrade(prev.grade),
+          semester: semNum,
+          eventType: 'tree_unlock',
+          title: `強化數學砲台「${spec.name}」Lv.${currLv + 1}`,
+          curriculumEvidence: `於${prev.grade}年級${semNum === 1 ? '上' : '下'}學期消耗算力齒輪升級防線砲台（相關課綱：${evidenceTags.join('、')}）`,
+        };
+        return {
+          ...prev,
+          subjectProfiles: { ...prevProfiles, math: nextMath },
+          learningMilestones: [milestone, ...(prev.learningMilestones ?? [])].slice(0, 80),
+        };
+      });
+      return { ok: true, message: `【${spec.name}】已升級至 Lv.${currLv + 1}！` };
+    },
+    [collectEvidenceTags, save.subjectProfiles]
+  );
+
+  const toggleMathDeckTurret = useCallback(
+    (turretId: string): ActionFeedback => {
+      const profiles = save.subjectProfiles ?? createInitialSubjectProfiles();
+      const curr = profiles.math.activeDeckTurretIds;
+      const exists = curr.includes(turretId);
+      if (exists && curr.length <= 2) {
+        return { ok: false, message: '防線出戰配置至少需保留 2 座砲台！' };
+      }
+      soundEngine.playClick();
+      setSave((prev) => {
+        const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+        const prevDeck = prevProfiles.math.activeDeckTurretIds;
+        const nextDeck = exists
+          ? prevDeck.filter((id) => id !== turretId)
+          : [...prevDeck, turretId];
+        return {
+          ...prev,
+          subjectProfiles: {
+            ...prevProfiles,
+            math: { ...prevProfiles.math, activeDeckTurretIds: nextDeck },
+          },
+        };
+      });
+      return { ok: true, message: exists ? '已從出戰陣容卸下該砲台。' : '已加入出戰防線陣容！' };
+    },
+    [save.subjectProfiles]
+  );
+
+  const selectMathSpirit = useCallback((spiritId: string) => {
+    soundEngine.playPetChime();
+    setSave((prev) => {
+      const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+      return {
+        ...prev,
+        subjectProfiles: {
+          ...prevProfiles,
+          math: { ...prevProfiles.math, guardianSpiritId: spiritId },
+        },
+      };
+    });
+  }, []);
+
+  const equipOrUnlockScienceCookware = useCallback(
+    (cookwareId: string): ActionFeedback => {
+      const profiles = save.subjectProfiles ?? createInitialSubjectProfiles();
+      const item = SCIENCE_COOKWARE.find((c) => c.id === cookwareId);
+      if (!item) return { ok: false, message: '找不到該科學廚具。' };
+      const owned = profiles.science.unlockedCookwareIds.includes(cookwareId);
+      if (!owned && profiles.science.labCrystals < item.unlockCostCrystals) {
+        return {
+          ok: false,
+          message: `實驗結晶不足（解鎖【${item.name}】需要 ${item.unlockCostCrystals} 顆結晶）。`,
+        };
+      }
+      soundEngine.playPerfectBell();
+      const evidenceTags = collectEvidenceTags('science', ['水的三態變化', '水溶液酸鹼']);
+      setSave((prev) => {
+        const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+        const sci = prevProfiles.science;
+        const nextSci = {
+          ...sci,
+          labCrystals: owned ? sci.labCrystals : sci.labCrystals - item.unlockCostCrystals,
+          equippedCookwareId: cookwareId,
+          unlockedCookwareIds: Array.from(new Set([...sci.unlockedCookwareIds, cookwareId])),
+        };
+        nextSci.chefTitle = computeScienceChefTitle(nextSci);
+        const nextMilestones = [...(prev.learningMilestones ?? [])];
+        if (!owned) {
+          const semNum = semesterToNumber(prev.semester);
+          nextMilestones.unshift({
+            id: `ms-cook-${Date.now().toString(36)}`,
+            timestamp: new Date().toISOString(),
+            subject: 'science',
+            grade: clampElementaryGrade(prev.grade),
+            semester: semNum,
+            eventType: 'tree_unlock',
+            title: `解鎖自然實驗廚房「${item.name}」`,
+            curriculumEvidence: `於${prev.grade}年級${semNum === 1 ? '上' : '下'}學期累積實驗結晶研發廚具（相關課綱：${evidenceTags.join('、')}）`,
+          });
+        }
+        return {
+          ...prev,
+          subjectProfiles: { ...prevProfiles, science: nextSci },
+          learningMilestones: nextMilestones.slice(0, 80),
+        };
+      });
+      return {
+        ok: true,
+        message: owned ? `已切換實驗主廚具【${item.name}】！` : `解鎖並啟用科學廚具【${item.name}】！`,
+      };
+    },
+    [collectEvidenceTags, save.subjectProfiles]
+  );
+
+  const selectScienceSpirit = useCallback((spiritId: string) => {
+    soundEngine.playPetChime();
+    setSave((prev) => {
+      const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+      return {
+        ...prev,
+        subjectProfiles: {
+          ...prevProfiles,
+          science: { ...prevProfiles.science, foodSpiritId: spiritId },
+        },
+      };
+    });
+  }, []);
+
+  const buySubjectConsumable = useCallback(
+    (subject: SubjectId, itemId: string, costCoins: number, itemName: string): ActionFeedback => {
+      if (save.coins < costCoins) {
+        return { ok: false, message: `金幣不足（補充【${itemName}】需要 ${costCoins} 金幣）。` };
+      }
+      soundEngine.playCorrectChord(2);
+      setSave((prev) => {
+        const prevProfiles = prev.subjectProfiles ?? createInitialSubjectProfiles();
+        const nextProfiles: SubjectProfiles = { ...prevProfiles };
+        if (subject === 'chinese') {
+          nextProfiles.chinese = {
+            ...prevProfiles.chinese,
+            consumables: {
+              ...prevProfiles.chinese.consumables,
+              [itemId]: (prevProfiles.chinese.consumables[itemId] ?? 0) + 1,
+            },
+          };
+        } else if (subject === 'english') {
+          nextProfiles.english = {
+            ...prevProfiles.english,
+            tacticalItems: {
+              ...prevProfiles.english.tacticalItems,
+              [itemId]: (prevProfiles.english.tacticalItems[itemId] ?? 0) + 1,
+            },
+          };
+        } else if (subject === 'math') {
+          nextProfiles.math = {
+            ...prevProfiles.math,
+            tacticalTraps: {
+              ...prevProfiles.math.tacticalTraps,
+              [itemId]: (prevProfiles.math.tacticalTraps[itemId] ?? 0) + 1,
+            },
+          };
+        } else {
+          nextProfiles.science = {
+            ...prevProfiles.science,
+            seasoningInventory: {
+              ...prevProfiles.science.seasoningInventory,
+              [itemId]: (prevProfiles.science.seasoningInventory[itemId] ?? 0) + 1,
+            },
+          };
+        }
+        return {
+          ...prev,
+          coins: prev.coins - costCoins,
+          subjectProfiles: nextProfiles,
+        };
+      });
+      return { ok: true, message: `已補充【${itemName}】×1！` };
+    },
+    [save.coins]
+  );
+
+  const addToTodayPracticeQueue = useCallback(
+    (item: Omit<TodayPracticeItem, 'id' | 'addedAt' | 'completed'>): ActionFeedback => {
+      const existing = (save.todayPracticeQueue ?? []).find(
+        (q) => !q.completed && q.subject === item.subject && q.knowledgeTag === item.knowledgeTag
+      );
+      if (existing) {
+        return { ok: true, message: `「${item.knowledgeTag}」已在今日練習清單中！` };
+      }
+      soundEngine.playCorrectChord(1);
+      const created: TodayPracticeItem = {
+        ...item,
+        id: `tp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+        addedAt: new Date().toISOString(),
+        completed: false,
+      };
+      setSave((prev) => ({
+        ...prev,
+        todayPracticeQueue: [created, ...(prev.todayPracticeQueue ?? [])].slice(0, 24),
+      }));
+      return { ok: true, message: `已將「${item.knowledgeTag}」加入孩子的今日練習清單！` };
+    },
+    [save.todayPracticeQueue]
+  );
+
+  const removeFromTodayPracticeQueue = useCallback((id: string) => {
+    setSave((prev) => ({
+      ...prev,
+      todayPracticeQueue: (prev.todayPracticeQueue ?? []).filter((q) => q.id !== id),
+    }));
+  }, []);
+
+  const completeTodayPracticeItem = useCallback((id: string) => {
+    setSave((prev) => ({
+      ...prev,
+      todayPracticeQueue: (prev.todayPracticeQueue ?? []).map((q) =>
+        q.id === id ? { ...q, completed: true } : q
+      ),
+    }));
+  }, []);
+
   return (
     <GameStateContext.Provider
       value={{
@@ -1344,7 +2127,23 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setSecondaryGuardian,
         recordDiscoveredMonster,
         applyTowerResult,
+        subjectProfiles,
+        upgradeSubjectTreeNode,
+        equipOrUnlockMandarinGear,
+        selectMandarinSpirit,
+        unlockOrSelectEnglishJet,
+        unlockOrEquipEnglishModule,
+        selectEnglishCopilot,
+        upgradeMathTurret,
+        toggleMathDeckTurret,
+        selectMathSpirit,
+        equipOrUnlockScienceCookware,
+        selectScienceSpirit,
+        buySubjectConsumable,
         updateParentSettings,
+        addToTodayPracticeQueue,
+        removeFromTodayPracticeQueue,
+        completeTodayPracticeItem,
         buildLearningCsv,
       }}
     >

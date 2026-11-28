@@ -52,7 +52,7 @@
         },
         "grade": {
           "type": "number",
-          "description": "Selected elementary grade (3-6)."
+          "description": "Selected elementary grade (1-6)."
         },
         "semester": {
           "type": "string",
@@ -66,7 +66,7 @@
         },
         "saveData": {
           "type": "object",
-          "description": "Native map holding weapons, gems, consumables, titles, mistake records, and trajectory logs."
+          "description": "Native map holding weapons, gems, consumables, titles, mistake records, trajectory logs, independent 4-subject progression profiles (subjectProfiles), learningMilestones, tagMastery, and todayPracticeQueue."
         },
         "createdAt": {
           "type": "string",
@@ -117,7 +117,7 @@
         },
         "grade": {
           "type": "number",
-          "description": "Question grade level (3-6)."
+          "description": "Question grade level (1-6)."
         },
         "subjectFilter": {
           "type": "string",

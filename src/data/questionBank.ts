@@ -13,7 +13,6 @@ import { CHINESE_QUESTIONS as BASE_CHINESE } from './questions/chineseQuestions'
 import { ENGLISH_QUESTIONS as BASE_ENGLISH } from './questions/englishQuestions';
 import { MATH_QUESTIONS as BASE_MATH } from './questions/mathQuestions';
 import { SCIENCE_QUESTIONS as BASE_SCIENCE } from './questions/scienceQuestions';
-import {EARLY_CHINESE, EARLY_ENGLISH, EARLY_MATH, EARLY_SCIENCE} from './questions/earlyGrades';
 import {
   BONUS_CHINESE_QUESTIONS,
   BONUS_ENGLISH_QUESTIONS,
@@ -37,6 +36,10 @@ const EXPANDED_CHINESE = buildExpandedChineseQuestions();
 const EXPANDED_ENGLISH = buildExpandedEnglishQuestions();
 const EXPANDED_SCIENCE = buildExpandedScienceQuestions();
 const SEEDED_PROCEDURAL_MATH: MathQuestion[] = [
+  ...generateProceduralMathQuestions(1, 'upper', 1, 14),
+  ...generateProceduralMathQuestions(1, 'lower', 5, 14),
+  ...generateProceduralMathQuestions(2, 'upper', 1, 14),
+  ...generateProceduralMathQuestions(2, 'lower', 5, 14),
   ...generateProceduralMathQuestions(3, 'upper', 2, 16),
   ...generateProceduralMathQuestions(3, 'lower', 6, 16),
   ...generateProceduralMathQuestions(4, 'upper', 3, 18),
@@ -48,28 +51,24 @@ const SEEDED_PROCEDURAL_MATH: MathQuestion[] = [
 ];
 
 export const CHINESE_QUESTIONS: ChineseQuestion[] = [
-  ...EARLY_CHINESE,
   ...BASE_CHINESE,
   ...BONUS_CHINESE_QUESTIONS,
   ...EPIC_CHINESE_QUESTIONS,
   ...EXPANDED_CHINESE,
 ];
 export const ENGLISH_QUESTIONS: EnglishQuestion[] = [
-  ...EARLY_ENGLISH,
   ...BASE_ENGLISH,
   ...BONUS_ENGLISH_QUESTIONS,
   ...EPIC_ENGLISH_QUESTIONS,
   ...EXPANDED_ENGLISH,
 ];
 export const MATH_QUESTIONS: MathQuestion[] = [
-  ...EARLY_MATH,
   ...BASE_MATH,
   ...BONUS_MATH_QUESTIONS,
   ...EPIC_MATH_QUESTIONS,
   ...SEEDED_PROCEDURAL_MATH,
 ];
 export const SCIENCE_QUESTIONS: ScienceQuestion[] = [
-  ...EARLY_SCIENCE,
   ...BASE_SCIENCE,
   ...BONUS_SCIENCE_QUESTIONS,
   ...EPIC_SCIENCE_QUESTIONS,
@@ -114,7 +113,7 @@ export function getChineseQuestions(
   const byGrade = CHINESE_QUESTIONS.filter((q) => q.grade === grade && (!mode || q.type === mode));
   const exactSemester = byGrade.filter((q) => q.semester === semester);
   const othersInGrade = byGrade.filter((q) => q.semester !== semester);
-  return grade<=2 ? shuffleArray(exactSemester) : [...shuffleArray(exactSemester), ...shuffleArray(othersInGrade)];
+  return [...shuffleArray(exactSemester), ...shuffleArray(othersInGrade)];
 }
 
 export function getEnglishQuestions(
@@ -125,7 +124,7 @@ export function getEnglishQuestions(
   const byGrade = ENGLISH_QUESTIONS.filter((q) => q.grade === grade && (!mode || q.type === mode));
   const exactSemester = byGrade.filter((q) => q.semester === semester);
   const othersInGrade = byGrade.filter((q) => q.semester !== semester);
-  return grade<=2 ? shuffleArray(exactSemester) : [...shuffleArray(exactSemester), ...shuffleArray(othersInGrade)];
+  return [...shuffleArray(exactSemester), ...shuffleArray(othersInGrade)];
 }
 
 export function getMathQuestions(
@@ -137,14 +136,15 @@ export function getMathQuestions(
   const byGrade = MATH_QUESTIONS.filter((q) => q.grade === grade);
   const exactSemester = byGrade.filter((q) => q.semester === semester);
   const othersInGrade = byGrade.filter((q) => q.semester !== semester);
-  return [...shuffleArray(freshDynamic), ...shuffleArray(exactSemester), ...(grade<=2?[]:shuffleArray(othersInGrade))];
+  return [...shuffleArray(freshDynamic), ...shuffleArray(exactSemester), ...shuffleArray(othersInGrade)];
 }
 
 export function getScienceQuestions(grade: GradeLevel, semester: SemesterId): ScienceQuestion[] {
-  const byGrade = SCIENCE_QUESTIONS.filter((q) => q.grade === grade);
+  const effectiveGrade: GradeLevel = grade < 3 ? 3 : grade;
+  const byGrade = SCIENCE_QUESTIONS.filter((q) => q.grade === effectiveGrade);
   const exactSemester = byGrade.filter((q) => q.semester === semester);
   const othersInGrade = byGrade.filter((q) => q.semester !== semester);
-  return grade<=2 ? shuffleArray(exactSemester) : [...shuffleArray(exactSemester), ...shuffleArray(othersInGrade)];
+  return [...shuffleArray(exactSemester), ...shuffleArray(othersInGrade)];
 }
 
 export function getQuestionCountBySubject(): Record<SubjectId, number> {
@@ -241,7 +241,7 @@ export function getPvPMixedQuestions(
           correctIng.name,
           wrongIngs[0].name,
           wrongIngs[1].name,
-          grade<=2 ? '以上都不是' : `${q.payload.targetPhLabel}（純試劑）`,
+          `${q.payload.targetPhLabel}（純試劑）`,
         ];
         const shuffledOpts = seededShuffle(rawOpts, seed + q.id.length * 13);
         const correctIdx = shuffledOpts.indexOf(correctIng.name);
@@ -249,13 +249,13 @@ export function getPvPMixedQuestions(
           id: q.id,
           subject: 'science',
           grade: q.grade,
-          prompt: grade<=2 ? `【生活觀察】${q.prompt}` : `【自然實驗】${q.payload.dishName}：哪一項符合「${q.knowledgeTag}」正確食材？`,
+          prompt: `【自然實驗】${q.payload.dishName}：哪一項符合「${q.knowledgeTag}」正確食材？`,
           options: shuffledOpts,
           correctIndex: correctIdx,
           answer: correctIng.name,
           explanation: q.explanation,
           knowledgeTag: q.knowledgeTag,
-          speakText: grade<=2 ? q.prompt : `${q.payload.dishName}，哪一項符合${q.knowledgeTag}？`,
+          speakText: `${q.payload.dishName}，哪一項符合${q.knowledgeTag}？`,
           speakLang: 'zh-TW',
         });
       }

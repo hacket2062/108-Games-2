@@ -1,5 +1,3 @@
-import {kitchenStageLayout} from '../core/renderLayout';
-import {ScienceWorkbench} from '../components/ScienceWorkbench';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Bell, Flame, Pause, Sparkles, Volume2, FlaskConical, CheckCircle2 } from 'lucide-react';
 import {
@@ -81,7 +79,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   const [ultCharge, setUltCharge] = useState(25);
   const [guardianUsed, setGuardianUsed] = useState(false);
   const [freezeSecs, setFreezeSecs] = useState(0);
-  const [orderTimer, setOrderTimer] = useState(grade<=2?45:32);
+  const [orderTimer, setOrderTimer] = useState(32);
   const [cutIn, setCutIn] = useState(false);
   const [relicModalOpen, setRelicModalOpen] = useState(false);
   const [relicChoices, setRelicChoices] = useState<RoguelikeRelicDef[]>([]);
@@ -103,7 +101,6 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   useEffect(() => {
     nextDishRef.current = nextDish;
   }, [nextDish]);
-  const servingRef=useRef(false);
   const [step, setStep] = useState<CookingStep>('ingredients');
   const [pickedIds, setPickedIds] = useState<string[]>([]);
   const [tempResult, setTempResult] = useState<'PERFECT' | 'GREAT' | 'GOOD' | null>(null);
@@ -136,7 +133,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   const ultRef = useRef(25);
   const freezeRef = useRef(0);
   const doubleNextRef = useRef(false);
-  const orderTimeRef = useRef(grade<=2?45:32);
+  const orderTimeRef = useRef(32);
 
   const simRef = useRef({
     time: 0,
@@ -165,9 +162,9 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
   });
 
   useEffect(() => {
-    pausedRef.current = paused || Boolean(banner) || relicModalOpen;
-    document.body.dataset.state = paused ? 'paused' : banner ? 'reading' : relicModalOpen ? 'choosing' : 'playing';
-  }, [paused,banner,relicModalOpen]);
+    pausedRef.current = paused;
+    document.body.dataset.state = paused ? 'paused' : 'playing';
+  }, [paused]);
 
   useEffect(() => {
     chefRef.current = chef;
@@ -183,12 +180,11 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
     setCurrentDish(promoted);
     setNextDish(queued);
     nextDishRef.current = queued;
-    servingRef.current=false;
     setStep('ingredients');
     setPickedIds([]);
     setTempResult(null);
     setSelectedPh(null);
-    orderTimeRef.current = grade<=2?45:guardianId === 'griffin' ? 36 : 32;
+    orderTimeRef.current = guardianId === 'griffin' ? 36 : 32;
     setOrderTimer(orderTimeRef.current);
     simRef.current.potColor = '#7C3AED';
     soundEngine.speakText(`新訂單，${promoted.payload.dishName}。${promoted.payload.orderRequirement}`, 'zh-TW');
@@ -251,7 +247,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 
       if (nextPicked.length >= currentDish.payload.neededCount) {
         soundEngine.playCorrectChord(comboRef.current + 1);
-        if(grade<=2){setTempResult('GOOD');setSelectedPh('neutral');setStep('serve');}else setStep('temperature');
+        setStep('temperature');
       }
     } else {
       // Wrong ingredient: Dragon Lord scorches kitchen + black smoke + science fact!
@@ -352,8 +348,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 
   // Step 4: Ring Serving Attack Bell -> Launch Dish at Dark Glutton Boss!
   const handleRingServeBell = () => {
-    if (step !== 'serve'||servingRef.current||pausedRef.current) return;
-    servingRef.current=true;
+    if (step !== 'serve') return;
     const s = simRef.current;
     soundEngine.playPerfectBell();
     soundEngine.playSlash();
@@ -486,7 +481,6 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       setFreezeSecs(8);
       s.floats.spawn(s.width * 0.5, s.height * 0.5, '訂單暫停 8s', 'perfect', guardian.activeName);
     } else {
-      if(grade<=2){orderTimeRef.current+=8;setOrderTimer(orderTimeRef.current);return;}
       // Auto-complete current ingredient step!
       const correctIds = currentDish.payload.ingredients.filter((i) => i.isCorrect).map((i) => i.id);
       setPickedIds(correctIds);
@@ -645,23 +639,61 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
         ctx.fillRect(x, H * 0.52, tileW, 24);
       }
 
-      // Short phone stages use a horizontal composition with uniform actor scales.
-      const {compact,bossScale,bossX,bossY,potX,potY,propScale}=kitchenStageLayout(W,H);
-      ctx.fillStyle='#92400E';ctx.strokeStyle='#451A03';ctx.lineWidth=2;
-      drawRoundedRect(ctx,W*(compact?.53:.16),H*(compact?.82:.44),W*(compact?.40:.68),compact?10:28,6);ctx.fill();ctx.stroke();
-      ctx.save();ctx.translate(bossX,bossY);ctx.scale(bossScale,bossScale);
-      drawDarkGluttonBoss(ctx,0,0,s.time,bossHpRef.current/bossMaxHp,s.bossHitFlash,s.bossMood);ctx.restore();
-      ctx.save();ctx.translate(potX,potY);ctx.scale(propScale,propScale);
-      ctx.fillStyle='#1E293B';ctx.strokeStyle='#0F172A';ctx.lineWidth=3.5;
-      ctx.beginPath();ctx.ellipse(0,0,64,34,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-      ctx.fillStyle=s.potColor;ctx.beginPath();ctx.ellipse(0,-12,54,16,0,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='rgba(255,255,255,.45)';ctx.beginPath();ctx.arc(-18,-13+Math.sin(s.time*6)*2,6,0,Math.PI*2);ctx.arc(14,-10+Math.cos(s.time*5)*2,4.5,0,Math.PI*2);ctx.fill();
-      drawHeroClassAura(ctx,-108,-8,s.time,playerStats.heroClassBranch,playerStats.heroTier);
-      drawChefCharacter(ctx,chefRef.current,-108,-8,s.time,s.chefPulse,null,appearanceRef.current);
-      if(playerCount>=2)drawChefCharacter(ctx,'penguin',106,-8,s.time+.7,s.chefPulse*.7,null,appearanceRef.current);
-      if(playerCount>=3)drawChefCharacter(ctx,'mantis',-165,2,s.time+1.4,s.chefPulse*.6,null,appearanceRef.current);
-      if(playerCount>=4)drawChefCharacter(ctx,'fox',165,2,s.time+2.1,s.chefPulse*.6);
-      ctx.restore();
+      // Banquet Dining Counter for Dark Glutton Boss
+      ctx.fillStyle = '#92400E';
+      ctx.strokeStyle = '#451A03';
+      ctx.lineWidth = 3;
+      drawRoundedRect(ctx, W * 0.16, H * 0.44, W * 0.68, 28, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      // Dark Glutton Boss behind banquet table
+      drawDarkGluttonBoss(
+        ctx,
+        W * 0.5,
+        H * 0.36,
+        s.time,
+        bossHpRef.current / bossMaxHp,
+        s.bossHitFlash,
+        s.bossMood
+      );
+
+      // Glowing Magic Element Cauldron in foreground center
+      const potX = W * 0.5;
+      const potY = H * 0.77;
+      ctx.fillStyle = '#1E293B';
+      ctx.strokeStyle = '#0F172A';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.ellipse(potX, potY, 64, 34, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Broth surface (reacts to Acid/Neutral/Alkali color!)
+      ctx.fillStyle = s.potColor;
+      ctx.beginPath();
+      ctx.ellipse(potX, potY - 12, 54, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Highlight bubbles
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.beginPath();
+      ctx.arc(potX - 18, potY - 13 + Math.sin(s.time * 6) * 2, 6, 0, Math.PI * 2);
+      ctx.arc(potX + 14, potY - 10 + Math.cos(s.time * 5) * 2, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Hero Class Aura + 1P..4P Co-op Anime Chefs beside Cauldron
+      drawHeroClassAura(ctx, potX - 108, potY - 8, s.time, playerStats.heroClassBranch, playerStats.heroTier);
+      drawChefCharacter(ctx, chefRef.current, potX - 108, potY - 8, s.time, s.chefPulse, null, appearanceRef.current);
+      if (playerCount >= 2) {
+        drawChefCharacter(ctx, 'penguin', potX + 106, potY - 8, s.time + 0.7, s.chefPulse * 0.7, null, appearanceRef.current);
+      }
+      if (playerCount >= 3) {
+        drawChefCharacter(ctx, 'mantis', potX - 165, potY + 2, s.time + 1.4, s.chefPulse * 0.6, null, appearanceRef.current);
+      }
+      if (playerCount >= 4) {
+        drawChefCharacter(ctx, 'fox', potX + 165, potY + 2, s.time + 2.1, s.chefPulse * 0.6);
+      }
 
       // Dragon Lord Charge-Up Warning Aura (< 8s left in adventure)
       if (playMode === 'adventure' && orderTimeRef.current <= 8 && freezeRef.current <= 0) {
@@ -670,7 +702,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
         ctx.strokeStyle = `rgba(239, 68, 68, ${0.4 + warnPulse * 0.5})`;
         ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.arc(bossX,bossY,(62 + warnPulse * 10)*bossScale, 0, Math.PI * 2);
+        ctx.arc(W * 0.5, H * 0.36, 62 + warnPulse * 10, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
@@ -679,8 +711,8 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       if (s.bossFireBreath > 0.02) {
         ctx.save();
         const alpha = Math.min(1, s.bossFireBreath * 1.4);
-        const mawX = bossX;
-        const mawY = bossY+15*bossScale;
+        const mawX = W * 0.5;
+        const mawY = H * 0.4;
         const flameGrad = ctx.createLinearGradient(mawX, mawY, potX, potY + 18);
         flameGrad.addColorStop(0, `rgba(254, 240, 138, ${alpha})`);
         flameGrad.addColorStop(0.45, `rgba(249, 115, 22, ${alpha * 0.9})`);
@@ -699,8 +731,8 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       // Elemental Dish Explosion VFX on Dragon Lord (Fire Tornado / Absolute Zero / Prism Wave)
       if (s.dishExplosion) {
         const p = s.dishExplosion.progress;
-        const ex = bossX;
-        const ey = bossY;
+        const ex = W * 0.5;
+        const ey = H * 0.35;
         const fade = Math.max(0, 1 - p);
         ctx.save();
         ctx.globalAlpha = fade;
@@ -740,7 +772,7 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       // Flying Served Element Dish Projectile!
       if (s.flyingDish) {
         const t = s.flyingDish.progress;
-        const fx = potX+(bossX-potX)*t;
+        const fx = potX;
         const fy = potY - 24 - (potY - H * 0.36) * t - Math.sin(t * Math.PI) * 55;
         ctx.save();
         ctx.translate(fx, fy);
@@ -834,11 +866,11 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
 
   return (
     <div
-      className="game-screen game-screen-science w-screen h-[100dvh] flex flex-col overflow-hidden bg-orange-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      className="w-screen h-[100dvh] flex flex-col overflow-hidden bg-orange-950 text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       data-testid="science-cooking-engine"
     >
       {/* Tier 1: Single-Row Compact Kitchen HUD (h-12 shrink-0, zero overlap!) */}
-      <header className="game-hud h-12 shrink-0 px-2.5 bg-slate-950/95 border-b border-orange-500/45 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
+      <header className="h-12 shrink-0 px-2.5 bg-slate-950/95 border-b border-orange-500/45 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-black text-orange-300 truncate max-w-[115px] sm:max-w-none">
             {stageConfig
@@ -907,9 +939,9 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
       </header>
 
       {/* Main Split: Portrait Top Canvas / Bottom Workbench | Landscape 54% Left Canvas / 46% Right Workbench */}
-      <div className="game-layout flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden" inert={Boolean(banner)}>
+      <div className="flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden">
         {/* Tier 2: Pure Unobstructed Dragon Lord & Cauldron Canvas */}
-        <div className="game-stage relative h-[30dvh] shrink-0 landscape:h-full landscape:w-[45%] border-b landscape:border-b-0 landscape:border-r border-orange-500/35 overflow-hidden">
+        <div className="relative h-[30dvh] shrink-0 landscape:h-full landscape:w-[54%] border-b landscape:border-b-0 landscape:border-r border-orange-500/35 overflow-hidden">
           <canvas
             ref={canvasRef}
             className="block w-full h-full"
@@ -922,8 +954,252 @@ export const ScienceCookingEngine: React.FC<EngineCommonProps> = ({
           )}
         </div>
 
-        <div className="game-controls flex-1 min-h-0 landscape:w-[55%] flex flex-col overflow-hidden">
-          <ScienceWorkbench dish={currentDish} nextDish={nextDish} step={step} pickedIds={pickedIds} tempResult={tempResult} selectedPh={selectedPh} needleRef={needleBarRef} tMin={tMin} tMax={tMax} ultCharge={ultCharge} paused={paused||Boolean(banner)||relicModalOpen} serving={servingRef.current} onPick={handlePickIngredient} onLock={handleLockTemperature} onPh={handleDropReagent} onServe={handleRingServeBell} onUltimate={triggerElementFeastUltimate}/>
+        {/* Tier 3: Independent Order Queue + 4-Station Workbench */}
+        <div className="flex-1 min-h-0 landscape:w-[46%] flex flex-col overflow-hidden">
+
+      {/* Dual Concurrent Order Ticket Strip (Active Order + Next Incoming Order Queue!) */}
+      <div
+        className="shrink-0 bg-amber-50 border-y-2 border-amber-500 px-3 py-1.5 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+        data-testid="science-order-queue"
+      >
+        <div className="flex items-center justify-between gap-2 min-w-0 flex-1">
+          <div className="min-w-0">
+            <div className="text-[11px] font-black text-orange-700 flex flex-wrap items-center gap-1.5">
+              <span className="px-1.5 py-0.5 rounded bg-orange-600 text-white text-[10px]">🔥 當前訂單</span>
+              <span>【{currentDish.payload.dishName}】</span>
+              <span className="text-emerald-700">· {currentDish.knowledgeTag}</span>
+            </div>
+            <div className="text-xs sm:text-sm font-black text-slate-900 truncate mt-0.5">
+              {currentDish.payload.orderRequirement}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              soundEngine.speakText(
+                `${currentDish.payload.dishName}，${currentDish.payload.orderRequirement}`,
+                'zh-TW'
+              )
+            }
+            aria-label="朗讀料理訂單"
+            className="w-9 h-9 rounded-xl bg-orange-500 hover:bg-orange-400 text-white flex items-center justify-center shrink-0"
+          >
+            <Volume2 className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Queued Next Order Preview Ticket */}
+        <div className="sm:w-64 shrink-0 rounded-xl bg-amber-100/90 border border-amber-400 px-2.5 py-1 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[10px] font-black text-amber-800 truncate">
+              ⏳ 排隊中：{nextDish.payload.dishName}
+            </div>
+            <div className="text-[10px] font-bold text-slate-600 truncate">
+              預告：{nextDish.payload.targetTempLabel} · {nextDish.payload.targetPhLabel}
+            </div>
+          </div>
+          <span className="text-[10px] font-black text-amber-700 bg-white/80 px-1.5 py-0.5 rounded shrink-0">
+            NEXT
+          </span>
+        </div>
+      </div>
+
+      {/* Bottom Interactive 4-Station Tactile Kitchen Workbench */}
+      <div className="flex-1 bg-slate-900 border-t-2 border-orange-400 p-3 sm:p-4 flex flex-col justify-between gap-3 overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 items-stretch">
+          {/* Station 1: Cold Storage Ingredient Picker (5 cols) */}
+          <div
+            className={`lg:col-span-5 rounded-2xl p-3 border-2 flex flex-col justify-between ${
+              step === 'ingredients'
+                ? 'bg-slate-800/95 border-amber-400 shadow-lg'
+                : 'bg-slate-950/70 border-slate-700 opacity-85'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-black text-amber-300">
+                1. 食材冷藏櫃（選取 {pickedIds.length}/{currentDish.payload.neededCount} 項正確食材）
+              </div>
+              {step !== 'ingredients' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+            </div>
+            <div className="grid grid-cols-2 gap-2 flex-1">
+              {currentDish.payload.ingredients.map((ing) => {
+                const picked = pickedIds.includes(ing.id);
+                return (
+                  <button
+                    key={ing.id}
+                    type="button"
+                    disabled={step !== 'ingredients' || picked}
+                    onClick={() => handlePickIngredient(ing)}
+                    className={`min-h-[62px] rounded-xl p-2.5 border-2 text-left transition-transform active:scale-95 flex items-center gap-2.5 ${
+                      picked
+                        ? 'bg-emerald-900/60 border-emerald-400 text-emerald-100'
+                        : 'bg-slate-900 hover:bg-slate-700 border-slate-600 text-white'
+                    }`}
+                  >
+                    <span
+                      className="w-8 h-8 rounded-lg shrink-0 border-2 border-slate-950"
+                      style={{ backgroundColor: ing.color }}
+                    />
+                    <div className="min-w-0">
+                      <div className="text-sm font-black truncate">{ing.name}</div>
+                      <div className={`text-[11px] truncate ${picked ? 'text-emerald-300 font-bold' : 'text-slate-400'}`}>
+                        {picked ? `✓ ${ing.categoryTag}` : '點擊投入檢驗'}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Station 2: Magic Temperature Stove Rhythm Bar (4 cols) */}
+          <div
+            className={`lg:col-span-4 rounded-2xl p-3 border-2 flex flex-col justify-between ${
+              step === 'temperature'
+                ? 'bg-slate-800/95 border-orange-400 shadow-lg'
+                : 'bg-slate-950/70 border-slate-700 opacity-85'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-black text-orange-300 flex items-center gap-1.5">
+                <Flame className="w-4 h-4" /> 2. 控溫魔法爐
+              </div>
+              {tempResult && <span className="text-xs font-black text-amber-300">{tempResult} ★</span>}
+            </div>
+            <div className="text-xs text-slate-200 font-bold mt-1">
+              目標火候：{currentDish.payload.targetTempLabel}
+            </div>
+
+            {/* Dynamic Thermal Rhythm Gauge */}
+            <div className="my-3">
+              <div className="relative h-9 rounded-xl overflow-hidden border-2 border-slate-600 bg-gradient-to-r from-sky-500 via-amber-400 to-rose-500">
+                {/* Target Highlight Zone */}
+                <div
+                  className="absolute inset-y-0 border-x-2 border-white bg-white/30"
+                  style={{ left: `${tMin}%`, width: `${tMax - tMin}%` }}
+                />
+                {/* Moving Needle mutated via ref */}
+                <div
+                  ref={needleBarRef}
+                  className="absolute top-0 bottom-0 w-2.5 -ml-1 bg-slate-950 border-x border-white shadow-lg"
+                  style={{ left: '50%' }}
+                />
+              </div>
+              <div className="flex justify-between text-[11px] font-bold text-slate-400 mt-1">
+                <span>0°C 急凍藍區</span>
+                <span>55°C 中火區</span>
+                <span>100°C 沸騰紅區</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={step !== 'temperature'}
+              onClick={() => {
+                soundEngine.hapticPulse(18);
+                handleLockTemperature();
+              }}
+              className={`w-full min-h-[56px] rounded-xl font-black text-sm sm:text-base transition-transform active:scale-95 ${
+                step === 'temperature'
+                  ? 'bg-orange-500 hover:bg-orange-400 text-white shadow-[0_0_18px_rgba(249,115,22,0.55)]'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              鎖定火候翻炒！（或按空白鍵）
+            </button>
+          </div>
+
+          {/* Station 3 & 4: Acid/Alkali Test Tubes + Serving Attack Bell (3 cols) */}
+          <div className="lg:col-span-3 flex flex-col gap-2.5 justify-between">
+            <div
+              className={`rounded-2xl p-3 border-2 ${
+                step === 'ph'
+                  ? 'bg-slate-800/95 border-teal-400 shadow-lg'
+                  : 'bg-slate-950/70 border-slate-700 opacity-85'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-xs font-black text-teal-300 flex items-center gap-1">
+                  <FlaskConical className="w-4 h-4" /> 3. 酸鹼試管架
+                </div>
+                {selectedPh && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+              </div>
+              <div className="text-[11px] text-slate-300 mb-2">
+                需求：{currentDish.payload.targetPhLabel}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  disabled={step !== 'ph'}
+                  onClick={() => {
+                    soundEngine.hapticPulse(14);
+                    handleDropReagent('acid');
+                  }}
+                  className="min-h-[54px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95"
+                >
+                  酸性
+                  <div className="text-[10px] font-normal">檸檬紅</div>
+                </button>
+                <button
+                  type="button"
+                  disabled={step !== 'ph'}
+                  onClick={() => {
+                    soundEngine.hapticPulse(14);
+                    handleDropReagent('neutral');
+                  }}
+                  className="min-h-[54px] rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95"
+                >
+                  中性
+                  <div className="text-[10px] font-normal">純水紫</div>
+                </button>
+                <button
+                  type="button"
+                  disabled={step !== 'ph'}
+                  onClick={() => {
+                    soundEngine.hapticPulse(14);
+                    handleDropReagent('alkali');
+                  }}
+                  className="min-h-[54px] rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-45 text-white font-black text-xs transition-transform active:scale-95"
+                >
+                  鹼性
+                  <div className="text-[10px] font-normal">蘇打藍</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Station 4: Serve Attack Bell + Ultimate */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={step !== 'serve'}
+                onClick={() => {
+                  soundEngine.hapticPulse(22);
+                  handleRingServeBell();
+                }}
+                className={`min-h-[60px] rounded-2xl font-black text-sm border-2 flex items-center justify-center gap-1.5 transition-transform active:scale-95 ${
+                  step === 'serve'
+                    ? 'bg-amber-400 hover:bg-amber-300 border-white text-slate-950 shadow-[0_0_24px_rgba(251,191,36,0.85)]'
+                    : 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
+                }`}
+              >
+                <Bell className="w-5 h-5" /> 搖鈴出餐！
+              </button>
+              <button
+                type="button"
+                disabled={ultCharge < 100}
+                onClick={triggerElementFeastUltimate}
+                className={`min-h-[60px] rounded-2xl font-black text-xs border-2 flex items-center justify-center gap-1 transition-transform active:scale-95 ${
+                  ultCharge >= 100
+                    ? 'bg-rose-500 hover:bg-rose-400 border-amber-200 text-white'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" /> 元素大滿貫 ({ultCharge}%)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
         </div>
       </div>
 

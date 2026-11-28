@@ -276,6 +276,72 @@ export function computeSaveCombatStats(save: PlayerSaveData): EffectiveCombatSta
 }
 
 /**
+ * Computes subject-specific combat stats driven by the student's independent SubjectProfile
+ * (Mandarin RPG Dojo / English Modular Hangar / Math Defense HQ / Science Lab Kitchen).
+ */
+export function computeSubjectCombatStats(
+  save: PlayerSaveData,
+  subject: 'chinese' | 'english' | 'math' | 'science'
+): EffectiveCombatStats {
+  const base = computeSaveCombatStats(save);
+  const profiles = save.subjectProfiles;
+  if (!profiles) return base;
+
+  if (subject === 'chinese') {
+    const p = profiles.chinese;
+    const treeLevels = Object.values(p.growthTree).reduce((s, n) => s + n.level, 0);
+    return {
+      ...base,
+      baseAttack: Math.round(base.baseAttack + treeLevels * 4 + p.rpgLevel * 2),
+      maxHp: Math.round(base.maxHp + (p.growthTree.chi_reading_1?.level ?? 0) * 18),
+      critChance: Number(Math.min(0.85, base.critChance + (p.growthTree.chi_phonetics_2?.level ?? 0) * 0.03).toFixed(3)),
+      shieldMitigation: Number(Math.min(0.45, base.shieldMitigation + (p.growthTree.chi_rhetoric_2?.level ?? 0) * 0.03).toFixed(3)),
+      ultChargeBonus: base.ultChargeBonus + (p.growthTree.chi_idiom_2?.level ?? 0) * 4,
+      thinkTimeBonusSec: Number((base.thinkTimeBonusSec + (p.growthTree.chi_reading_2?.level ?? 0) * 0.4).toFixed(1)),
+    };
+  }
+
+  if (subject === 'english') {
+    const p = profiles.english;
+    const jetBonus = p.unlockedJetIds.length * 6;
+    const modBonus = p.unlockedModuleIds.length * 4;
+    return {
+      ...base,
+      baseAttack: Math.round(base.baseAttack + jetBonus + modBonus),
+      maxHp: Math.round(base.maxHp + p.unlockedJetIds.length * 14),
+      speedBonus: Number((base.speedBonus + p.unlockedModuleIds.length * 0.03).toFixed(2)),
+      thinkTimeBonusSec: Number((base.thinkTimeBonusSec + (p.loadout.avionicsChipId === 'chip_voice_lock' ? 1.5 : 0.5)).toFixed(1)),
+    };
+  }
+
+  if (subject === 'math') {
+    const p = profiles.math;
+    const turretPower = Object.values(p.turretUpgrades).reduce((s, lv) => s + lv, 0);
+    const treeLevels = Object.values(p.growthTree).reduce((s, n) => s + n.level, 0);
+    return {
+      ...base,
+      baseAttack: Math.round(base.baseAttack + turretPower * 5 + treeLevels * 4),
+      maxHp: Math.round(base.maxHp + (p.growthTree.math_geo_1?.level ?? 0) * 22),
+      critChance: Number(Math.min(0.85, base.critChance + (p.growthTree.math_geo_2?.level ?? 0) * 0.04).toFixed(3)),
+      ultChargeBonus: base.ultChargeBonus + (p.growthTree.math_algebra_1?.level ?? 0) * 5,
+      thinkTimeBonusSec: Number((base.thinkTimeBonusSec + (p.growthTree.math_measure_2?.level ?? 0) * 0.5).toFixed(1)),
+    };
+  }
+
+  // Science
+  const p = profiles.science;
+  const treeLevels = Object.values(p.growthTree).reduce((s, n) => s + n.level, 0);
+  return {
+    ...base,
+    baseAttack: Math.round(base.baseAttack + treeLevels * 4 + p.unlockedCookwareIds.length * 6),
+    maxHp: Math.round(base.maxHp + (p.growthTree.sci_bio_1?.level ?? 0) * 20),
+    shieldMitigation: Number(Math.min(0.45, base.shieldMitigation + (p.growthTree.sci_earth_2?.level ?? 0) * 0.04).toFixed(3)),
+    ultChargeBonus: base.ultChargeBonus + (p.growthTree.sci_energy_2?.level ?? 0) * 5,
+    thinkTimeBonusSec: Number((base.thinkTimeBonusSec + (p.growthTree.sci_earth_1?.level ?? 0) * 0.6).toFixed(1)),
+  };
+}
+
+/**
  * Class-specific combat damage multiplier:
  * - Blade branch scales up to 3.0x on high combo & Awakened Berserk state
  * - Arcane branch grants +25% elemental resonance

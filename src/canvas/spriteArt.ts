@@ -4,7 +4,6 @@ import { ZOMBIE_DEFS } from '../core/mathDefense';
 import type { ZombieKind } from '../core/mathDefense';
 import {enemyPoseFrame,heroPoseFrame,motionSourceRect} from '../core/spriteMotion';
 import {getBossAppearance} from '../core/bossAppearance';
-import {containArtwork} from '../core/renderLayout';
 
 const images = new Map<string, HTMLImageElement>();
 
@@ -38,7 +37,7 @@ export async function preloadMotionAssets(world:'chinese'|'math'|'science'):Prom
 export function drawMotionFrame(ctx:CanvasRenderingContext2D,url:string,row:number,frame:number,columns:number,rows:number,x:number,y:number,width:number,height:number):boolean {
   const source=atlas(url);if(!source)return false;
   const crop=motionSourceRect(url,source.naturalWidth,source.naturalHeight,row,frame,columns,rows);
-  ctx.drawImage(source,...crop,...containArtwork(crop[2],crop[3],x,y,width,height));return true;
+  ctx.drawImage(source,...crop,x,y,width,height);return true;
 }
 export function drawCompanionMotion(ctx:CanvasRenderingContext2D,role:'pandaHealer'|'craneMage',x:number,y:number,time:number,options:{scale?:number;facing?:number;moving?:boolean;walkPhase?:number;attackProgress?:number;hitFlash?:number;label?:string}):boolean {
   if(!atlas('/art/party-motion-v1.png'))return false;
@@ -74,18 +73,16 @@ export function drawWorldAvatar(ctx:CanvasRenderingContext2D,role:'ship'|'redpan
  const w=image.naturalWidth/4;
  const bounds=[[0,.218],[.226,.470],[.476,.728],[.735,1]][row];
  ctx.globalAlpha=hitFlash>0?.65+Math.sin(time*45)*.25:1;
- const sourceW=w*.89,sourceH=(bounds[1]-bounds[0])*image.naturalHeight;
- ctx.drawImage(image,frame*w+w*.055,bounds[0]*image.naturalHeight,sourceW,sourceH,...containArtwork(sourceW,sourceH,role==='ship'?-37:-36,role==='ship'?-38:-49,role==='ship'?74:72,role==='ship'?76:86));
+ ctx.drawImage(image,frame*w+w*.055,bounds[0]*image.naturalHeight,w*.89,(bounds[1]-bounds[0])*image.naturalHeight,role==='ship'?-37:-36,role==='ship'?-38:-49,role==='ship'?74:72,role==='ship'?76:86);
  ctx.restore();return true;
 }
 export function drawArtCell(ctx: CanvasRenderingContext2D, url: string, cell: number, columns: number, rows: number, x: number, y: number, width: number, height: number): boolean {
   const image = atlas(url); if (!image) return false;
   const w = image.naturalWidth / columns, h = image.naturalHeight / rows;
-  let crop:[number,number,number,number]=[cell%columns*w,Math.floor(cell/columns)*h,w,h];
-  if(url.includes('allies-towers-enemies')){const bounds=[[0,.24],[.247,.492],[.496,.721],[.735,.995]][Math.floor(cell/4)];crop=[cell%4*w+w*.075,bounds[0]*image.naturalHeight,w*.85,(bounds[1]-bounds[0])*image.naturalHeight];}
-  if(url.includes('hero-evolution'))crop=[cell%columns*w+w*.03,Math.floor(cell/columns)*h+h*.02,w*.94,h*.90];
-  if(url.includes('zombie-roster'))crop=[cell%columns*w+w*.035,Math.floor(cell/columns)*h+h*.02,w*.93,h*.90];
-  ctx.drawImage(image,...crop,...containArtwork(crop[2],crop[3],x,y,width,height));return true;
+  if(url.includes('allies-towers-enemies')){const bounds=[[0,.24],[.247,.492],[.496,.721],[.735,.995]][Math.floor(cell/4)];ctx.drawImage(image,cell%4*w+w*.075,bounds[0]*image.naturalHeight,w*.85,(bounds[1]-bounds[0])*image.naturalHeight,x,y,width,height);return true;}
+  if(url.includes('hero-evolution')){ctx.drawImage(image,cell%columns*w+w*.03,Math.floor(cell/columns)*h+h*.02,w*.94,h*.90,x,y,width,height);return true;}
+  if(url.includes('zombie-roster')) {ctx.drawImage(image,cell%columns*w+w*.035,Math.floor(cell/columns)*h+h*.02,w*.93,h*.90,x,y,width,height);return true;}
+  ctx.drawImage(image, cell % columns * w, Math.floor(cell / columns) * h, w, h, x, y, width, height); return true;
 }
 export function drawPaintedUnit(ctx:CanvasRenderingContext2D,cell:number,x:number,y:number,time:number,options:{scale?:number;facing?:number;hitFlash?:number;shielded?:boolean;hpRatio?:number;label?:string}={}):boolean {
  if(!atlas('/art/allies-towers-enemies-v1.png'))return false;
@@ -105,8 +102,7 @@ export function drawEquippedHero(ctx: CanvasRenderingContext2D, x: number, y: nu
   const animated=drawMotionFrame(ctx,'/art/hero-motion-v1.png',PATH_ART[path].frame,pose,6,4,-43,-59,86,94);
   if(!animated)drawArtCell(ctx,'/art/hero-evolution-v1.png',PATH_ART[path].frame,2,2,-38,-54,76,86);
   const hands=[[18,-8],[20,-12],[26,-25],[-9,-47],[35,-16],[22,-26]];
-  const hand=animated?hands[pose]:[21,-6];
-  ctx.save();ctx.translate(hand[0],animated?-51+(hand[1]+59)*86/94:hand[1]);ctx.rotate(pose===3?-1.1:pose===4?1.1:-.15);
+  ctx.save();ctx.translate(...(animated?hands[pose]:[21,-6]) as [number,number]);ctx.rotate(pose===3?-1.1:pose===4?1.1:-.15);
   drawArtCell(ctx,'/art/equipment-atlas-v1.png',weaponArtCell(appearance.weapon),4,4,-18,-35,45,56);ctx.restore();
   ctx.restore();return true;
 }

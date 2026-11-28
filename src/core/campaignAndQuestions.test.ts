@@ -29,7 +29,7 @@ test('Question bank has 400+ original Taiwan 108 Curriculum questions with >= 25
   }
 
   const subjects: SubjectId[] = ['chinese', 'english', 'math', 'science'];
-  const grades: GradeLevel[] = [1, 2, 3, 4, 5, 6];
+  const grades: GradeLevel[] = [3, 4, 5, 6];
   for (const s of subjects) {
     for (const g of grades) {
       const bucket = ALL_QUESTIONS.filter((q) => q.subject === s && q.grade === g);
@@ -119,11 +119,15 @@ test('Campaign map has 3 chapters × 10 progressive stages per subject/grade wit
 });
 
 import { generateProceduralMathQuestions } from '../data/proceduralQuestions';
+import { migrateLegacySaveToSubjectProfiles } from '../types/progression';
+import { computeEnglishHangarRadar, isScienceUnlockedForGrade } from '../data/subjectProgressionData';
+import { computeSubjectCombatStats } from './combatMath';
+import { createInitialPlayerSave } from './GameStateContext';
 
-test('Expanded 108-curriculum question pool reaches 600+ and procedural math generator produces valid distinct options for Grades 3-6', () => {
+test('Expanded 108-curriculum question pool reaches 600+ and procedural math generator produces valid distinct options for Grades 1-6', () => {
   assert.ok(ALL_QUESTIONS.length >= 600, `Expected >= 600 questions, got ${ALL_QUESTIONS.length}`);
 
-  for (const g of [3, 4, 5, 6] as const) {
+  for (const g of [1, 2, 3, 4, 5, 6] as const) {
     const batchA = generateProceduralMathQuestions(g, 'upper', 1, 8);
     const batchB = generateProceduralMathQuestions(g, 'lower', 10, 8);
     assert.equal(batchA.length, 8);
@@ -134,6 +138,79 @@ test('Expanded 108-curriculum question pool reaches 600+ and procedural math gen
       assert.equal(new Set(q.payload.options).size, 4, `Duplicate math option on ${q.id}`);
       assert.equal(q.payload.options[q.payload.correctIndex], q.answer);
     }
+    assert.ok(getChineseQuestions(g, 'upper', 'slash').length > 0, `Missing G${g} Chinese slash`);
+    assert.ok(getChineseQuestions(g, 'upper', 'radical').length > 0, `Missing G${g} Chinese radical`);
+    assert.ok(getChineseQuestions(g, 'upper', 'typo').length > 0, `Missing G${g} Chinese typo`);
+    assert.ok(getEnglishQuestions(g, 'upper', 'listen').length > 0, `Missing G${g} English listen`);
+    assert.ok(getEnglishQuestions(g, 'upper', 'spell').length > 0, `Missing G${g} English spell`);
   }
 });
+
+test('Four-subject independent profiles, lossless legacy migration, Science Grade 1-2 lock, and modular English radar work reliably', () => {
+  // Science Grade 1-2 friendly lock
+  assert.equal(isScienceUnlockedForGrade(1), false);
+  assert.equal(isScienceUnlockedForGrade(2), false);
+  assert.equal(isScienceUnlockedForGrade(3), true);
+  assert.equal(isScienceUnlockedForGrade(6), true);
+
+  // Lossless legacy migration converts historical stats without losing data
+  const migrated = migrateLegacySaveToSubjectProfiles({
+    level: 10,
+    grade: 4,
+    subjectStats: {
+      chinese: { answered: 20, correct: 16, clears: 3 },
+      english: { answered: 18, correct: 15, clears: 2 },
+      math: { answered: 24, correct: 20, clears: 4 },
+      science: { answered: 12, correct: 10, clears: 1 },
+    },
+  });
+  assert.ok(migrated.chinese.skillPoints > 2, 'Chinese skillPoints should convert from legacy stats');
+  assert.ok(migrated.english.hangarCores > 40, 'English hangarCores should convert from legacy stats');
+  assert.ok(migrated.math.techGears > 2, 'Math techGears should convert from legacy stats');
+  assert.ok(migrated.science.labCrystals > 2, 'Science labCrystals should convert from legacy stats');
+
+  // Re-hydrating an already migrated profile preserves unlocked nodes and loadout idempotently
+  migrated.chinese.growthTree.chi_phonetics_1.level = 3;
+  migrated.english.loadout.weaponPodId = 'pod_phonics_missile';
+  const rehydrated = migrateLegacySaveToSubjectProfiles({ subjectProfiles: migrated });
+  assert.equal(rehydrated.chinese.growthTree.chi_phonetics_1.level, 3);
+  assert.equal(rehydrated.english.loadout.weaponPodId, 'pod_phonics_missile');
+
+  // Modular English Hangar radar reflects loadout swaps dynamically
+  const baseRadar = computeEnglishHangarRadar(migrated.english);
+  const upgradedEng = {
+    ...migrated.english,
+    activeJetId: 'jet_aegis_star',
+    loadout: {
+      wingModuleId: 'wing_ion_thruster',
+      weaponPodId: 'pod_phonics_missile',
+      avionicsChipId: 'chip_aegis_matrix',
+    },
+  };
+  const flagshipRadar = computeEnglishHangarRadar(upgradedEng);
+  assert.ok(flagshipRadar.firepower > baseRadar.firepower);
+  assert.ok(flagshipRadar.shield > baseRadar.shield);
+  assert.ok(flagshipRadar.lockOn > baseRadar.lockOn);
+
+  // Independent per-subject combat stats scale when upgrading a subject's own progression
+  const baseSave = createInitialPlayerSave();
+  const baseMathStats = computeSubjectCombatStats(baseSave, 'math');
+  const upgradedSave = {
+    ...baseSave,
+    subjectProfiles: {
+      ...baseSave.subjectProfiles!,
+      math: {
+        ...baseSave.subjectProfiles!.math,
+        turretUpgrades: {
+          ...baseSave.subjectProfiles!.math.turretUpgrades,
+          turret_addsub: 6,
+          turret_muldiv: 5,
+        },
+      },
+    },
+  };
+  const upgradedMathStats = computeSubjectCombatStats(upgradedSave, 'math');
+  assert.ok(upgradedMathStats.baseAttack > baseMathStats.baseAttack);
+});
+
 

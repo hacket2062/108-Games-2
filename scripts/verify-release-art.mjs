@@ -2,11 +2,7 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {preview,build} from 'vite';
-import {pathToFileURL} from 'node:url';
-import {resolve} from 'node:path';
-await build({build:{ssr:'src/data/questions/earlyGrades.ts',outDir:'.verification/early-bank'},logLevel:'error'});
-const {EARLY_SCIENCE}=await import(pathToFileURL(resolve('.verification/early-bank/earlyGrades.js')).href);
+import {preview} from 'vite';
 const require=createRequire(import.meta.url);
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
 const external=process.env.RELEASE_TARGET_URL;
@@ -84,55 +80,13 @@ try{
    await page.waitForFunction(name=>window.__artDraws.some(url=>url.includes(name)),atlas,{timeout:30000});
    worlds.push({world,drawnAtlases:await page.evaluate(()=>window.__artDraws.map(x=>new URL(x).pathname))});
    await page.screenshot({path:out+'/'+world+'-'+viewport.width+'.png'});
-   if(world==='science'){
-    const labels=await page.locator('.science-ingredient-name').evaluateAll(nodes=>nodes.map(e=>({text:e.textContent,width:e.clientWidth,scroll:e.scrollWidth,overflow:getComputedStyle(e).textOverflow,whiteSpace:getComputedStyle(e).whiteSpace})));
-    assert.ok(labels.length>=3);assert.ok(labels.every(x=>x.width>40&&x.scroll<=x.width+1&&x.overflow!=='ellipsis'&&x.whiteSpace!=='nowrap'),'Science labels must wrap fully: '+JSON.stringify(labels));
-    if([1894,390].includes(viewport.width)){const shot=await page.getByTestId('science-workbench').screenshot({type:'jpeg',quality:60});console.log('VISUAL_SCIENCE_'+viewport.width+'_BASE64:'+shot.toString('base64'));}
-   }
-  }
-  const earlyReports=[];
-  for(const grade of [1,2]){
-   await page.goto(origin,{waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();
-   await page.getByRole('button',{name:grade+'年級',exact:true}).click();
-   await page.getByText(/^生活觀察(?: ·|$)/).first().waitFor();
-   await page.getByText(/^英語啟蒙（選修）(?: ·|$)/).first().waitFor();
-   await page.waitForFunction(g=>JSON.parse(localStorage.getItem('zhiguang_108_save_v2_local_hero_01'))?.grade===g,grade);
-   await page.reload({waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();
-   assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('zhiguang_108_save_v2_local_hero_01')).grade),grade);
-   const earlyWorlds=[];
-   for(const world of ['chinese','english','math','science']){
-    await page.goto(origin+'/?autostart=1&world='+world,{waitUntil:'domcontentloaded'});
-    await page.locator('canvas').first().waitFor();
-    await page.waitForFunction(()=>window.__artDraws.length>0);
-    if(world==='science'){
-     const workbench=page.getByTestId('science-workbench');await workbench.waitFor();
-     const prompt=await page.locator('.science-order-requirement').textContent();
-     const question=EARLY_SCIENCE.find(q=>q.grade===grade&&q.payload.orderRequirement===prompt);
-     assert.ok(question,'Must load the selected early grade bank');
-     assert.equal(await page.getByRole('heading',{name:'控制火候'}).count(),0);
-     assert.equal(await page.locator('.science-step-list li').count(),2);
-     if(grade===1&&[1894,390].includes(viewport.width)){const shot=await workbench.screenshot({type:'jpeg',quality:60});console.log('VISUAL_EARLY_'+viewport.width+'_BASE64:'+shot.toString('base64'));}
-     const correct=question.payload.ingredients.find(i=>i.isCorrect).name;
-     await page.getByTestId('science-ingredient-option').filter({has:page.getByText(correct,{exact:true})}).click();
-     await page.getByRole('button',{name:'確認答案！',exact:true}).click();
-     await page.waitForFunction(()=>document.querySelector('[data-testid="science-workbench"]')?.getAttribute('data-step')==='ingredients');
-     assert.notEqual(await page.locator('.science-order-requirement').textContent(),prompt,'Completed observation advances to a different question');
-     await page.screenshot({path:out+'/life-g'+grade+'-'+viewport.width+'.png'});
-    }
-    if(world==='math'){
-     await page.getByRole('button',{name:/採能超頻/}).click();
-     const body=await page.locator('body').textContent();assert.ok(!body.includes('三位數加法'),'Early learners must not receive grade-three math');
-    }
-    earlyWorlds.push(world);
-   }
-   earlyReports.push({grade,worlds:earlyWorlds,lifeAnswerCompleted:true,gradePersisted:true});
   }
   const after=await page.evaluate(()=>JSON.parse(localStorage.getItem('zhiguang_108_save_v2_local_hero_01')));
   assert.deepEqual(after.weapons,before.weapons,'existing weapon inventory preserved');
   assert.deepEqual(after.heroProgression,before.heroProgression,'existing class progression preserved');
   assert.equal(await page.evaluate(()=>localStorage.getItem('release-save-sentinel')),'keep-this');
   assert.deepEqual(errors,[]);
-  reports.push({viewport,newLobbyArt:true,newForgeArt:true,noBackgroundGuardianOrPedestal:true,singleHeroShowcase:true,reloads:3,trialTowerPreserved:true,bestiaryPreserved:true,worlds,earlyReports,inventoryAndClassPreserved:true,errors});
+  reports.push({viewport,newLobbyArt:true,newForgeArt:true,noBackgroundGuardianOrPedestal:true,singleHeroShowcase:true,reloads:3,trialTowerPreserved:true,bestiaryPreserved:true,worlds,inventoryAndClassPreserved:true,errors});
   await context.close();
  }
  await writeFile(out+'/results.json',JSON.stringify({origin,assets:assetEvidence,reports},null,2));

@@ -1,3 +1,10 @@
+import type {
+  LearningMilestoneLog,
+  SubjectProfiles,
+  TagMasteryRecord,
+  TodayPracticeItem,
+} from './progression';
+
 export type SubjectId = 'chinese' | 'english' | 'math' | 'science';
 export type GradeLevel = 1 | 2 | 3 | 4 | 5 | 6;
 export type SemesterId = 'upper' | 'lower';
@@ -363,6 +370,10 @@ export interface PlayerSaveData {
   heroProgression?: HeroProgression;
   towerBestFloor?: number;
   discoveredBestiary?: string[];
+  subjectProfiles?: SubjectProfiles;
+  learningMilestones?: LearningMilestoneLog[];
+  tagMastery?: Record<string, TagMasteryRecord>;
+  todayPracticeQueue?: TodayPracticeItem[];
 }
 
 export interface WorldRunResult {
@@ -432,7 +443,12 @@ export interface EngineCommonProps {
   stageConfig?: CampaignStageConfig;
   masteredQuestionIds?: string[];
   wrongQuestionIds?: string[];
-  onAnswerResult: (question: AnyQuestion, isCorrect: boolean, responseMs?: number) => void;
+  onAnswerResult: (
+    question: AnyQuestion,
+    isCorrect: boolean,
+    responseMs?: number,
+    usedHint?: boolean
+  ) => void;
   onDiscoverMonster?: (monsterId: string) => void;
   onFinish: (result: WorldRunResult) => void;
   onExit: () => void;
@@ -451,6 +467,7 @@ export interface AppUserAccount {
 
 export type ActiveScreen =
   | 'lobby'
+  | 'subject_hub'
   | 'stage_select'
   | 'world_chinese'
   | 'world_english'
