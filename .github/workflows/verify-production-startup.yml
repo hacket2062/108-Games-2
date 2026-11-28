@@ -1,0 +1,28 @@
+name: Verify production startup
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/verify-production-startup]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated browser test tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/startup-check" --no-package-lock --no-audit --no-fund playwright
+          node "$RUNNER_TEMP/startup-check/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Verify live desktop, phone, reloads and recovery
+        run: node scripts/verify-production-startup.mjs
+        env:
+          PLAYWRIGHT_MODULE_PATH: ${{ runner.temp }}/startup-check/node_modules/playwright
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-startup-evidence
+          path: .verification/production-startup/
+          if-no-files-found: ignore
+          retention-days: 7
