@@ -241,7 +241,7 @@ export function getPvPMixedQuestions(
           correctIng.name,
           wrongIngs[0].name,
           wrongIngs[1].name,
-          `${q.payload.targetPhLabel}（純試劑）`,
+          grade<=2 ? '以上都不是' : `${q.payload.targetPhLabel}（純試劑）`,
         ];
         const shuffledOpts = seededShuffle(rawOpts, seed + q.id.length * 13);
         const correctIdx = shuffledOpts.indexOf(correctIng.name);
@@ -249,13 +249,13 @@ export function getPvPMixedQuestions(
           id: q.id,
           subject: 'science',
           grade: q.grade,
-          prompt: `【自然實驗】${q.payload.dishName}：哪一項符合「${q.knowledgeTag}」正確食材？`,
+          prompt: grade<=2 ? `【生活觀察】${q.prompt}` : `【自然實驗】${q.payload.dishName}：哪一項符合「${q.knowledgeTag}」正確食材？`,
           options: shuffledOpts,
           correctIndex: correctIdx,
           answer: correctIng.name,
           explanation: q.explanation,
           knowledgeTag: q.knowledgeTag,
-          speakText: `${q.payload.dishName}，哪一項符合${q.knowledgeTag}？`,
+          speakText: grade<=2 ? q.prompt : `${q.payload.dishName}，哪一項符合${q.knowledgeTag}？`,
           speakLang: 'zh-TW',
         });
       }

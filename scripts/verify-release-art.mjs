@@ -87,7 +87,7 @@ try{
    if(world==='science'){
     const labels=await page.locator('.science-ingredient-name').evaluateAll(nodes=>nodes.map(e=>({text:e.textContent,width:e.clientWidth,scroll:e.scrollWidth,overflow:getComputedStyle(e).textOverflow,whiteSpace:getComputedStyle(e).whiteSpace})));
     assert.ok(labels.length>=3);assert.ok(labels.every(x=>x.width>40&&x.scroll<=x.width+1&&x.overflow!=='ellipsis'&&x.whiteSpace!=='nowrap'),'Science labels must wrap fully: '+JSON.stringify(labels));
-    if(viewport.width===1894){const shot=await page.getByTestId('science-workbench').screenshot({type:'jpeg',quality:60});console.log('VISUAL_SCIENCE_BASE64:'+shot.toString('base64'));}
+    if([1894,390].includes(viewport.width)){const shot=await page.getByTestId('science-workbench').screenshot({type:'jpeg',quality:60});console.log('VISUAL_SCIENCE_'+viewport.width+'_BASE64:'+shot.toString('base64'));}
    }
   }
   const earlyReports=[];
@@ -111,13 +111,13 @@ try{
      assert.ok(question,'Must load the selected early grade bank');
      assert.equal(await page.getByRole('heading',{name:'控制火候'}).count(),0);
      assert.equal(await page.locator('.science-step-list li').count(),2);
+     if(grade===1&&[1894,390].includes(viewport.width)){const shot=await workbench.screenshot({type:'jpeg',quality:60});console.log('VISUAL_EARLY_'+viewport.width+'_BASE64:'+shot.toString('base64'));}
      const correct=question.payload.ingredients.find(i=>i.isCorrect).name;
      await page.getByTestId('science-ingredient-option').filter({has:page.getByText(correct,{exact:true})}).click();
      await page.getByRole('button',{name:'確認答案！',exact:true}).click();
      await page.waitForFunction(()=>document.querySelector('[data-testid="science-workbench"]')?.getAttribute('data-step')==='ingredients');
      assert.notEqual(await page.locator('.science-order-requirement').textContent(),prompt,'Completed observation advances to a different question');
      await page.screenshot({path:out+'/life-g'+grade+'-'+viewport.width+'.png'});
-     if(grade===1&&viewport.width===1894){const shot=await workbench.screenshot({type:'jpeg',quality:60});console.log('VISUAL_EARLY_BASE64:'+shot.toString('base64'));}
     }
     if(world==='math'){
      await page.getByRole('button',{name:/採能超頻/}).click();

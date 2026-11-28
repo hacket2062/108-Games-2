@@ -1,5 +1,12 @@
 rules_version = '2';
 
+// Existing models: /users/{uid} is a verified user's private save (uid,
+// displayName, currencies, grade/semester, guardian, saveData, timestamps).
+// /pvpRooms/{id} contains host/guest loadouts, scores, grade and timestamps;
+// nested events contain sender/participant IDs and combat actions.
+// This prototype only extends validated grade values to integers 1–6.
+// User ownership, immutable identity/timestamps and field allowlists stay intact.
+
 service cloud.firestore {
   match /databases/{database}/documents {
     // Global Safety Net: default deny everything

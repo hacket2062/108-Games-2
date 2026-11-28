@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ALL_QUESTIONS,getChineseQuestions,getEnglishQuestions,getMathQuestions,getScienceQuestions} from '../data/questionBank';
+import {ALL_QUESTIONS,getChineseQuestions,getEnglishQuestions,getMathQuestions,getScienceQuestions,getPvPMixedQuestions} from '../data/questionBank';
 import {getChaptersForWorld,buildStageKey} from '../data/campaignMap';
 test('grades 1–2 have distinct playable banks in both semesters and every engine mode',()=>{
  for(const grade of [1,2] as const)for(const semester of ['upper','lower'] as const){
@@ -39,5 +39,18 @@ test('early Chinese puzzles are solvable without duplicate part selection',()=>{
   if(p.mode==='radical'){assert.notEqual(p.partA,p.partB);assert.ok(p.pool.includes(p.partA)&&p.pool.includes(p.partB));assert.equal(new Set(p.pool).size,p.pool.length);}
   if(p.mode==='typo')assert.equal(p.sentence[p.typoIndex],p.wrongChar);
   if(p.mode==='slash')assert.equal(p.options[p.correctIndex],q.answer);
+ }
+});
+test('Trial Tower and mixed decks preserve each life-observation question and correct choices',()=>{
+ for(const grade of [1,2] as const){
+  const cards=getPvPMixedQuestions(grade,'science',123);
+  assert.equal(cards.length,26);
+  for(const card of cards){
+   const original=ALL_QUESTIONS.find(q=>q.id===card.id)!;
+   assert.ok(card.prompt.includes(original.prompt));
+   assert.equal(card.options[card.correctIndex],card.answer);
+   assert.equal(new Set(card.options).size,4);
+   assert.ok(card.options.every(x=>!x.includes('免操作')));
+  }
  }
 });
