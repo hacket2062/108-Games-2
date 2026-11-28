@@ -1,0 +1,33 @@
+name: Diagnose Firebase public project configuration
+on:
+  push:
+    branches: [codex/diagnose-firebase-target]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Read public Auth configuration without login or data writes
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const source=fs.readFileSync('src/core/firebase.ts','utf8');
+          const runtime={apiKey:source.match(/apiKey:\s*'([^']+)'/)[1],projectId:source.match(/projectId:\s*'([^']+)'/)[1]};
+          const applet=JSON.parse(fs.readFileSync('firebase-applet-config.json','utf8'));
+          for(const [label,cfg] of [['runtime',runtime],['original-applet',applet]]){
+            const url=new URL('https://identitytoolkit.googleapis.com/v1/projects');
+            url.searchParams.set('key',cfg.apiKey);
+            try{
+              const response=await fetch(url,{signal:AbortSignal.timeout(20000)});
+              const json=await response.json();
+              const message=String(json.error?.message||'').split(cfg.apiKey).join('[redacted]');
+              console.log(JSON.stringify({label,configuredProject:cfg.projectId,status:response.status,returnedProjectId:json.projectId??null,authorizedDomainsCount:json.authorizedDomains?.length??null,errorCode:json.error?.status??null,errorMessage:message,reasons:(json.error?.details||[]).map(d=>d.reason).filter(Boolean)}));
+            }catch(error){console.log(JSON.stringify({label,configuredProject:cfg.projectId,networkFailure:error.cause?.code||error.name}));process.exitCode=1;}
+          }
+          NODE
