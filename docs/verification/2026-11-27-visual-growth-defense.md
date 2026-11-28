@@ -33,3 +33,7 @@
 ## 存檔相容與部署
 
 新增可選 `characterJob`、`guardianCare`、`randomMissions`、`unlockedSkills`、`selectedSkill`、`recentQuestionIds`，完整序列化與 runtime 驗證；舊存檔缺欄位可用。Firebase 專案、UID 與既有資產未遷移或重置。這次只同步任務分支與 draft PR，不合併 main、不部署正式站。
+
+## GitHub 同步後雲端檢查（2026-11-28）
+
+程式碼與五張圖集已同步為 `d998e723576d7f670d8eeece6bf7fe608ac90940`；Git tree 與本機完全一致，draft PR #1 保留。GitHub 連動的 `Workers Builds: 108-games-2` 回報 failure；[Cloudflare 建置紀錄](https://dash.cloudflare.com/823f3e0f0dae061e6935ac0984ff21cb/workers/services/view/108-games-2/production/builds/1837ebb2-cf6e-47a2-8c86-2b0da3501f7d)。GitHub check output 只含建置 ID／網址，無錯誤訊息或 annotations。現有工具沒有可讀此專案建置日誌的 Cloudflare connector，故未確定原因，未假稱部署成功，也未改正式服務設定。下一輪先取得該建置日誌，再決定是否為安裝鎖檔、Node、命令或部署設定問題。
