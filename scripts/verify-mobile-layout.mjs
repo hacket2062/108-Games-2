@@ -19,7 +19,8 @@ try{
   const browser=await type.launch({headless:true});
   try{for(const viewport of [{width:390,height:640},{width:375,height:568},{width:844,height:390}]){
    const context=await browser.newContext({viewport,deviceScaleFactor:2,isMobile:true,hasTouch:true,reducedMotion:'reduce'});
-   await context.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());
+   const blockedRequests=new Set();
+   await context.route('**/*',r=>{const url=new URL(r.request().url());if(url.origin===origin)return r.continue();blockedRequests.add('/'+url.host+url.pathname);return r.abort();});
    await context.addInitScript(()=>{
     window.__mobileArt={};window.__mobileText={};
     const draw=CanvasRenderingContext2D.prototype.drawImage;
@@ -37,7 +38,8 @@ try{
    page.on('pageerror',e=>{
     // WebKit surfaces our deliberate offline Firestore route abort as a pageerror.
     // Keep it as evidence; every application exception must still fail this suite.
-    if(/^\/firestore\.googleapis\.com\/google\.firestore\.v1\.Firestore\/Listen\/channel\?.* due to access control checks\.$/.test(e.message))blockedNetworkErrors.push(e.message);
+    const blocked=e.message.match(/^(\/[^? ]+)(?:\?[^ ]*)? due to access control checks\.$/);
+    if(blocked&&blockedRequests.has(blocked[1]))blockedNetworkErrors.push(e.message);
     else errors.push(e.message);
    });
    await page.goto(origin,{waitUntil:'domcontentloaded'});await page.getByTestId('lobby-hub').waitFor();
